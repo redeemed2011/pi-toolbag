@@ -1,0 +1,24 @@
+{
+  "name": "pi-auto-fallback",
+  "version": "0.1.0",
+  "description": "Pi extension: same-session cross-model failover via pi-fallback-lib.",
+  "type": "module",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pi-fallback-lib": "file:../pi-fallback-lib"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.4",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

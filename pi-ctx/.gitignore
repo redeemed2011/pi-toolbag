@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.log
+npm-debug.log*
+.tmp/
+.ctx-test/
