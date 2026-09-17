@@ -29,6 +29,9 @@ describe("record write path", () => {
 		const ok = putJudgment({ ...base, input: { ...input, applies_to: "all" } });
 		expect(ok.ok).toBe(true);
 		if (ok.ok) expect(ok.record.applies_to).toBe("all");
+		const fromToolUnion = putJudgment({ ...base, input: { ...input, applies_to: ["all"] } });
+		expect(fromToolUnion.ok).toBe(true);
+		if (fromToolUnion.ok) expect(fromToolUnion.record.applies_to).toBe("all");
 	});
 
 	it("refuses missing directive on constraint", () => {

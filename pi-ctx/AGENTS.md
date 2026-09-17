@@ -22,7 +22,7 @@ Default `pi` is cplt. Details: [docs/sandbox.md](docs/sandbox.md). Tests use `CT
 | Observer worker (no orchestrator hooks; in-process failover via `pi-fallback-lib`) | `worker.ts` |
 | Compact inject (unbound / GE / CS) | `src/hooks/compaction-hook.ts`, `src/render/` |
 | F-once A | `src/hooks/context-hook.ts`, `src/render/fonce.ts` |
-| Tools | `src/tools/` — `get` `zoom` `frontier` `claim` `bind` `record` |
+| Tools | `src/tools/` — `ctx_get` `ctx_zoom` `ctx_frontier` `ctx_claim` `ctx_bind` `ctx_record` |
 | Commands | `src/commands/ctx.ts` — on/off, compact, status, occupancy, bind, unbind, claim |
 | Occupancy switch | `src/commands/occupancy.ts` — TUI GATE confirm; print refuse-with-reason |
 | Bind HITL + promotion | `src/commands/bind.ts`, `src/promotion.ts` |

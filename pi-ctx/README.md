@@ -8,7 +8,7 @@ The spec’s “PR 1–10” is a **local implementation sequence**, not GitHub 
 
 ## Status (2026-09-14)
 
-Shipped: local sequence **1–10** — session inject (observers + model-free compact inject); fold; both occupancy renderers; F-once **A**; tools `get` `zoom` `frontier` `claim` `bind` `record`; `/ctx bind` `/unbind` `/claim`; confirm-only promotion; per-writer JSONL; mint refuse path; occupancy-switch GATE warn + print refuse-with-reason; golden slot-table inject tests; `sendGuardTokens` on compact-trigger live usage; mint GATE overflow HITL (TUI refuse-first `select`); mint `live_conflict` TUI `select`; promotion mint uses `runRecordFlow`; Mismatch Banner + Directive Off-Window; sequence 9 tests (Pi `estimateTokens` identity, observer cannot mint judgments, enabled compact hook never `undefined` except off/passive, no `search_similar`). Spawn Envelope held.
+Shipped: local sequence **1–10** — session inject (observers + model-free compact inject); fold; both occupancy renderers; F-once **A**; tools `ctx_get` `ctx_zoom` `ctx_frontier` `ctx_claim` `ctx_bind` `ctx_record`; `/ctx bind` `/unbind` `/claim`; confirm-only promotion; per-writer JSONL; mint refuse path; occupancy-switch GATE warn + print refuse-with-reason; golden slot-table inject tests; `sendGuardTokens` on compact-trigger live usage; mint GATE overflow HITL (TUI refuse-first `select`); mint `live_conflict` TUI `select`; promotion mint uses `runRecordFlow`; Mismatch Banner + Directive Off-Window; sequence 9 tests (Pi `estimateTokens` identity, observer cannot mint judgments, enabled compact hook never `undefined` except off/passive, no `search_similar`). Spawn Envelope held.
 
 Do not reopen closed leftovers (packing 15k/5k, suffix cap/stub, stop-hook evaluator, Order-flip A, F-packer).
 
@@ -71,7 +71,7 @@ bash scripts/check-sandbox.sh
 | `/ctx bind` / `/ctx unbind` | Project law: name HITL, confirm, promotion pass |
 | `/ctx claim` | HITL claim / re-claim / close |
 
-Named tools: `get`, `zoom`, `frontier`, `claim`, `bind`, `record`. Print mode refuses HITL bind/promotion (no silent bind). Mint GATE overflow: print refuses `"gate"`; TUI refuse-first `select` vs supersede/split. Promotion uses the same record flow. Mint `live_conflict`: print refuses; TUI `select` which to supersede.
+Named tools: `ctx_get`, `ctx_zoom`, `ctx_frontier`, `ctx_claim`, `ctx_bind`, `ctx_record`. Print mode refuses HITL bind/promotion (no silent bind). Mint GATE overflow: print refuses `"gate"`; TUI refuse-first `select` vs supersede/split. Promotion uses the same record flow. Mint `live_conflict`: print refuses; TUI `select` which to supersede.
 
 ## Layout
 

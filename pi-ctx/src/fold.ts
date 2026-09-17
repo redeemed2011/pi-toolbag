@@ -100,7 +100,10 @@ export function resolveOccupancy(session: Pick<SessionFold, "occupancy">, settin
 }
 
 export function parseAppliesTo(value: unknown): AppliesTo | undefined {
+	// Tool-calling unions often send ["all"] instead of the string "all".
+	// That is not a missing applies_to and not a question id.
 	if (value === "all") return "all";
+	if (Array.isArray(value) && value.length === 1 && value[0] === "all") return "all";
 	if (Array.isArray(value) && value.length > 0 && value.every(isNonEmptyString)) return value;
 	return undefined;
 }

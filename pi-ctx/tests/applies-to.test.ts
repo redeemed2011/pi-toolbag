@@ -10,4 +10,9 @@ describe("applies_to refuse-missing", () => {
 		expect(validateAppliesTo("all", ["q1"])).toEqual({ ok: true, applies_to: "all" });
 		expect(validateAppliesTo(["q1"], ["q1"])).toEqual({ ok: true, applies_to: ["q1"] });
 	});
+
+	it("coerces tool-calling singleton [\"all\"] to all; mixed all+id stays dangling", () => {
+		expect(validateAppliesTo(["all"], ["q1"])).toEqual({ ok: true, applies_to: "all" });
+		expect(validateAppliesTo(["all", "q1"], ["q1"])).toEqual({ ok: false, error: "applies_to_dangling" });
+	});
 });

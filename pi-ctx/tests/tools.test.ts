@@ -92,7 +92,7 @@ describe("get / zoom", () => {
 			} as never,
 			new Runtime(),
 		);
-		expect(names).toEqual(["get", "zoom", "frontier", "claim", "bind", "record"]);
+		expect(names).toEqual(["ctx_get", "ctx_zoom", "ctx_frontier", "ctx_claim", "ctx_bind", "ctx_record"]);
 		expect(names).not.toContain("search_similar");
 	});
 

@@ -3,7 +3,7 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { runBindFlow } from "../commands/bind.js";
 import { runRecordFlow } from "../commands/record.js";
-import { foldLive, resolveOccupancy } from "../fold.js";
+import { foldLive, parseAppliesTo, resolveOccupancy } from "../fold.js";
 import { hitlFromCtx } from "../hitl.js";
 import { appendProjectRecord } from "../store/project.js";
 import type { Runtime } from "../runtime.js";
@@ -30,12 +30,12 @@ function liveOf(runtime: Runtime) {
 
 export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 	pi.registerTool({
-		name: "get",
+		name: "ctx_get",
 		label: "ctx get",
 		description: "Point lookup or default retrieve. Omit id for default retrieve. Must not scan the observation corpus.",
 		promptSnippet: "Retrieve ctx default law/claim or a record by id",
 		promptGuidelines: [
-			"Use get when you need default retrieve or a record body by id. Omit id for default retrieve. Do not use get to search.",
+			"Use ctx_get when you need default retrieve or a record body by id. Omit id for default retrieve. Do not use ctx_get to search.",
 		],
 		parameters: Type.Object({
 			id: Type.Optional(Type.String({ description: "Record id. Omit for default retrieve." })),
@@ -62,11 +62,11 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 	});
 
 	pi.registerTool({
-		name: "zoom",
+		name: "ctx_zoom",
 		label: "ctx zoom",
 		description: "Full body of a record by id. Never paraphrase.",
 		promptSnippet: "Zoom a ctx record body by id",
-		promptGuidelines: ["Use zoom when you need the full body of a known record id."],
+		promptGuidelines: ["Use ctx_zoom when you need the full body of a known record id."],
 		parameters: Type.Object({
 			id: Type.String({ description: "Record id" }),
 		}),
@@ -85,12 +85,12 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 	});
 
 	pi.registerTool({
-		name: "frontier",
+		name: "ctx_frontier",
 		label: "ctx frontier",
 		description: "Open unblocked unclaimed questions in mint-time order. Cap 20; remainder in elided.",
 		promptSnippet: "List open unclaimed ctx questions",
 		promptGuidelines: [
-			"Use frontier when you need open unblocked unclaimed questions in mint-time order. Do not dump frontier into inject.",
+			"Use ctx_frontier when you need open unblocked unclaimed questions in mint-time order. Do not dump frontier into inject.",
 		],
 		parameters: Type.Object({
 			include_blocked: Type.Optional(Type.Boolean()),
@@ -116,12 +116,12 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 	});
 
 	pi.registerTool({
-		name: "claim",
+		name: "ctx_claim",
 		label: "ctx claim",
 		description: "Read or set the session claim. Live swap refuses; close first or user /ctx claim.",
 		promptSnippet: "Status, claim, or close the ctx claim",
 		promptGuidelines: [
-			"Use claim to read or set the session claim when claimed_id is empty, or to close. Do not silent-swap a live claim; close first or ask the user to run /ctx claim.",
+			"Use ctx_claim to read or set the session claim when claimed_id is empty, or to close. Do not silent-swap a live claim; close first or ask the user to run /ctx claim.",
 		],
 		parameters: Type.Object({
 			action: StringEnum(["status", "claim", "close"] as const),
@@ -160,12 +160,12 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 	});
 
 	pi.registerTool({
-		name: "bind",
+		name: "ctx_bind",
 		label: "ctx bind",
 		description: "Start the bind HITL flow (name, confirm, promotion). Never silent. Print mode refuses.",
 		promptSnippet: "Bind this session to a ctx project",
 		promptGuidelines: [
-			"Use bind when the user asked to create a ctx project or you propose one. Bind always requires HITL; never bind silently.",
+			"Use ctx_bind when the user asked to create a ctx project or you propose one. Bind always requires HITL; never bind silently.",
 		],
 		parameters: Type.Object({
 			name: Type.Optional(
@@ -193,12 +193,12 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 	});
 
 	pi.registerTool({
-		name: "record",
+		name: "ctx_record",
 		label: "ctx record",
 		description: "Append a new judgment record to the bound project log. Never overwrite. Observers cannot call this.",
 		promptSnippet: "Mint a ctx judgment record",
 		promptGuidelines: [
-			"Use record to append a new judgment record to the bound project. Never overwrite. Constraints require applies_to and directive. Missing applies_to refuses; it never defaults to all. live_conflict refuses in print; TUI selects which to supersede. GATE overflow refuses in print; TUI select is refuse-first vs supersede/split.",
+			"Use ctx_record to append a new judgment record to the bound project. Never overwrite. Constraints require applies_to and directive. Missing applies_to refuses; it never defaults to all. live_conflict refuses in print; TUI selects which to supersede. GATE overflow refuses in print; TUI select is refuse-first vs supersede/split.",
 		],
 		parameters: Type.Object({
 			type: StringEnum([
@@ -219,7 +219,11 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 			rationale: Type.Optional(
 				Type.String({ description: "Zoom only. Never injected. Compact hook does not split prose." }),
 			),
-			applies_to: Type.Optional(Type.Union([Type.Literal("all"), Type.Array(Type.String())])),
+			applies_to: Type.Optional(
+				Type.Union([Type.Literal("all"), Type.Array(Type.String())], {
+					description: '"all" or live question ids. A one-element ["all"] means all.',
+				}),
+			),
 			supersedes: Type.Optional(Type.String()),
 			reason_class: Type.Optional(StringEnum(["clarification", "decision_change", "conflict"] as const)),
 			parent: Type.Optional(Type.String()),
@@ -227,6 +231,24 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 			conflicts_with: Type.Optional(Type.Array(Type.String())),
 			citation_target: Type.Optional(Type.String()),
 		}),
+		prepareArguments(args: unknown) {
+			const input = dropKeys<{
+				type: "constraint" | "decision" | "question" | "fog" | "destination" | "out_of_scope" | "finding" | "tombstone" | "citation";
+				headline: string;
+				directive?: string;
+				rationale?: string;
+				applies_to?: "all" | string[];
+				supersedes?: string;
+				reason_class?: "clarification" | "decision_change" | "conflict";
+				parent?: string;
+				blocks?: string[];
+				conflicts_with?: string[];
+				citation_target?: string;
+			}>(args, []);
+			const applies = parseAppliesTo(input.applies_to);
+			if (applies !== undefined) input.applies_to = applies;
+			return input;
+		},
 		async execute(
 			_id: string,
 			params: {
