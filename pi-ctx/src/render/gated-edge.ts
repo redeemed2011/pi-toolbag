@@ -1,5 +1,6 @@
 import { bodySetGE } from "../fold.js";
 import type { JudgmentRecord, LiveSet, Observation, PackedInject, SessionFold } from "../types.js";
+import { pendingReplaceSection } from "../promoter/inject.js";
 import { mismatchBanner } from "./banner.js";
 import { GATE_BODY_COUNT, injectTokens } from "./estimate.js";
 import { gateCheck } from "./occupancy.js";
@@ -44,7 +45,8 @@ export function renderGatedEdge(opts: {
 	const g = gateCheck(bodies);
 	const headers = `# ctx\nbound: 1\noccupancy: gated-edge`;
 	const counts = countsLine(opts.live, g, claimed);
-	const banner = mismatchBanner({
+	const pending = pendingReplaceSection(opts.live);
+	const mismatch = mismatchBanner({
 		session: opts.session,
 		claimEmpty: claimed.claim_empty === 1,
 		claimNotLive: claimed.claim_not_live === 1,
@@ -52,6 +54,7 @@ export function renderGatedEdge(opts: {
 		branch: opts.branch,
 		observations: opts.observations,
 	});
+	const banner = [mismatch, pending].filter(Boolean).join("\n\n") || undefined;
 
 	if (g.gate === 1) {
 		return renderOverflow({ headers, dest, claimed: claimed.md, counts, banner });

@@ -4,6 +4,7 @@ import { registerCompactionHook } from "./src/hooks/compaction-hook.js";
 import { registerCompactionTrigger } from "./src/hooks/compaction-trigger.js";
 import { registerContextHook } from "./src/hooks/context-hook.js";
 import { registerObserverTrigger } from "./src/hooks/observer-trigger.js";
+import { registerPendingReplaceHook } from "./src/hooks/pending-replace-hook.js";
 import { registerSessionStart } from "./src/hooks/session-start.js";
 import { Runtime } from "./src/runtime.js";
 import { registerTools } from "./src/tools/register.js";
@@ -15,6 +16,7 @@ export default function ctx(pi: ExtensionAPI): void {
 	registerCompactionTrigger(pi, runtime);
 	registerCompactionHook(pi, runtime);
 	registerContextHook(pi, runtime);
+	registerPendingReplaceHook(pi, runtime);
 	registerCtxCommand(pi, runtime);
 	registerTools(pi, runtime);
 }

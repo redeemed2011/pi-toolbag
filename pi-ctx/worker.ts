@@ -1,7 +1,7 @@
 /**
  * Observer worker. Registers only record_observations.
  * Must not register orchestrator hooks (compact inject, compact trigger, observer clock).
- * Cannot construct constraint / decision / question / fog / destination / out_of_scope.
+ * Cannot construct constraint / decision / question / fog / destination / out_of_scope / pending_replace.
  */
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -84,6 +84,5 @@ export default function ctxObserverWorker(pi: ExtensionAPI): void {
 	attachFallback(pi, {
 		retryAfterTools: true,
 		configPath: join(getAgentDir(), "auto-fallback.json"),
-		log: (line) => console.error(`[pi-fallback] ${line}`),
 	});
 }

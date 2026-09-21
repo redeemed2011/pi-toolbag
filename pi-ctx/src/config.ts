@@ -26,6 +26,8 @@ export type Config = {
 	models: {
 		/** Set only when `ctx.models.observer` is in settings. Unset = inherit the live session. */
 		observer?: ConfiguredModel;
+		/** Nested bind-consent promoter. Unset = same fallbacks as observer. Thinking forced xhigh/high. */
+		promoter?: ConfiguredModel;
 	};
 	/** Pi `defaultProvider` / `defaultModel` / `defaultThinkingLevel` from settings.json. */
 	sessionDefault?: ConfiguredModel;
@@ -112,10 +114,14 @@ function overlay(ns: Record<string, unknown>, base: Config): Partial<Config> {
 	if (typeof ns.resumeAfterMidRunCompaction === "boolean") {
 		next.resumeAfterMidRunCompaction = ns.resumeAfterMidRunCompaction;
 	}
-	if (isRecord(ns.models) && "observer" in ns.models) {
-		next.models = {
-			observer: parseModel(ns.models.observer, base.models.observer ?? LAST_RESORT_OBSERVER),
-		};
+	if (isRecord(ns.models)) {
+		next.models = { ...base.models };
+		if ("observer" in ns.models) {
+			next.models.observer = parseModel(ns.models.observer, base.models.observer ?? LAST_RESORT_OBSERVER);
+		}
+		if ("promoter" in ns.models) {
+			next.models.promoter = parseModel(ns.models.promoter, base.models.promoter ?? LAST_RESORT_OBSERVER);
+		}
 	}
 	return next;
 }
@@ -170,6 +176,18 @@ export function resolveObserverModel(config: Config, session?: SessionModelSourc
 	return LAST_RESORT_OBSERVER;
 }
 
+function forcePromoterThinking(model: ConfiguredModel): ConfiguredModel {
+	const t = model.thinking;
+	const thinking = t === "xhigh" || t === "high" ? t : "xhigh";
+	return { ...model, thinking };
+}
+
+/** Like observer fallbacks; thinking forced to xhigh (or high if settings say high). */
+export function resolvePromoterModel(config: Config, session?: SessionModelSource): ConfiguredModel {
+	if (config.models.promoter) return forcePromoterThinking(config.models.promoter);
+	return forcePromoterThinking(resolveObserverModel(config, session));
+}
+
 /** Defaults → `~/.pi/agent/settings.json` `ctx` → `<cwd>/.pi/settings.json` `ctx` → env. */
 export function loadConfig(cwd: string, env: NodeJS.ProcessEnv = process.env): Config {
 	const globalPath = join(getAgentDir(), "settings.json");
@@ -187,6 +205,7 @@ export function loadConfig(cwd: string, env: NodeJS.ProcessEnv = process.env): C
 		...projectRead.overlay,
 		models: {
 			observer: projectRead.overlay.models?.observer ?? afterGlobal.models.observer,
+			promoter: projectRead.overlay.models?.promoter ?? afterGlobal.models.promoter,
 		},
 		sessionDefault: projectRead.sessionDefault ?? afterGlobal.sessionDefault,
 	};

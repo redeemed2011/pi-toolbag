@@ -31,6 +31,9 @@ export const CTX_OBSERVATIONS_RECORDED = "ctx.observations.recorded";
 export const CTX_OBSERVATIONS_EMPTY_COVER = "ctx.observations.empty_cover";
 export const CTX_RESUME = "ctx.resume";
 export const CTX_FOLDED = "ctx.folded";
+export const CTX_PROMOTER_LATCH = "ctx.promoter.latch";
+export const CTX_PENDING_TURN = "ctx.pending_replace.turns";
+export const CTX_PENDING_INJECT = "ctx.pending_replace.inject";
 export const FOOTER_TAG = "ctx.constitution-footer";
 
 export type Occupancy = "gated-edge" | "claim-strip";
@@ -66,6 +69,7 @@ export type RecordKind =
 	| "finding"
 	| "tombstone"
 	| "citation"
+	| "pending_replace"
 	| "observation";
 
 /** `applies_to` is required at mint: `"all"` or question ids. Missing refuses. Never default to all. */
@@ -102,6 +106,7 @@ export type LiveSet = {
 	destinations: JudgmentRecord[];
 	outOfScope: JudgmentRecord[];
 	fog: JudgmentRecord[];
+	pendingReplaces: JudgmentRecord[];
 	blocked: Set<string>;
 	liveConflict: string[];
 };
@@ -114,6 +119,8 @@ export type SessionFold = {
 	occupancy: Occupancy | null;
 	observations: Observation[];
 	recency: Observation[];
+	promoterLatched?: boolean;
+	pendingReplaceTurns?: number;
 };
 
 export type PackedInject = {
@@ -140,7 +147,8 @@ export function isJudgmentType(value: string): value is Exclude<RecordKind, "obs
 		value === "out_of_scope" ||
 		value === "finding" ||
 		value === "tombstone" ||
-		value === "citation"
+		value === "citation" ||
+		value === "pending_replace"
 	);
 }
 

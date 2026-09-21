@@ -8,7 +8,7 @@ The spec’s “PR 1–10” is a **local implementation sequence**, not GitHub 
 
 ## Status (2026-09-14)
 
-Shipped: local sequence **1–10** — session inject (observers + model-free compact inject); fold; both occupancy renderers; F-once **A**; tools `ctx_get` `ctx_zoom` `ctx_frontier` `ctx_claim` `ctx_bind` `ctx_record`; `/ctx bind` `/unbind` `/claim`; confirm-only promotion; per-writer JSONL; mint refuse path; occupancy-switch GATE warn + print refuse-with-reason; golden slot-table inject tests; `sendGuardTokens` on compact-trigger live usage; mint GATE overflow HITL (TUI refuse-first `select`); mint `live_conflict` TUI `select`; promotion mint uses `runRecordFlow`; Mismatch Banner + Directive Off-Window; sequence 9 tests (Pi `estimateTokens` identity, observer cannot mint judgments, enabled compact hook never `undefined` except off/passive, no `search_similar`). Spawn Envelope held.
+Shipped: local sequence **1–10** — session inject (observers + model-free compact inject); fold; both occupancy renderers; F-once **A**; tools `ctx_get` `ctx_zoom` `ctx_frontier` `ctx_claim` `ctx_bind` `ctx_record`; `/ctx bind` `/unbind` `/claim`; bind does not run the old observation-promotion quiz; attended bind runs bind-consent harvest (nested promoter, N=10, project pending_replace); per-writer JSONL; mint refuse path; occupancy-switch GATE warn + print refuse-with-reason; golden slot-table inject tests; `sendGuardTokens` on compact-trigger live usage; mint GATE overflow HITL (TUI refuse-first `select`); mint `live_conflict` TUI `select`; Mismatch Banner + Directive Off-Window; sequence 9 tests (Pi `estimateTokens` identity, observer cannot mint judgments, enabled compact hook never `undefined` except off/passive, no `search_similar`). Spawn Envelope held.
 
 Do not reopen closed leftovers (packing 15k/5k, suffix cap/stub, stop-hook evaluator, Order-flip A, F-packer).
 
@@ -68,17 +68,17 @@ bash scripts/check-sandbox.sh
 | `/ctx compact` | Force compact; still model-free inject |
 | `/ctx status` | Bound?, occupancy, claim, GATE flags, observer inflight |
 | `/ctx occupancy` | `gated-edge` \| `claim-strip` (print refuses a switch with a reason; TUI confirms if target would `gate=1`) |
-| `/ctx bind` / `/ctx unbind` | Project law: name HITL, confirm, promotion pass |
+| `/ctx bind` / `/ctx unbind` | Project law: name HITL, confirm; bind-consent nested harvest; no observation-promotion quiz |
 | `/ctx claim` | HITL claim / re-claim / close |
 
-Named tools: `ctx_get`, `ctx_zoom`, `ctx_frontier`, `ctx_claim`, `ctx_bind`, `ctx_record`. Print mode refuses HITL bind/promotion (no silent bind). Mint GATE overflow: print refuses `"gate"`; TUI refuse-first `select` vs supersede/split. Promotion uses the same record flow. Mint `live_conflict`: print refuses; TUI `select` which to supersede.
+Named tools: `ctx_get`, `ctx_zoom`, `ctx_frontier`, `ctx_claim`, `ctx_bind`, `ctx_record`. Print mode refuses HITL bind (no silent bind). Mint GATE overflow: print refuses `"gate"`; TUI refuse-first `select` vs supersede/split. Mint `live_conflict`: print refuses; TUI `select` which to supersede.
 
 ## Layout
 
 Matches the spec §5.10 package layout.
 
 - `index.ts` — orchestrator (hooks + commands + tools)
-- `worker.ts` — observation-only; no compact / observer-clock hooks. In-process failover via `pi-fallback-lib` (`retryAfterTools: true`). Spawn stays `--no-extensions -e worker.ts`. If the observer's fallback chain needs an extension provider (e.g. `npm:pi-grok-cli` for `grok-cli/*`), that installed package is also passed as an extra `-e` so `setModel` can find it. Failover logs are worker stderr only; the parent ignores worker stderr unless the process exits non-zero. In print mode the attach helper waits for the continue turn so Pi does not exit 1 on the failed model’s assistant error.
+- `worker.ts` — observation-only; no compact / observer-clock hooks. In-process failover via `pi-fallback-lib` (`retryAfterTools: true`). Spawn stays `--no-extensions -e worker.ts`. If the observer's fallback chain needs an extension provider (e.g. `npm:pi-grok-cli` for `grok-cli/*`), that installed package is also passed as an extra `-e` so `setModel` can find it. The worker does not write failover traces to stdout/stderr; `pi-fallback-lib` emits structured events to the attach caller (this worker ignores them). Worker stderr is still piped and only surfaces if the process exits non-zero. In print mode the attach helper waits for the continue turn so Pi does not exit 1 on the failed model’s assistant error.
 - `src/render/` — unbound, Gated Edge, Claim Strip, pack, F-once A
 - `src/tools/` — LLM-visible pull/writes
 - `src/store/` — `CTX_HOME` / `~/.pi/ctx`, per-writer JSONL, `project.json`

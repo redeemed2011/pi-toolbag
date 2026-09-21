@@ -1,6 +1,6 @@
 # ctx — agent pickup
 
-Pi 0.84.4 extension. Spec: agent memory — Pi spec (both injects) (not shipped in this repo). Workspace pointer: `./AGENTS.md`.
+Pi 0.84.4 extension. Spec: agent memory — Pi spec (both injects) (not shipped in this repo). **New Pi session:** read `HANDOFF.md` (this dir) or `./AGENTS.md` — same remainder.
 
 Do not reopen closed leftovers (15k/5k, cap/stub, stop-hook, Order-flip A, F-packer). The spec’s “PR 1–10” is a **local sequence**, not GitHub pull requests.
 
@@ -25,18 +25,19 @@ Default `pi` is cplt. Details: [docs/sandbox.md](docs/sandbox.md). Tests use `CT
 | Tools | `src/tools/` — `ctx_get` `ctx_zoom` `ctx_frontier` `ctx_claim` `ctx_bind` `ctx_record` |
 | Commands | `src/commands/ctx.ts` — on/off, compact, status, occupancy, bind, unbind, claim |
 | Occupancy switch | `src/commands/occupancy.ts` — TUI GATE confirm; print refuse-with-reason |
-| Bind HITL + promotion | `src/commands/bind.ts`, `src/promotion.ts` |
+| Bind HITL | `src/commands/bind.ts` (name + confirm; nested bind-consent harvest; no observation-promotion quiz). |
+| Bind-consent promoter | `src/promoter/`, `promoter-worker.ts` — after attended bind; project `pending_replace`; HITL after 3 turns. |
 | Mint GATE overflow HITL | `src/commands/record.ts` — TUI refuse-first `select` vs supersede/split; print `"gate"` |
 | Mint live_conflict HITL | `src/commands/record.ts` — TUI `select` which to supersede; print `"live_conflict"` |
 | Mismatch Banner | `src/render/banner.ts` — `MATCH`/`DIVERGED` + `n`; omit empty/stale/unstamped tail |
 | Mint / refuse | `src/mint.ts` |
 | Store | `src/store/` — `CTX_HOME` or `~/.pi/ctx` |
 
-Print mode (`hasUI === false`): bind/promotion refuse; occupancy **switch** refuses with a reason (session stays on previous / default GE); mint GATE stays `"gate"`; mint live_conflict stays `"live_conflict"`.
+Print mode (`hasUI === false`): bind refuse; occupancy **switch** refuses with a reason (session stays on previous / default GE); mint GATE stays `"gate"`; mint live_conflict stays `"live_conflict"`.
 
 ## After compact
 
-`cd pi-ctx && npm test`. Sequence 1–10 is in tree. Promotion mint uses `runRecordFlow`. GATE TUI is refuse-first `select`. Confirm with the user before coding held items.
+`cd pi-ctx && npm test`. Sequence 1–10 is in tree. Bind does not promote observations. GATE TUI is refuse-first `select`. Confirm with the user before coding held items.
 
 ## Next
 

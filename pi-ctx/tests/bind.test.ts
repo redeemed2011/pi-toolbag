@@ -2,14 +2,13 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { GATE_REFUSE, GATE_SUPERSEDE } from "../src/commands/record.js";
 import { runBindFlow, runUnbind } from "../src/commands/bind.js";
 import { foldSession } from "../src/fold.js";
 import type { Hitl } from "../src/hitl.js";
 import { Runtime } from "../src/runtime.js";
 import { appendProjectRecord, createProject, loadProjectLive, readProjectMeta } from "../src/store/project.js";
 import { CTX_BIND, type Entry } from "../src/types.js";
-import { constraint, recorded } from "./fixtures.js";
+import { recorded } from "./fixtures.js";
 
 function scriptedHitl(plan: {
 	selects?: Array<string | undefined>;
@@ -128,138 +127,35 @@ describe("bind HITL", () => {
 	it("does not dump observations into law on bind", async () => {
 		const runtime = new Runtime();
 		runtime.sessionId = "sess-a";
+		const confirms: string[] = [];
+		const selects: string[] = [];
 		const branch: Entry[] = [recorded("r1", "u1", ["never reopen packing"])];
-		await runBindFlow({
+		const result = await runBindFlow({
 			pi: { appendEntry: () => {} },
 			runtime,
-			hitl: scriptedHitl({
-				selects: ["new: lawless — agent suggestion", "final skip — do not re-ask"],
-				confirms: [true, false],
-			}),
+			hitl: {
+				hasUI: true,
+				select: async (title, options) => {
+					selects.push(title);
+					return options.find((o) => o.startsWith("new: lawless")) ?? options[0];
+				},
+				confirm: async (title) => {
+					confirms.push(title);
+					return true;
+				},
+				input: async () => undefined,
+				notify: () => {},
+			},
 			cwd: "/tmp/work",
 			branch,
 			suggestedName: "lawless",
 		});
+		expect(result.ok).toBe(true);
+		expect(runtime.bound).toBe(true);
+		expect(confirms).toEqual(["Confirm bind"]);
+		expect(selects).toEqual(["Bind ctx project (never silent)"]);
 		const live = loadProjectLive("lawless", home);
 		expect([...live.live]).toEqual([]);
-	});
-
-	it("confirm-only promotion mints via record refuse rules", async () => {
-		const runtime = new Runtime();
-		runtime.sessionId = "sess-a";
-		const branch: Entry[] = [recorded("r1", "u1", ["never reopen packing"])];
-		await runBindFlow({
-			pi: { appendEntry: () => {} },
-			runtime,
-			hitl: scriptedHitl({
-				selects: ["new: minted — agent suggestion", "all — true global / house rule"],
-				confirms: [true, true],
-			}),
-			cwd: "/tmp/work",
-			branch,
-			suggestedName: "minted",
-		});
-		const live = loadProjectLive("minted", home);
-		expect([...live.live]).toHaveLength(1);
-		const rec = live.byId.get([...live.live][0] ?? "");
-		expect(rec?.headline).toBe("never reopen packing");
-		expect(rec?.applies_to).toBe("all");
-	});
-
-	it("promotion GATE refuse-first does not mint", async () => {
-		createProject("full", "full", home);
-		for (let i = 0; i < 20; i++) {
-			appendProjectRecord("full", "seed", constraint(`c${i}`, "x"), home);
-		}
-		const runtime = new Runtime();
-		runtime.sessionId = "sess-a";
-		const branch: Entry[] = [recorded("r1", "u1", ["never reopen packing"])];
-		await runBindFlow({
-			pi: { appendEntry: () => {} },
-			runtime,
-			hitl: scriptedHitl({
-				selects: [
-					"existing: full [full] — already on disk",
-					"all — true global / house rule",
-					GATE_REFUSE,
-				],
-				confirms: [true, true],
-			}),
-			cwd: "/tmp/work",
-			branch,
-		});
-		const live = loadProjectLive("full", home);
-		expect([...live.live]).toHaveLength(20);
-		expect([...live.live].every((id) => id.startsWith("c"))).toBe(true);
-	});
-
-	it("promotion GATE supersede mints", async () => {
-		createProject("full2", "full2", home);
-		for (let i = 0; i < 20; i++) {
-			appendProjectRecord("full2", "seed", constraint(`c${i}`, "x"), home);
-		}
-		const runtime = new Runtime();
-		runtime.sessionId = "sess-a";
-		const branch: Entry[] = [recorded("r1", "u1", ["never reopen packing"])];
-		await runBindFlow({
-			pi: { appendEntry: () => {} },
-			runtime,
-			hitl: scriptedHitl({
-				selects: [
-					"existing: full2 [full2] — already on disk",
-					"all — true global / house rule",
-					GATE_SUPERSEDE,
-					"c0 — c0",
-				],
-				confirms: [true, true],
-			}),
-			cwd: "/tmp/work",
-			branch,
-		});
-		const live = loadProjectLive("full2", home);
-		expect(live.live.has("c0")).toBe(false);
-		expect([...live.live]).toHaveLength(20);
-		expect([...live.constraints].some((c) => c.headline === "never reopen packing" && live.live.has(c.id))).toBe(
-			true,
-		);
-	});
-
-	it("promotion live_conflict TUI select mints with supersedes", async () => {
-		createProject("clash", "clash", home);
-		appendProjectRecord(
-			"clash",
-			"seed",
-			{
-				...constraint("c1", "never reopen packing"),
-				headline: "never reopen packing",
-				directive: "never reopen packing",
-			},
-			home,
-		);
-		const runtime = new Runtime();
-		runtime.sessionId = "sess-a";
-		const branch: Entry[] = [recorded("r1", "u1", ["never reopen packing"])];
-		await runBindFlow({
-			pi: { appendEntry: () => {} },
-			runtime,
-			hitl: scriptedHitl({
-				selects: [
-					"existing: clash [clash] — already on disk",
-					"all — true global / house rule",
-					"c1 — never reopen packing",
-				],
-				confirms: [true, true],
-			}),
-			cwd: "/tmp/work",
-			branch,
-		});
-		const live = loadProjectLive("clash", home);
-		expect(live.live.has("c1")).toBe(false);
-		expect([...live.live]).toHaveLength(1);
-		const rec = live.constraints.find((c) => live.live.has(c.id));
-		expect(rec?.headline).toBe("never reopen packing");
-		expect(rec?.supersedes).toEqual(["c1"]);
-		expect(rec?.reason_class).toBe("conflict");
 	});
 
 	it("two writers two files; fold unions; no last-writer-wins", () => {

@@ -1,4 +1,5 @@
 import { bodySetCS } from "../fold.js";
+import { pendingReplaceSection } from "../promoter/inject.js";
 import type { Entry, JudgmentRecord, LiveSet, Observation, PackedInject, SessionFold } from "../types.js";
 import { mismatchBanner } from "./banner.js";
 import { gateCheck } from "./occupancy.js";
@@ -28,7 +29,8 @@ export function renderClaimStrip(opts: {
 	const headers = `# ctx\nbound: 1\noccupancy: claim-strip`;
 	const unapplied = Math.max(0, opts.live.constraints.length - applied.length);
 	const counts = countsLine(opts.live, g, claimed, unapplied);
-	const banner = mismatchBanner({
+	const pending = pendingReplaceSection(opts.live);
+	const mismatch = mismatchBanner({
 		session: opts.session,
 		claimEmpty: claimed.claim_empty === 1,
 		claimNotLive: claimed.claim_not_live === 1,
@@ -36,6 +38,7 @@ export function renderClaimStrip(opts: {
 		branch: opts.branch,
 		observations: opts.observations,
 	});
+	const banner = [mismatch, pending].filter(Boolean).join("\n\n") || undefined;
 
 	if (g.gate === 1) {
 		return renderOverflow({ headers, dest, claimed: claimed.md, counts, banner });

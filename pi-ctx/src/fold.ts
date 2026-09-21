@@ -5,6 +5,8 @@ import {
 	CTX_OCCUPANCY,
 	CTX_PROMOTION_DECISION,
 	CTX_OBSERVATIONS_RECORDED,
+	CTX_PROMOTER_LATCH,
+	CTX_PENDING_TURN,
 	isOccupancy,
 	isPlainRecord,
 	isNonEmptyString,
@@ -90,6 +92,14 @@ export function foldSession(entries: Entry[], sessionId = ""): SessionFold {
 		occupancy: occupancy ?? null,
 		observations,
 		recency: [...observations].reverse(),
+		promoterLatched: lastCustom(entries, CTX_PROMOTER_LATCH, (data) => {
+			if (!isPlainRecord(data) || data.latched !== true) return undefined;
+			return true;
+		}) ?? false,
+		pendingReplaceTurns: lastCustom(entries, CTX_PENDING_TURN, (data) => {
+			if (!isPlainRecord(data) || typeof data.n !== "number" || !Number.isInteger(data.n) || data.n < 0) return undefined;
+			return data.n;
+		}) ?? 0,
 	};
 }
 
@@ -171,6 +181,7 @@ export function foldLive(records: JudgmentRecord[]): LiveSet {
 		destinations: ofType("destination"),
 		outOfScope: ofType("out_of_scope"),
 		fog: ofType("fog"),
+		pendingReplaces: ofType("pending_replace"),
 		blocked,
 		liveConflict,
 	};

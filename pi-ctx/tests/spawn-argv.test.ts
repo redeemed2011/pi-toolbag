@@ -58,6 +58,7 @@ describe("observer argv", () => {
 		const src = readFileSync(join(root, "worker.ts"), "utf-8");
 		expect(src).not.toMatch(/name:\s*"(record|bind|claim|get|zoom|frontier)"/);
 		expect(src).not.toMatch(/putJudgment|executeRecord|appendProjectRecord/);
+		expect(src).not.toMatch(/submit_harvest/);
 		const names = [...src.matchAll(/name:\s*"([^"]+)"/g)].map((m) => m[1]);
 		expect(new Set(names)).toEqual(new Set(["record_observations"]));
 	});

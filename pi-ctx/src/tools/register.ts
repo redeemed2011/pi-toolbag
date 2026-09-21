@@ -162,10 +162,10 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 	pi.registerTool({
 		name: "ctx_bind",
 		label: "ctx bind",
-		description: "Start the bind HITL flow (name, confirm, promotion). Never silent. Print mode refuses.",
+		description: "Start the bind HITL flow (name, confirm). Never silent. Print mode refuses. Does not promote observations into law.",
 		promptSnippet: "Bind this session to a ctx project",
 		promptGuidelines: [
-			"Use ctx_bind when the user asked to create a ctx project or you propose one. Bind always requires HITL; never bind silently.",
+			"Use ctx_bind when the user asked to create a ctx project or you propose one. Bind always requires HITL; never bind silently. Bind sets the project pointer only; it does not ask to ratify observer notes. Mint law with ctx_record.",
 		],
 		parameters: Type.Object({
 			name: Type.Optional(
