@@ -7,6 +7,7 @@ import type {
   AttachOptions,
   FallbackConfig,
   FallbackCtx,
+  FallbackEvent,
   FallbackHost,
   ModelKey,
 } from "./types.js";
@@ -59,14 +60,14 @@ function delay(ms: number): Promise<void> {
  */
 async function waitForContinueTurn(
   ctx: FallbackCtx,
-  log: (line: string) => void,
+  emit: (event: FallbackEvent, ctx?: FallbackCtx) => void,
 ): Promise<void> {
   const startDeadline = Date.now() + 30_000;
   while (ctx.isIdle() && Date.now() < startDeadline) {
     await delay(20);
   }
   if (ctx.isIdle()) {
-    log("skip reason=continue-did-not-start");
+    emit({ type: "skip", reason: "continue-did-not-start" }, ctx);
     return;
   }
   while (!ctx.isIdle()) {
@@ -75,8 +76,9 @@ async function waitForContinueTurn(
 }
 
 export function attachFallback(pi: FallbackHost, options: AttachOptions): AttachHandle {
-  const log = options.log ?? (() => {});
-  const notify = options.notify !== false;
+  const emit = (event: FallbackEvent, ctx?: FallbackCtx): void => {
+    options.onEvent?.(event, ctx);
+  };
   let config: FallbackConfig | undefined;
   let enabled = false;
 
@@ -86,13 +88,13 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
   } else if (options.configPath) {
     const loaded = loadFallbackConfigFile(options.configPath);
     if (!loaded.ok) {
-      log(`config ${loaded.reason} path=${options.configPath}`);
+      emit({ type: "config-error", reason: loaded.reason, path: options.configPath });
     } else {
       config = loaded.config;
       enabled = config.enabled;
     }
   } else {
-    log("config missing (no config or configPath)");
+    emit({ type: "config-error", reason: "missing" });
   }
 
   const state: EpochState = {
@@ -126,7 +128,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     try {
       thinking = pi.getThinkingLevel();
     } catch (err) {
-      log(`getThinkingLevel threw: ${err instanceof Error ? err.message : String(err)}`);
+      emit({ type: "host-error", where: "getThinkingLevel", message: err instanceof Error ? err.message : String(err) }, ctx);
     }
 
     state.ignoreModelSelectKey = nextKey;
@@ -138,7 +140,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       }
     } catch (err) {
       if (state.ignoreModelSelectKey === nextKey) state.ignoreModelSelectKey = undefined;
-      log(`setModel threw to=${nextKey}: ${err instanceof Error ? err.message : String(err)}`);
+      emit({ type: "host-error", where: "setModel", message: err instanceof Error ? err.message : String(err), to: nextKey }, ctx);
       return { ok: false, reason: "setModel-threw" };
     }
 
@@ -146,7 +148,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       try {
         pi.setThinkingLevel(thinking);
       } catch (err) {
-        log(`setThinkingLevel threw: ${err instanceof Error ? err.message : String(err)}`);
+        emit({ type: "host-error", where: "setThinkingLevel", message: err instanceof Error ? err.message : String(err) }, ctx);
       }
     }
     if (state.ignoreModelSelectKey === nextKey) state.ignoreModelSelectKey = undefined;
@@ -187,7 +189,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     const reason = rec.reason;
     const willRetry = rec.willRetry === true;
     if (reason === "overflow" && willRetry) {
-      log("compact overflow willRetry=true stay");
+      emit({ type: "stay", reason: "overflow-will-retry" }, ctx);
       return;
     }
     if (reason === "manual" || reason === "threshold" || (reason === "overflow" && !willRetry)) {
@@ -195,9 +197,9 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       if (state.preferred && current !== state.preferred) {
         const switched = await applyModelSwitch(ctx, state.preferred);
         if (!switched.ok) {
-          log(`chapter-break restore failed reason=${switched.reason} to=${state.preferred}`);
+          emit({ type: "restore", ok: false, to: state.preferred, reason: switched.reason }, ctx);
         } else {
-          log(`chapter-break restore to=${state.preferred}`);
+          emit({ type: "restore", ok: true, to: state.preferred }, ctx);
         }
       }
       resetEpoch();
@@ -208,7 +210,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     if (!config || !enabled) return;
     if (state.failoverInFlight) return;
     if (!ctx.isIdle()) {
-      log("skip reason=not-idle");
+      emit({ type: "skip", reason: "not-idle" }, ctx);
       return;
     }
 
@@ -219,14 +221,14 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     }
 
     if (!options.retryAfterTools && state.toolsThisTurn) {
-      log("skip reason=tools-already-started");
+      emit({ type: "skip", reason: "tools-already-started" }, ctx);
       state.toolsThisTurn = false;
       return;
     }
 
     const current = currentKey(ctx);
     if (!current) {
-      log("skip reason=no-current-model");
+      emit({ type: "skip", reason: "no-current-model" }, ctx);
       state.toolsThisTurn = false;
       return;
     }
@@ -234,7 +236,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
 
     const classification = classifyError(error);
     if (!isFailoverWorthy(classification)) {
-      log(`skip reason=not-failover-worthy class=${classification}`);
+      emit({ type: "skip", reason: "not-failover-worthy", classification }, ctx);
       state.toolsThisTurn = false;
       return;
     }
@@ -249,7 +251,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
         remainingBudget: state.remainingBudget,
       });
       if (decision.action === "none") {
-        log(`skip reason=${decision.reason}${decision.classification ? ` class=${decision.classification}` : ""}`);
+        emit({ type: "skip", reason: decision.reason, classification: decision.classification }, ctx);
         state.toolsThisTurn = false;
         return;
       }
@@ -258,7 +260,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       const parsed = splitModelKey(decision.next);
       if (!parsed || !ctx.modelRegistry.find(parsed.provider, parsed.id)) {
         state.attempted.add(decision.next);
-        log(`skip reason=not-in-registry to=${decision.next}`);
+        emit({ type: "skip", reason: "not-in-registry", to: decision.next }, ctx);
         continue;
       }
 
@@ -267,13 +269,13 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
         const switched = await applyModelSwitch(ctx, decision.next);
         if (!switched.ok) {
           state.attempted.add(decision.next);
-          log(`skip reason=${switched.reason} to=${decision.next}`);
+          emit({ type: "skip", reason: switched.reason, to: decision.next }, ctx);
           continue;
         }
 
         try {
           if (!ctx.isIdle()) {
-            log("skip reason=not-idle-after-setModel");
+            emit({ type: "skip", reason: "not-idle-after-setModel" }, ctx);
             return;
           }
           // ExtensionAPI.sendUserMessage is void and fire-and-forget
@@ -283,19 +285,24 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
           const sent = pi.sendUserMessage(CONTINUE_USER_MESSAGE);
           await maybeAwait(sent);
         } catch (err) {
-          log(`skip reason=continue-threw: ${err instanceof Error ? err.message : String(err)}`);
+          emit({ type: "skip", reason: "continue-threw", detail: err instanceof Error ? err.message : String(err) }, ctx);
           return;
         }
 
         state.remainingBudget -= 1;
         state.toolsThisTurn = false;
-        const line = `failover ${current} -> ${decision.next} reason=${decision.reason} budget=${state.remainingBudget}`;
-        log(line);
-        if (notify && ctx.hasUI) {
-          ctx.ui?.notify?.(line, "warning");
-        }
+        emit(
+          {
+            type: "failover",
+            from: current,
+            to: decision.next,
+            reason: decision.reason,
+            budget: state.remainingBudget,
+          },
+          ctx,
+        );
         if (ctx.mode === "print" || ctx.mode === "json") {
-          await waitForContinueTurn(ctx, log);
+          await waitForContinueTurn(ctx, emit);
         }
         return;
       } finally {

@@ -136,6 +136,15 @@ Feature: Attach failover to a Pi session
     Then setModel was not called
     And toolsThisTurn is false
 
+  Scenario: aborted settle does not failover
+    Given attach with retryAfterTools false
+    And a session start
+    And the last assistant was aborted
+    When the agent settles
+    Then setModel was not called
+    And continue was not sent
+    And a skip event has reason "not-failover-worthy" and class "aborted"
+
   Scenario: overflow without retry restores preferred
     Given attach with retryAfterTools false
     And a session start
@@ -186,10 +195,11 @@ Feature: Attach failover to a Pi session
     And continue was sent once
     And the host is idle
 
-  Scenario: hasUI notifies on failover
+  Scenario: failover emits an event and does not notify
     Given the host has UI
     And attach with retryAfterTools false
     And a session start
     And the last assistant error is "usage balance exhausted"
     When the agent settles
-    Then a warning was notified
+    Then a failover event was emitted
+    And no warning was notified

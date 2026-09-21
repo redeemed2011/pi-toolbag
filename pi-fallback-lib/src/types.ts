@@ -74,15 +74,39 @@ export type ParseResult =
   | { ok: true; config: FallbackConfig }
   | { ok: false; reason: ParseFailReason };
 
+export type FallbackEvent =
+  | {
+      type: "skip";
+      reason: string;
+      classification?: ErrorClass;
+      to?: ModelKey;
+      detail?: string;
+    }
+  | {
+      type: "failover";
+      from: ModelKey;
+      to: ModelKey;
+      reason: ErrorClass;
+      budget: number;
+    }
+  | { type: "restore"; ok: boolean; to: ModelKey; reason?: string }
+  | { type: "stay"; reason: "overflow-will-retry" }
+  | { type: "config-error"; reason: ParseFailReason | "missing"; path?: string }
+  | {
+      type: "host-error";
+      where: "getThinkingLevel" | "setThinkingLevel" | "setModel";
+      message: string;
+      to?: ModelKey;
+    };
+
 export type AttachOptions = {
   retryAfterTools: boolean;
   /** Already-parsed config. Wins over configPath. */
   config?: FallbackConfig;
   /** Absolute path supplied by the caller. Helper never guesses ~/.pi. */
   configPath?: string;
-  log?: (line: string) => void;
-  /** Default true. When ctx.hasUI, also ctx.ui.notify. */
-  notify?: boolean;
+  /** Structured outcomes. The library never writes stdout/stderr or calls notify. */
+  onEvent?: (event: FallbackEvent, ctx?: FallbackCtx) => void;
 };
 
 export type AttachHandle = {

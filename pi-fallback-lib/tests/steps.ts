@@ -269,16 +269,20 @@ Given("a three-model grok chain with budget 1", (world) => {
 });
 
 Given("attach with retryAfterTools false", (world) => {
+  world.events = [];
   world.handle = attachFallback(hostOf(world), {
     retryAfterTools: false,
     config: world.config as FallbackConfig,
+    onEvent: (event) => (world.events as object[]).push(event),
   });
 });
 
 Given("attach with retryAfterTools true", (world) => {
+  world.events = [];
   world.handle = attachFallback(hostOf(world), {
     retryAfterTools: true,
     config: world.config as FallbackConfig,
+    onEvent: (event) => (world.events as object[]).push(event),
   });
 });
 
@@ -299,6 +303,9 @@ Given("a tool has started", async (world) => {
 
 Given(/^the last assistant error is "(.*)"$/, (world, text) => {
   hostOf(world).setAssistantError(text);
+});
+Given("the last assistant was aborted", (world) => {
+  hostOf(world).setAssistantError("", "aborted");
 });
 
 Given(/^setModel for "(.*)" returns false$/, (world, key) => {
@@ -396,8 +403,16 @@ Then("toolsThisTurn is false", (world) => {
   expect(handleOf(world).getDebugState().toolsThisTurn).toBe(false);
 });
 
-Then("a warning was notified", (world) => {
-  expect(hostOf(world).notifies.some((line) => line.includes("failover"))).toBe(true);
+Then(/^a skip event has reason "(.*)" and class "(.*)"$/, (world, reason, classification) => {
+  const events = world.events as Array<{ type: string; reason?: string; classification?: string }>;
+  expect(events.some((e) => e.type === "skip" && e.reason === reason && e.classification === classification)).toBe(true);
+});
+Then("a failover event was emitted", (world) => {
+  const events = world.events as Array<{ type: string }>;
+  expect(events.some((e) => e.type === "failover")).toBe(true);
+});
+Then("no warning was notified", (world) => {
+  expect(hostOf(world).notifies).toEqual([]);
 });
 
 Then("the host is idle", (world) => {

@@ -27,5 +27,6 @@ Put `"npm:pi-auto-fallback"` back in `packages` and remove the local path.
 
 - Wait until Pi has given up (`agent_settled`), then `setModel` + `continue`.
 - Do not failover after tools have started in the interactive session.
+- Do not write to stdout/stderr. Failover reports through `ctx.ui.notify`. The library emits structured events; this extension notifies only on a successful hop.
 - After `/compact` or threshold compact, restore the preferred (epoch-start) model.
 - Overflow compact that retries the same request stays on the current model. If that model later settles with a quota/402 error, failover runs on that settle (the compact handler itself does not switch).

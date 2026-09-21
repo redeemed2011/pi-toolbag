@@ -8,6 +8,7 @@ export type {
   ParseFailReason,
   DecideInput,
   FailoverDecision,
+  FallbackEvent,
   AttachOptions,
   AttachHandle,
   FallbackHost,
