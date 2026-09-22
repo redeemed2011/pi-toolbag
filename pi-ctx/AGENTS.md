@@ -26,7 +26,7 @@ Default `pi` is cplt. Details: [docs/sandbox.md](docs/sandbox.md). Tests use `CT
 | Commands | `src/commands/ctx.ts` — on/off, compact, status, occupancy, bind, unbind, claim |
 | Occupancy switch | `src/commands/occupancy.ts` — TUI GATE confirm; print refuse-with-reason |
 | Bind HITL | `src/commands/bind.ts` (name + confirm; nested bind-consent harvest; no observation-promotion quiz). |
-| Bind-consent promoter | `src/promoter/`, `promoter-worker.ts` — after attended bind; project `pending_replace`; HITL after 3 turns. |
+| Bind-consent promoter | `src/promoter/`, `promoter-worker.ts` — after attended bind; project `pending_replace`; HITL again after 3 settled parent turns (`agent_settled`), not tool rounds. |
 | Mint GATE overflow HITL | `src/commands/record.ts` — TUI refuse-first `select` vs supersede/split; print `"gate"` |
 | Mint live_conflict HITL | `src/commands/record.ts` — TUI `select` which to supersede; print `"live_conflict"` |
 | Mismatch Banner | `src/render/banner.ts` — `MATCH`/`DIVERGED` + `n`; omit empty/stale/unstamped tail |

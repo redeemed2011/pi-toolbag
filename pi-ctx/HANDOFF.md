@@ -11,10 +11,8 @@ You are continuing **ctx** in this directory. Bind-consent harvest is **locked a
 cd pi-ctx && npm test && npm run typecheck
 ```
 
-## Your work
+## Queue
 
-1. **Receipt on `ctx_bind` JSON** — done.
-2. **Live `pending_replace` e2e:** attended TUI only. Join `pi-ctx-harvest-e2e-2`, user quote that replaces a live constraint. Report: `e2e-pending-replace-report.md`.
-3. **Patch Pi spec / Remaining / first-questions dump-on-bind** — done (surgical). First-principles untouched.
+Empty. Fight path and Defer-reopen are done. Do not rerun them against `pi-ctx-harvest-e2e-2`. Do not invent Spawn Envelope.
 
-See `AGENTS.md` for shipped behavior, constraints, and e2e history.
+See `AGENTS.md` for shipped behavior and constraints.

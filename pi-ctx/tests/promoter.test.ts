@@ -10,7 +10,8 @@ import { pendingReplaceSection } from "../src/promoter/inject.js";
 import { extractUserQuotes, quoteInCorpus } from "../src/promoter/quotes.js";
 import { promoterKickoffPrompt } from "../src/promoter/io.js";
 import { PROMOTER_EXTENSION_PATH } from "../src/promoter/run.js";
-import { KEEP, SUPERSEDE, runPendingReplaceHitl } from "../src/promoter/hitl.js";
+import { DEFER_ONE, KEEP, SUPERSEDE, runPendingReplaceHitl } from "../src/promoter/hitl.js";
+import { isCompletedParentTurn, onPendingReplaceSettled, registerPendingReplaceHook } from "../src/hooks/pending-replace-hook.js";
 import { parsePromoterResult } from "../src/promoter/schema.js";
 import { renderInject } from "../src/render/inject.js";
 import { Runtime } from "../src/runtime.js";
@@ -410,6 +411,100 @@ describe("promoter harvest", () => {
 		expect(result.harvest?.promoted).toEqual([]);
 		expect(result.harvest?.pending).toBe(1);
 		expect(result.harvest?.skipped).toBe(0);
+	});
+
+	it("reopens pending-replace HITL after 3 settled parent turns, not tool rounds", async () => {
+		createProject("p-turns", "p-turns");
+		const live = constraint("c1", "never dump the buffer", "all");
+		live.headline = "never dump";
+		live.directive = live.body;
+		appendProjectRecord("p-turns", "seed", live);
+		const quote = "Bind is consent to promote what should clearly be promoted";
+		applyPromoterResult({
+			projectId: "p-turns",
+			sessionId: "sess",
+			occupancy: "gated-edge",
+			siblingKnob: 0,
+			claimedId: null,
+			existing: [live],
+			corpus: [quote],
+			result: { promote: [], pending_replace: [{ quote, live_id: "c1" }] },
+		});
+		const runtime = new Runtime();
+		runtime.bound = true;
+		runtime.projectId = "p-turns";
+		runtime.sessionId = "sess";
+		const branch: { type: string; id: string; customType?: string; data?: unknown; message?: { role?: string; stopReason?: string } }[] = [];
+		const counts: number[] = [];
+		const pi = {
+			appendEntry: (_customType: string, data?: unknown) => {
+				const n = (data as { n?: number } | undefined)?.n;
+				if (typeof n === "number") counts.push(n);
+				branch.push({ type: "custom", id: `c${branch.length}`, customType: _customType, data });
+			},
+		};
+		let selects = 0;
+		let resolveSelect: (value: string) => void = () => {};
+		const ctx = {
+			hasUI: true,
+			ui: {
+				select: async () => {
+					selects += 1;
+					return new Promise<string>((resolve) => {
+						resolveSelect = resolve;
+					});
+				},
+				confirm: async () => false,
+				input: async () => undefined,
+				notify: () => {},
+			},
+			sessionManager: { getBranch: () => branch, getSessionId: () => "sess" },
+		};
+		const gate = { inFlight: false };
+		const settle = (event?: unknown) =>
+			onPendingReplaceSettled(pi as never, runtime, ctx, gate, event);
+
+		await settle();
+		await settle();
+		expect(selects).toBe(0);
+		expect(counts).toEqual([1, 2]);
+
+		const third = settle();
+		expect(selects).toBe(1);
+		expect(gate.inFlight).toBe(true);
+		await settle();
+		expect(selects).toBe(1);
+		expect(counts).toEqual([1, 2, 3]);
+
+		resolveSelect(DEFER_ONE);
+		await third;
+		expect(counts.at(-1)).toBe(0);
+		expect(gate.inFlight).toBe(false);
+		const folded = foldLive(loadProjectRecords("p-turns"));
+		expect(folded.pendingReplaces.filter((p) => folded.live.has(p.id))).toHaveLength(1);
+		expect(folded.live.has("c1")).toBe(true);
+
+		await settle({ toolResults: [{}], message: { stopReason: "tool_use" } });
+		await settle({ outcome: "completed", continue: true });
+		branch.push({ type: "message", id: "err", message: { role: "assistant", stopReason: "error" } });
+		await settle();
+		expect(selects).toBe(1);
+		expect(counts.filter((n) => n !== 0)).toEqual([1, 2, 3]);
+	});
+
+	it("does not count a tool round as a parent turn", () => {
+		expect(isCompletedParentTurn(undefined)).toBe(true);
+		expect(isCompletedParentTurn({ type: "agent_settled" } as never)).toBe(true);
+		expect(isCompletedParentTurn({ toolResults: [{ id: "t" }] })).toBe(false);
+		expect(isCompletedParentTurn({ message: { stopReason: "tool_calls" } })).toBe(false);
+		expect(isCompletedParentTurn({ outcome: "error" })).toBe(false);
+		expect(isCompletedParentTurn({ continue: true })).toBe(false);
+	});
+
+	it("registers the reopen counter on agent_settled", () => {
+		const events: string[] = [];
+		registerPendingReplaceHook({ on: (event: string) => events.push(event) } as never, new Runtime());
+		expect(events).toEqual(["agent_settled"]);
 	});
 
 });
