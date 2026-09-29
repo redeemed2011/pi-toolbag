@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,11 +14,30 @@ export const WORKER_EXTENSION_PATH = join(REPO_ROOT, "worker.ts");
 export function modelArg(model: ConfiguredModel): string {
 	return `${model.provider}/${model.id}`;
 }
+/** Numeric nvm dir order. `v9.0.0` is older than `v24.21.0`. */
+export function compareNodeVersionDir(a: string, b: string): number {
+	const parts = (name: string) =>
+		name
+			.replace(/^v/i, "")
+			.split(".")
+			.map((part) => {
+				const n = Number(part);
+				return Number.isInteger(n) ? n : Number.NEGATIVE_INFINITY;
+			});
+	const av = parts(a);
+	const bv = parts(b);
+	const len = Math.max(av.length, bv.length);
+	for (let i = 0; i < len; i++) {
+		const diff = (av[i] ?? 0) - (bv[i] ?? 0);
+		if (diff !== 0) return diff;
+	}
+	return 0;
+}
 
 /**
  * Prefer the already-running Pi CLI JS (so a sandboxed parent does not re-enter
- * the cplt wrapper). Then the Bun launcher at ~/.pi/agent/bin/pi, then
- * `pi-unsafe`. Never PATH `pi` unless that is the only option.
+ * the cplt wrapper). Then the newest nvm global `pi`, then `pi-unsafe`.
+ * Never PATH `pi` unless that is the only option.
  */
 export function resolvePiBinary(): { command: string; baseArgs: string[] } {
 	if (process.env.SBX_PI_BIN && existsSync(process.env.SBX_PI_BIN)) {
@@ -35,9 +54,15 @@ export function resolvePiBinary(): { command: string; baseArgs: string[] } {
 			// fall through
 		}
 	}
-	const bunLauncher = join(homedir(), ".pi", "agent", "bin", "pi");
-	if (existsSync(bunLauncher)) {
-		return { command: bunLauncher, baseArgs: [] };
+	const nvmVersions = join(homedir(), ".nvm", "versions", "node");
+	if (existsSync(nvmVersions)) {
+		const versions = readdirSync(nvmVersions).sort(compareNodeVersionDir);
+		for (let i = versions.length - 1; i >= 0; i--) {
+			const cand = join(nvmVersions, versions[i], "bin", "pi");
+			if (existsSync(cand)) {
+				return { command: cand, baseArgs: [] };
+			}
+		}
 	}
 	return { command: "pi-unsafe", baseArgs: [] };
 }

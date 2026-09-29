@@ -3,11 +3,16 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { buildWorkerArgv, extraWorkerExtensionPaths, modelArg, WORKER_EXTENSION_PATH } from "../src/spawn/observer.js";
+import { buildWorkerArgv, compareNodeVersionDir, extraWorkerExtensionPaths, modelArg, WORKER_EXTENSION_PATH } from "../src/spawn/observer.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("observer argv", () => {
+	it("orders nvm dirs by version, not by string", () => {
+		const dirs = ["v9.0.0", "v24.21.0", "v24.9.0", "v10.0.0"].sort(compareNodeVersionDir);
+		expect(dirs).toEqual(["v9.0.0", "v10.0.0", "v24.9.0", "v24.21.0"]);
+	});
+
 	const model = { provider: "openrouter" as const, id: "z-ai/glm-5.3", thinking: "low" as const };
 
 	it("uses the OM contract plus sandbox --session-dir", () => {
