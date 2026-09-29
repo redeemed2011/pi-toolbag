@@ -1,0 +1,25 @@
+{
+  "name": "pi-stream-stall",
+  "version": "0.1.0",
+  "description": "Pi extension: end a silent provider stream without abort(), so failover can hop.",
+  "type": "module",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "test": "node ../node_modules/vitest/vitest.mjs run",
+    "typecheck": "node ../node_modules/typescript/bin/tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^0.84.4",
+    "@earendil-works/pi-coding-agent": "^0.84.4",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.5"
+  }
+}

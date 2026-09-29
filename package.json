@@ -10,17 +10,19 @@
     "pi-fallback-lib",
     "pi-ctx",
     "pi-auto-fallback",
-    "pi-foundations"
+    "pi-foundations",
+    "pi-stream-stall"
   ],
   "scripts": {
-    "test": "cd pi-ctx && node ../node_modules/vitest/vitest.mjs run && cd ../pi-fallback-lib && node ../node_modules/vitest/vitest.mjs run && cd ../pi-foundations && node ../node_modules/vitest/vitest.mjs run",
-    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p pi-ctx && node node_modules/typescript/bin/tsc --noEmit -p pi-fallback-lib && node node_modules/typescript/bin/tsc --noEmit -p pi-auto-fallback && node node_modules/typescript/bin/tsc --noEmit -p pi-foundations"
+    "test": "cd pi-ctx && node ../node_modules/vitest/vitest.mjs run && cd ../pi-fallback-lib && node ../node_modules/vitest/vitest.mjs run && cd ../pi-foundations && node ../node_modules/vitest/vitest.mjs run && cd ../pi-stream-stall && node ../node_modules/vitest/vitest.mjs run",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p pi-ctx && node node_modules/typescript/bin/tsc --noEmit -p pi-fallback-lib && node node_modules/typescript/bin/tsc --noEmit -p pi-auto-fallback && node node_modules/typescript/bin/tsc --noEmit -p pi-foundations && node node_modules/typescript/bin/tsc --noEmit -p pi-stream-stall"
   },
   "pi": {
     "extensions": [
       "./pi-ctx/index.ts",
       "./pi-auto-fallback/index.ts",
-      "./pi-foundations/index.ts"
+      "./pi-foundations/index.ts",
+      "./pi-stream-stall/index.ts"
     ],
     "skills": [
       "./pi-foundations/skills"

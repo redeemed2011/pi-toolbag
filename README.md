@@ -8,6 +8,7 @@ Pi extensions and the library they share.
 | `pi-auto-fallback/` | Same-session cross-model failover for the interactive session. |
 | `pi-fallback-lib/` | Failover kernel. Not an extension. ctx and auto-fallback depend on it. |
 | `pi-foundations/` | `/first-questions` and `/first-principles`. Contract files under `.pi/foundations/`. Short ctx law only after the file is confirmed. |
+| `pi-stream-stall/` | Ends a silent provider stream without `abort()`, so failover can hop. |
 
 ## Install
 
@@ -32,4 +33,4 @@ Default `pi` on a cplt host is the sandboxed wrapper. Tests must not invoke it. 
 
 ## Pickup
 
-A new Pi session in this repo should read `AGENTS.md`, then `pi-ctx/AGENTS.md` for memory work, `pi-auto-fallback/README.md` for failover, or `pi-foundations/README.md` for the two rituals.
+A new Pi session in this repo should read `AGENTS.md`, then `pi-ctx/AGENTS.md` for memory work, `pi-auto-fallback/README.md` for failover, `pi-foundations/README.md` for the two rituals, or `pi-stream-stall/README.md` for the stall watchdog.
