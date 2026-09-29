@@ -9,7 +9,7 @@ ctx is a Pi extension. Session inject (observers + compact inject) must work ins
 | Layer | What it does |
 |---|---|
 | Wrapper | `~/.local/bin/pi` → `cplt --agent pi --yes … -- <pi args>` |
-| Already inside cplt | Wrapper sees `__CPLT_WRAPPED=1` and execs the real nvm `pi` (no nested jail) |
+| Already inside cplt | Wrapper sees `__CPLT_WRAPPED=1` and execs the Bun Pi launcher (no nested jail) |
 | Filesystem | Landlock deny-by-default. Project dir is read+write+exec. Home is not. |
 | Network | Outbound TCP 443 allowed. Localhost blocked except ports you pass (`8787` for Headroom). Secrets stripped from env unless `--pass-env`. |
 | Bubblewrap | If `bwrap` is installed, extra namespaces + private `/tmp`. Live probes can return `EROFS` (errno 30) where Landlock-only returns `EACCES` (errno 13). |
@@ -72,7 +72,7 @@ Tests never write the real home store. They set `CTX_HOME` to a temp dir under t
 |---|---|---|---|---|
 | **Unit** (`vitest`) | fold, snapCutoff, packInject, occupancy, applies_to refuse, F-once A, JSONL, argv | No | No | Run anywhere, including inside cplt. Writes only `CTX_HOME` / `mkdtemp` / project `.tmp/` |
 | **Sandbox probe** (`scripts/check-sandbox.sh`, `tests/sandbox-probe.test.ts`) | Asserts `--print-profile` contains the `~/.pi/ctx` grant; documents exec≠agent | No Pi session | No | Invokes `cplt --print-profile` / `cplt check` only |
-| **Extension load (optional)** | `pi-unsafe --offline --no-session -e ./index.ts -p …` in an isolated `PI_CODING_AGENT_DIR` | Yes, real CLI | Yes, unless the prompt never starts a model (prefer `--help` / fail-closed load tests) | **Do not** use default `pi` (wrapper). Use `pi-unsafe` or nvm `pi` with isolated dirs |
+| **Extension load (optional)** | `pi-unsafe --offline --no-session -e ./index.ts -p …` in an isolated `PI_CODING_AGENT_DIR` | Yes, real CLI | Yes, unless the prompt never starts a model (prefer `--help` / fail-closed load tests) | **Do not** use default `pi` (wrapper). Use `pi-unsafe` with isolated dirs |
 | **Live compact (later, gated)** | Bound/unbound compact inject against a cheap model | Yes | Yes | Opt-in: `PI_CTX_LIVE=1`. Isolated `CTX_HOME` + `PI_CODING_AGENT_DIR` + `--session-dir` |
 
 Default `npm test` is **unit + sandbox probe**. It must not:
@@ -85,7 +85,7 @@ Default `npm test` is **unit + sandbox probe**. It must not:
 ### Isolated live Pi (when you opt in)
 
 ```bash
-REAL_PI="$(ls -1d "$HOME"/.nvm/versions/node/*/bin/pi | tail -1)"
+REAL_PI="$HOME/.pi/agent/bin/pi"
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/pi-ctx-live.XXXX")"
 export PI_CODING_AGENT_DIR="$WORKDIR/agent"
 export CTX_HOME="$WORKDIR/ctx"

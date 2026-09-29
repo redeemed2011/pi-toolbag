@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,8 +17,8 @@ export function modelArg(model: ConfiguredModel): string {
 
 /**
  * Prefer the already-running Pi CLI JS (so a sandboxed parent does not re-enter
- * the cplt wrapper). Fall back to nvm `pi`, then `pi-unsafe`, never PATH `pi`
- * unless that is the only option.
+ * the cplt wrapper). Then the Bun launcher at ~/.pi/agent/bin/pi, then
+ * `pi-unsafe`. Never PATH `pi` unless that is the only option.
  */
 export function resolvePiBinary(): { command: string; baseArgs: string[] } {
 	if (process.env.SBX_PI_BIN && existsSync(process.env.SBX_PI_BIN)) {
@@ -35,13 +35,9 @@ export function resolvePiBinary(): { command: string; baseArgs: string[] } {
 			// fall through
 		}
 	}
-	const nvm = join(homedir(), ".nvm", "versions", "node");
-	if (existsSync(nvm)) {
-		const versions = readdirSync(nvm).sort();
-		for (let i = versions.length - 1; i >= 0; i--) {
-			const cand = join(nvm, versions[i], "bin", "pi");
-			if (existsSync(cand)) return { command: cand, baseArgs: [] };
-		}
+	const bunLauncher = join(homedir(), ".pi", "agent", "bin", "pi");
+	if (existsSync(bunLauncher)) {
+		return { command: bunLauncher, baseArgs: [] };
 	}
 	return { command: "pi-unsafe", baseArgs: [] };
 }
