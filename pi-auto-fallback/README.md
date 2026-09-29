@@ -26,5 +26,19 @@ Put `"npm:pi-auto-fallback"` back in `packages` and remove `git:github.com/redee
 - Wait until Pi has given up (`agent_settled`), then `setModel` + `continue`.
 - Do not failover after tools have started in the interactive session.
 - Do not write to stdout/stderr. Failover reports through `ctx.ui.notify`. The library emits structured events; this extension notifies only on a successful hop.
-- After `/compact` or threshold compact, restore the preferred (epoch-start) model.
+- After `/compact` or threshold compact, restore the preferred model unless a usage gate has not recovered by at least 20 points. A failed usage probe does not restore.
 - Overflow compact that retries the same request stays on the current model. If that model later settles with a quota/402 error, failover runs on that settle (the compact handler itself does not switch).
+- Before a prompt, a `usageGates` entry can switch off a model whose remote percent or token count is at or over the threshold. That hop does not send `continue`. A failed usage check stays on the current model and is notified. A later prompt returns to the preferred model when its percent is at least 20 points under the threshold. A 402 does not return while that cap still holds. The return does not send `continue` and resets the failover budget.
+
+```json
+"usageGates": [
+  {
+    "provider": "grok-cli",
+    "metric": "percent",
+    "threshold": 90,
+    "source": "grok-cli"
+  }
+],
+```
+
+`source: "grok-cli"` is weekly percent, not a token count. The model must already be in a chain; the gate does not invent a hop. `grok-cli/grok-build` is not in the default chain, so add it there if you want that model capped too.

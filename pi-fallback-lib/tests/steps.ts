@@ -192,6 +192,7 @@ When("I decide failover", (world) => {
     error: errorOf(world),
     attempted: (world.attempted as Set<string>) ?? new Set(),
     remainingBudget: world.budget as number,
+    blocked: world.blocked as Set<string> | undefined,
   });
 });
 
@@ -274,6 +275,17 @@ Given("attach with retryAfterTools false", (world) => {
     retryAfterTools: false,
     config: world.config as FallbackConfig,
     onEvent: (event) => (world.events as object[]).push(event),
+    readUsage: async (input) => {
+      const fn = world.readUsage as
+        | ((input: {
+            model: string;
+            gate: import("../src/types.js").UsageGate;
+            ctx: import("../src/types.js").FallbackCtx;
+          }) => Promise<{ ok: true; value: number } | { ok: false; reason: string }>)
+        | undefined;
+      if (!fn) return { ok: false, reason: "no-reader" };
+      return fn(input);
+    },
   });
 });
 
@@ -283,6 +295,17 @@ Given("attach with retryAfterTools true", (world) => {
     retryAfterTools: true,
     config: world.config as FallbackConfig,
     onEvent: (event) => (world.events as object[]).push(event),
+    readUsage: async (input) => {
+      const fn = world.readUsage as
+        | ((input: {
+            model: string;
+            gate: import("../src/types.js").UsageGate;
+            ctx: import("../src/types.js").FallbackCtx;
+          }) => Promise<{ ok: true; value: number } | { ok: false; reason: string }>)
+        | undefined;
+      if (!fn) return { ok: false, reason: "no-reader" };
+      return fn(input);
+    },
   });
 });
 
@@ -417,4 +440,243 @@ Then("no warning was notified", (world) => {
 
 Then("the host is idle", (world) => {
   expect(hostOf(world).idle).toBe(true);
+});
+Given(/^blocked keys are "(.*)"$/, (world, keys) => {
+  world.blocked = new Set(parseKeys(keys));
+});
+
+Given(/^a grok percent gate at (\d+(?:\.\d+)?) on provider "(.*)"$/, (world, threshold, provider) => {
+  const config = world.config as FallbackConfig;
+  config.usageGates = [
+    {
+      provider,
+      metric: "percent",
+      threshold: Number(threshold),
+      source: { kind: "grok-cli" },
+    },
+  ];
+});
+
+Given(/^usage reads ([0-9.]+)$/, (world, value) => {
+  const reading = Number(value);
+  world.readUsage = async () => ({ ok: true as const, value: reading });
+});
+
+Given(/^usage is unavailable because "(.*)"$/, (world, reason) => {
+  world.readUsage = async () => ({ ok: false as const, reason });
+});
+
+
+Given("sendUserMessage starts the next prompt", (world) => {
+  hostOf(world).emitBeforeAgentStartOnSend = true;
+});
+When("the user prompt starts", async (world) => {
+  await hostOf(world).emit("before_agent_start");
+});
+
+Then(/^a usage-switch event went to "(.*)"$/, (world, key) => {
+  const events = world.events as Array<{ type: string; to?: string }>;
+  expect(events.some((event) => event.type === "usage-switch" && event.to === key)).toBe(true);
+});
+
+Then(/^a usage-return event went to "(.*)"$/, (world, key) => {
+  const events = world.events as Array<{ type: string; to?: string }>;
+  expect(events.some((event) => event.type === "usage-return" && event.to === key)).toBe(true);
+});
+
+Then(/^a usage-skip event has reason "(.*)"$/, (world, reason) => {
+  const events = world.events as Array<{ type: string; reason?: string }>;
+  expect(events.some((event) => event.type === "usage-skip" && event.reason === reason)).toBe(true);
+});
+
+Then(/^setModel call count is (\d+)$/, (world, n) => {
+  expect(hostOf(world).setModelCalls).toHaveLength(Number(n));
+});
+
+Then(/^a usage gate matches provider "(.*)" at (\d+(?:\.\d+)?) percent from "(.*)"$/, (world, provider, threshold, source) => {
+  const parsed = world.parse as ParseResult;
+  expect(parsed.ok).toBe(true);
+  if (!parsed.ok) return;
+  const gate = parsed.config.usageGates?.find((item) => item.provider === provider);
+  expect(gate?.metric).toBe("percent");
+  expect(gate?.threshold).toBe(Number(threshold));
+  expect(gate?.source).toEqual({ kind: source });
+});
+
+Then("no usage gates were parsed", (world) => {
+  const parsed = world.parse as ParseResult;
+  expect(parsed.ok && parsed.config.usageGates).toBeUndefined();
+});
+
+
+Given("a grok vault with a live token", (world) => {
+  const dir = mkdtempSync(join(tmpdir(), "pi-fallback-usage-"));
+  const now = Date.parse("2026-09-29T12:00:00Z");
+  writeFileSync(
+    join(dir, "accounts.json"),
+    JSON.stringify({
+      version: 1,
+      activeAccountId: "account-1",
+      accounts: [
+        {
+          id: "account-1",
+          credential: {
+            access: "secret-token",
+            refresh: "refresh-token",
+            expires: now + 60_000,
+            baseUrl: "https://billing.example.test/v1",
+          },
+        },
+      ],
+    }),
+  );
+  world.usageDir = dir;
+  world.now = now;
+  world.usageFetches = [];
+  world.usageFetch = async (url: string, init: { headers: Record<string, string> }) => {
+    (world.usageFetches as object[]).push({
+      url,
+      authorization: init.headers.authorization,
+      tokenAuth: init.headers["x-xai-token-auth"],
+    });
+    return { ok: true, status: 200, json: async () => ({ config: { creditUsagePercent: 92.2 } }) };
+  };
+});
+
+Given("a grok vault with an expired token and fresh cache 91", (world) => {
+  const dir = mkdtempSync(join(tmpdir(), "pi-fallback-usage-"));
+  const now = Date.parse("2026-09-29T12:00:00Z");
+  writeFileSync(
+    join(dir, "accounts.json"),
+    JSON.stringify({
+      version: 1,
+      activeAccountId: "account-1",
+      accounts: [
+        {
+          id: "account-1",
+          credential: { access: "secret-token", refresh: "refresh-token", expires: now - 1_000 },
+        },
+      ],
+    }),
+  );
+  writeFileSync(
+    join(dir, "quota-cache.json"),
+    JSON.stringify({
+      version: 1,
+      accounts: {
+        "account-1": {
+          updatedAt: "2026-09-29T11:50:00.000Z",
+          weekly: { creditUsagePercent: 91, billingPeriodEnd: "2026-10-06T00:00:00.000Z" },
+        },
+      },
+    }),
+  );
+  world.usageDir = dir;
+  world.now = now;
+  world.usageFetches = [];
+  world.usageFetch = async () => {
+    throw new Error("billing should not be called");
+  };
+});
+
+Given("a grok vault with an expired token and a stale cache", (world) => {
+  const dir = mkdtempSync(join(tmpdir(), "pi-fallback-usage-"));
+  const now = Date.parse("2026-09-29T12:00:00Z");
+  writeFileSync(
+    join(dir, "accounts.json"),
+    JSON.stringify({
+      version: 1,
+      activeAccountId: "account-1",
+      accounts: [
+        {
+          id: "account-1",
+          credential: { access: "secret-token", refresh: "refresh-token", expires: now - 1_000 },
+        },
+      ],
+    }),
+  );
+  writeFileSync(
+    join(dir, "quota-cache.json"),
+    JSON.stringify({
+      version: 1,
+      accounts: {
+        "account-1": {
+          updatedAt: "2026-09-01T00:00:00.000Z",
+          weekly: { creditUsagePercent: 100, billingPeriodEnd: "2026-09-22T00:00:00.000Z" },
+        },
+      },
+    }),
+  );
+  world.usageDir = dir;
+  world.now = now;
+  world.usageFetches = [];
+  world.usageFetch = async () => {
+    throw new Error("billing should not be called");
+  };
+});
+
+Given("an http usage endpoint returning 1000 tokens", (world) => {
+  world.usageFetches = [];
+  world.usageFetch = async (url: string, init: { headers: Record<string, string> }) => {
+    (world.usageFetches as object[]).push({ url, authorization: init.headers.authorization });
+    return { ok: true, status: 200, json: async () => ({ used: { val: 1000 } }) };
+  };
+});
+
+async function readPrepared(world: World, gate: FallbackConfig["usageGates"] extends infer T ? T extends ReadonlyArray<infer G> ? G : never : never) {
+  const { readGateUsage } = await import("../src/grokUsage.js");
+  const dir = world.usageDir as string | undefined;
+  world.usageRead = await readGateUsage({
+    gate,
+    now: (world.now as number | undefined) ?? Date.parse("2026-09-29T12:00:00Z"),
+    env: {},
+    fetchImpl: world.usageFetch as never,
+    ...(dir
+      ? { vaultPath: join(dir, "accounts.json"), cachePath: join(dir, "quota-cache.json") }
+      : {}),
+    cache: new Map(),
+    cacheTtlMs: 0,
+  });
+}
+
+When("I read the grok usage gate", async (world) => {
+  await readPrepared(world, {
+    provider: "grok-cli",
+    metric: "percent",
+    threshold: 90,
+    source: { kind: "grok-cli" },
+  });
+});
+
+When("I read the http usage gate", async (world) => {
+  await readPrepared(world, {
+    models: ["xai/grok-4.6"],
+    metric: "tokens",
+    threshold: 10,
+    source: { kind: "http", url: "https://example.test/usage", path: "used.val", auth: "none" },
+  });
+});
+
+Then(/^the usage value is ([0-9.]+)$/, (world, value) => {
+  expect(world.usageRead).toEqual({ ok: true, value: Number(value) });
+});
+
+Then(/^the usage read failed with "(.*)"$/, (world, reason) => {
+  expect(world.usageRead).toEqual({ ok: false, reason });
+});
+
+Then("the billing request used the grok auth header", (world) => {
+  const fetches = world.usageFetches as Array<{ url: string; authorization?: string; tokenAuth?: string }>;
+  expect(fetches).toHaveLength(1);
+  expect(fetches[0]?.url).toBe("https://billing.example.test/v1/billing?format=credits");
+  expect(fetches[0]?.authorization).toBe("Bearer secret-token");
+  expect(fetches[0]?.tokenAuth).toBe("xai-grok-cli");
+});
+
+Then("the billing endpoint was not called", (world) => {
+  expect(world.usageFetches).toEqual([]);
+});
+
+Then(/^the usage result does not contain "(.*)"$/, (world, secret) => {
+  expect(JSON.stringify(world.usageRead)).not.toContain(secret);
 });

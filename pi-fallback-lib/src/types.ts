@@ -1,6 +1,31 @@
 /** "provider/id" split on first slash only. */
 export type ModelKey = string;
 
+export type UsageMetric = "percent" | "tokens";
+
+/** Named SuperGrok weekly percent, or a caller-chosen HTTPS JSON field. */
+export type UsageSource =
+  | { kind: "grok-cli" }
+  | {
+      kind: "http";
+      url: string;
+      path: string;
+      auth: "none" | "bearer-env";
+      /** Env var name. The secret stays in the environment. */
+      env?: string;
+    };
+
+export type UsageGate = {
+  /** Exact model keys. Match if current is in this list. */
+  models?: ModelKey[];
+  /** Provider segment before the first slash. Match every model of that provider. */
+  provider?: string;
+  metric: UsageMetric;
+  /** Switch when the reported value is >= threshold. Percent is rounded like /usage. */
+  threshold: number;
+  source: UsageSource;
+};
+
 export type FallbackChain = {
   name: string;
   models: ModelKey[];
@@ -10,6 +35,7 @@ export type FallbackConfig = {
   enabled: boolean;
   chains: FallbackChain[];
   maxFailoversPerRequest: number;
+  usageGates?: UsageGate[];
 };
 
 export type FailoverError = {
@@ -38,6 +64,8 @@ export type DecideInput = {
   error: FailoverError;
   attempted: ReadonlySet<ModelKey>;
   remainingBudget: number;
+  /** Models a usage gate is holding. Skipped as failover targets; not marked attempted. */
+  blocked?: ReadonlySet<ModelKey>;
 };
 
 export type FailoverDecision =
@@ -68,7 +96,8 @@ export type ParseFailReason =
   | "invalid-chain"
   | "invalid-model-key"
   | "duplicate-key"
-  | "invalid-budget";
+  | "invalid-budget"
+  | "invalid-usage-gate";
 
 export type ParseResult =
   | { ok: true; config: FallbackConfig }
@@ -97,6 +126,29 @@ export type FallbackEvent =
       where: "getThinkingLevel" | "setThinkingLevel" | "setModel";
       message: string;
       to?: ModelKey;
+    }
+  | {
+      type: "usage-switch";
+      from: ModelKey;
+      to: ModelKey;
+      metric: UsageMetric;
+      value: number;
+      threshold: number;
+    }
+  | {
+      type: "usage-return";
+      from: ModelKey;
+      to: ModelKey;
+      metric?: UsageMetric;
+      value?: number;
+      threshold?: number;
+    }
+  | {
+      type: "usage-skip";
+      reason: "unavailable" | "not-in-chain" | "no-target" | "usage-held";
+      model?: ModelKey;
+      to?: ModelKey;
+      detail?: string;
     };
 
 export type AttachOptions = {
@@ -107,6 +159,20 @@ export type AttachOptions = {
   configPath?: string;
   /** Structured outcomes. The library never writes stdout/stderr or calls notify. */
   onEvent?: (event: FallbackEvent, ctx?: FallbackCtx) => void;
+  /**
+   * Pre-request usage check. Default true.
+   * Offline workers should set false so a billing fetch cannot stall them.
+   */
+  checkUsage?: boolean;
+  /**
+   * Test seam. When set, attach does not call the network.
+   * `value` is the raw endpoint number; percent rounding happens in the gate.
+   */
+  readUsage?: (input: {
+    model: ModelKey;
+    gate: UsageGate;
+    ctx: FallbackCtx;
+  }) => Promise<{ ok: true; value: number } | { ok: false; reason: string }>;
 };
 
 export type AttachHandle = {
@@ -123,7 +189,7 @@ export type AttachHandle = {
 export type FallbackHost = {
   on(event: string, handler: (event: unknown, ctx: FallbackCtx) => unknown): void;
   setModel(model: unknown): Promise<boolean>;
-  sendUserMessage(content: string): void;
+  sendUserMessage(content: string): void | Promise<void>;
   getThinkingLevel(): string;
   setThinkingLevel(level: string): void;
 };
@@ -134,6 +200,8 @@ export type FallbackCtx = {
   sessionManager: {
     getBranch(): ReadonlyArray<{
       type?: string;
+      customType?: string;
+      data?: unknown;
       message?: {
         role?: string;
         stopReason?: string;

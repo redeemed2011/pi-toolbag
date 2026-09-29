@@ -77,8 +77,10 @@ export default function ctxPromoterWorker(pi: ExtensionAPI): void {
 		},
 	});
 
+	// --offline worker: a billing fetch would stall and then fail open.
 	attachFallback(pi, {
 		configPath: join(getAgentDir(), "auto-fallback.json"),
 		retryAfterTools: true,
+		checkUsage: false,
 	});
 }

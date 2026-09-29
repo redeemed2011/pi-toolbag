@@ -1,6 +1,7 @@
 import { classifyError, isFailoverWorthy } from "./classify.js";
 import { extractLastAssistantError } from "./extract.js";
-import { decideFailover, modelKey, splitModelKey } from "./kernel.js";
+import { readGateUsage } from "./grokUsage.js";
+import { decideFailover, findChain, modelKey, splitModelKey } from "./kernel.js";
 import { loadFallbackConfigFile } from "./load.js";
 import type {
   AttachHandle,
@@ -10,7 +11,10 @@ import type {
   FallbackEvent,
   FallbackHost,
   ModelKey,
+  UsageGate,
+  UsageMetric,
 } from "./types.js";
+import { matchingGate, reportedUsage, thresholdCrossed, usageRecovered } from "./usage.js";
 
 export const CONTINUE_USER_MESSAGE = "continue" as const;
 
@@ -21,7 +25,10 @@ type EpochState = {
   toolsThisTurn: boolean;
   ignoreModelSelectKey?: ModelKey;
   failoverInFlight: boolean;
-};
+  usageHeld: Set<ModelKey>;
+  /** The continue retry must stay on the fallback. Cleared by the next prompt. */
+  deferReturn: boolean;
+}
 
 function currentKey(ctx: FallbackCtx): ModelKey | undefined {
   if (!ctx.model?.provider || !ctx.model.id) return undefined;
@@ -102,6 +109,8 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     remainingBudget: config?.maxFailoversPerRequest ?? 0,
     toolsThisTurn: false,
     failoverInFlight: false,
+    usageHeld: new Set(),
+    deferReturn: false,
   };
 
   const resetEpoch = (): void => {
@@ -155,8 +164,86 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     return { ok: true };
   };
 
+  const sessionAccountId = (ctx: FallbackCtx): string | undefined => {
+    const branch = ctx.sessionManager.getBranch();
+    for (let i = branch.length - 1; i >= 0; i--) {
+      const entry = branch[i];
+      if (entry?.type !== "custom" || entry.customType !== "grok-cli-active-account-v1") continue;
+      const data = entry.data;
+      if (!data || typeof data !== "object" || Array.isArray(data)) continue;
+      const id = (data as Record<string, unknown>).accountId;
+      if (typeof id === "string" && id) return id;
+    }
+    return undefined;
+  };
+
+  const readUsage = (model: ModelKey, gate: UsageGate, ctx: FallbackCtx) => {
+    if (options.readUsage) return options.readUsage({ model, gate, ctx });
+    return readGateUsage({ gate, sessionAccountId: sessionAccountId(ctx) });
+  };
+
+
+  const readPreferredGate = async (
+    ctx: FallbackCtx,
+  ): Promise<
+    | { kind: "ungated" }
+    | { kind: "blocked"; reason: "unavailable" | "usage-held"; detail?: string }
+    | { kind: "recovered"; metric: UsageMetric; value: number; threshold: number }
+  > => {
+    const preferred = state.preferred;
+    if (!preferred || !config?.usageGates?.length) return { kind: "ungated" };
+    const gate = matchingGate(config.usageGates, preferred);
+    if (!gate) return { kind: "ungated" };
+    const reading = await readUsage(preferred, gate, ctx);
+    if (!reading.ok) {
+      state.usageHeld.add(preferred);
+      return { kind: "blocked", reason: "unavailable", detail: reading.reason };
+    }
+    if (!usageRecovered(gate, reading.value)) {
+      state.usageHeld.add(preferred);
+      return { kind: "blocked", reason: "usage-held" };
+    }
+    state.usageHeld.delete(preferred);
+    return {
+      kind: "recovered",
+      metric: gate.metric,
+      value: reportedUsage(gate.metric, reading.value) ?? reading.value,
+      threshold: gate.threshold,
+    };
+  };
+
+  const returnToPreferred = async (ctx: FallbackCtx, current: ModelKey): Promise<boolean> => {
+    const preferred = state.preferred;
+    if (!preferred || preferred === current || !config) return false;
+    const probe = await readPreferredGate(ctx);
+    if (probe.kind === "blocked") {
+      emit({ type: "usage-skip", reason: probe.reason, model: preferred, detail: probe.detail }, ctx);
+      return false;
+    }
+    const switched = await applyModelSwitch(ctx, preferred);
+    if (!switched.ok) {
+      emit({ type: "skip", reason: switched.reason, to: preferred }, ctx);
+      return false;
+    }
+    resetEpoch();
+    emit(
+      {
+        type: "usage-return",
+        from: current,
+        to: preferred,
+        ...(probe.kind === "recovered"
+          ? { metric: probe.metric, value: probe.value, threshold: probe.threshold }
+          : {}),
+      },
+      ctx,
+    );
+    return true;
+  };
+
   pi.on("session_start", (_event, ctx) => {
     resetEpoch();
+    state.usageHeld = new Set();
+    state.deferReturn = false;
     snapshotPreferred(ctx);
   });
 
@@ -176,6 +263,8 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       return;
     }
     state.preferred = key;
+    state.usageHeld = new Set();
+    state.deferReturn = false;
     resetEpoch();
   });
 
@@ -183,6 +272,73 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     state.toolsThisTurn = true;
   });
 
+  pi.on("before_agent_start", async (_event, ctx) => {
+    if (options.checkUsage === false) return;
+    if (!config?.enabled) return;
+    if (state.deferReturn) {
+      state.deferReturn = false;
+      return;
+    }
+    if (state.failoverInFlight) return;
+    const current = currentKey(ctx);
+    if (!current) return;
+    if (!state.preferred) state.preferred = current;
+    if (current !== state.preferred && (await returnToPreferred(ctx, current))) return;
+
+    const gates = config.usageGates;
+    if (!gates?.length) return;
+    const gate = matchingGate(gates, current);
+    if (!gate) return;
+
+    const reading = await readUsage(current, gate, ctx);
+    if (!reading.ok) {
+      emit({ type: "usage-skip", reason: "unavailable", model: current, detail: reading.reason }, ctx);
+      return;
+    }
+    if (!thresholdCrossed(gate, reading.value)) {
+      state.usageHeld.delete(current);
+      return;
+    }
+    state.usageHeld.add(current);
+
+    const chain = findChain(config, current);
+    if (!chain) {
+      emit({ type: "usage-skip", reason: "not-in-chain", model: current }, ctx);
+      return;
+    }
+
+    const reported = reportedUsage(gate.metric, reading.value) ?? reading.value;
+    for (const key of chain.models) {
+      if (key === current || state.usageHeld.has(key)) continue;
+      const nextGate = matchingGate(gates, key);
+      if (nextGate) {
+        const nextReading = await readUsage(key, nextGate, ctx);
+        if (!nextReading.ok || thresholdCrossed(nextGate, nextReading.value)) {
+          if (nextReading.ok) state.usageHeld.add(key);
+          continue;
+        }
+        state.usageHeld.delete(key);
+      }
+      const switched = await applyModelSwitch(ctx, key);
+      if (!switched.ok) {
+        emit({ type: "skip", reason: switched.reason, to: key }, ctx);
+        continue;
+      }
+      emit(
+        {
+          type: "usage-switch",
+          from: current,
+          to: key,
+          metric: gate.metric,
+          value: reported,
+          threshold: gate.threshold,
+        },
+        ctx,
+      );
+      return;
+    }
+    emit({ type: "usage-skip", reason: "no-target", model: current }, ctx);
+  });
   pi.on("session_compact", async (event, ctx) => {
     if (!config || !enabled) return;
     const rec = eventRecord(event);
@@ -195,11 +351,29 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     if (reason === "manual" || reason === "threshold" || (reason === "overflow" && !willRetry)) {
       const current = currentKey(ctx);
       if (state.preferred && current !== state.preferred) {
-        const switched = await applyModelSwitch(ctx, state.preferred);
-        if (!switched.ok) {
-          emit({ type: "restore", ok: false, to: state.preferred, reason: switched.reason }, ctx);
+        if (options.checkUsage === false) {
+          if (state.usageHeld.has(state.preferred)) {
+            emit({ type: "usage-skip", reason: "usage-held", model: state.preferred }, ctx);
+          } else {
+            const switched = await applyModelSwitch(ctx, state.preferred);
+            if (!switched.ok) {
+              emit({ type: "restore", ok: false, to: state.preferred, reason: switched.reason }, ctx);
+            } else {
+              emit({ type: "restore", ok: true, to: state.preferred }, ctx);
+            }
+          }
         } else {
-          emit({ type: "restore", ok: true, to: state.preferred }, ctx);
+          const probe = await readPreferredGate(ctx);
+          if (probe.kind === "blocked") {
+            emit({ type: "usage-skip", reason: probe.reason, model: state.preferred, detail: probe.detail }, ctx);
+          } else {
+            const switched = await applyModelSwitch(ctx, state.preferred);
+            if (!switched.ok) {
+              emit({ type: "restore", ok: false, to: state.preferred, reason: switched.reason }, ctx);
+            } else {
+              emit({ type: "restore", ok: true, to: state.preferred }, ctx);
+            }
+          }
         }
       }
       resetEpoch();
@@ -249,6 +423,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
         error,
         attempted: state.attempted,
         remainingBudget: state.remainingBudget,
+        blocked: state.usageHeld,
       });
       if (decision.action === "none") {
         emit({ type: "skip", reason: decision.reason, classification: decision.classification }, ctx);
@@ -282,9 +457,11 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
           // (session wrapper .catch(emitError)). A throw is only visible
           // when the host is synchronous (tests). Budget decrements after
           // a successful call from this process.
+          state.deferReturn = true;
           const sent = pi.sendUserMessage(CONTINUE_USER_MESSAGE);
           await maybeAwait(sent);
         } catch (err) {
+          state.deferReturn = false;
           emit({ type: "skip", reason: "continue-threw", detail: err instanceof Error ? err.message : String(err) }, ctx);
           return;
         }

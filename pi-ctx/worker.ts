@@ -81,8 +81,10 @@ export default function ctxObserverWorker(pi: ExtensionAPI): void {
 		},
 	});
 
+	// --offline worker: a billing fetch would stall and then fail open.
 	attachFallback(pi, {
 		retryAfterTools: true,
 		configPath: join(getAgentDir(), "auto-fallback.json"),
+		checkUsage: false,
 	});
 }

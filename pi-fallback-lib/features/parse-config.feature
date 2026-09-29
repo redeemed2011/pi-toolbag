@@ -77,3 +77,31 @@ Feature: Parse auto-fallback.json
     When I parse the config
     Then parse succeeds
     And the chain named "chain-0" has models "openrouter/z-ai/glm-5.3, xai/grok-4.6"
+
+
+  Scenario: grok percent gate is accepted
+    Given the raw config value is the JSON object "{\"chains\":[{\"models\":[\"grok-cli/grok-4.6\",\"xai/grok-4.6\"]}],\"usageGates\":[{\"provider\":\"grok-cli\",\"metric\":\"percent\",\"threshold\":90,\"source\":\"grok-cli\"}]}"
+    When I parse the config
+    Then parse succeeds
+    And a usage gate matches provider "grok-cli" at 90 percent from "grok-cli"
+
+  Scenario: omitted usage gates stay omitted
+    Given the raw config value is the JSON object "{\"chains\":[{\"models\":[\"grok-cli/grok-4.6\",\"xai/grok-4.6\"]}]}"
+    When I parse the config
+    Then parse succeeds
+    And no usage gates were parsed
+
+  Scenario: grok source cannot report tokens
+    Given the raw config value is the JSON object "{\"chains\":[{\"models\":[\"grok-cli/grok-4.6\",\"xai/grok-4.6\"]}],\"usageGates\":[{\"provider\":\"grok-cli\",\"metric\":\"tokens\",\"threshold\":1,\"source\":\"grok-cli\"}]}"
+    When I parse the config
+    Then parse fails with "invalid-usage-gate"
+
+  Scenario: percent threshold above 100 is rejected
+    Given the raw config value is the JSON object "{\"chains\":[{\"models\":[\"grok-cli/grok-4.6\",\"xai/grok-4.6\"]}],\"usageGates\":[{\"provider\":\"grok-cli\",\"metric\":\"percent\",\"threshold\":101,\"source\":\"grok-cli\"}]}"
+    When I parse the config
+    Then parse fails with "invalid-usage-gate"
+
+  Scenario: http usage source must be https
+    Given the raw config value is the JSON object "{\"chains\":[{\"models\":[\"grok-cli/grok-4.6\",\"xai/grok-4.6\"]}],\"usageGates\":[{\"models\":[\"xai/grok-4.6\"],\"metric\":\"tokens\",\"threshold\":10,\"source\":{\"url\":\"http://example.test/usage\",\"path\":\"used\",\"auth\":\"none\"}}]}"
+    When I parse the config
+    Then parse fails with "invalid-usage-gate"

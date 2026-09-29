@@ -1,6 +1,14 @@
 import { splitModelKey } from "./kernel.js";
-import type { FallbackChain, FallbackConfig, ParseFailReason, ParseResult } from "./types.js";
-
+import type {
+  FallbackChain,
+  FallbackConfig,
+  ParseFailReason,
+  ParseResult,
+  UsageGate,
+  UsageMetric,
+  UsageSource,
+} from "./types.js";
+import { httpsUrl, isEnvName } from "./usage.js";
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -63,25 +71,113 @@ function parseChains(
   return { ok: true, chains };
 }
 
+function parseUsageSource(
+  raw: unknown,
+  metric: UsageMetric,
+): { ok: true; source: UsageSource } | { ok: false } {
+  if (raw === "grok-cli") {
+    if (metric !== "percent") return { ok: false };
+    return { ok: true, source: { kind: "grok-cli" } };
+  }
+  if (!isPlainObject(raw)) return { ok: false };
+  if (typeof raw.url !== "string" || !httpsUrl(raw.url)) return { ok: false };
+  if (typeof raw.path !== "string" || !isJsonPath(raw.path)) return { ok: false };
+  if (raw.auth !== "none" && raw.auth !== "bearer-env") return { ok: false };
+  if (raw.auth === "bearer-env") {
+    if (typeof raw.env !== "string" || !isEnvName(raw.env)) return { ok: false };
+    return {
+      ok: true,
+      source: { kind: "http", url: raw.url, path: raw.path, auth: "bearer-env", env: raw.env },
+    };
+  }
+  return { ok: true, source: { kind: "http", url: raw.url, path: raw.path, auth: "none" } };
+}
+
+function isJsonPath(path: string): boolean {
+  if (!path || path.startsWith(".") || path.endsWith(".") || path.includes("..")) return false;
+  return path.split(".").every((part) => part.length > 0);
+}
+
+function parseUsageGates(
+  raw: unknown,
+): { ok: true; gates?: UsageGate[] } | { ok: false; reason: "invalid-usage-gate" } {
+  if (raw === undefined) return { ok: true };
+  if (!Array.isArray(raw)) return { ok: false, reason: "invalid-usage-gate" };
+  const gates: UsageGate[] = [];
+  for (const item of raw) {
+    if (!isPlainObject(item)) return { ok: false, reason: "invalid-usage-gate" };
+    const metric = item.metric;
+    if (metric !== "percent" && metric !== "tokens") return { ok: false, reason: "invalid-usage-gate" };
+    if (typeof item.threshold !== "number" || !Number.isFinite(item.threshold) || item.threshold < 0) {
+      return { ok: false, reason: "invalid-usage-gate" };
+    }
+    if (metric === "percent" && item.threshold > 100) return { ok: false, reason: "invalid-usage-gate" };
+
+
+    let models: string[] | undefined;
+    if (item.models !== undefined) {
+      if (!Array.isArray(item.models) || item.models.length === 0) {
+        return { ok: false, reason: "invalid-usage-gate" };
+      }
+      models = [];
+      for (const model of item.models) {
+        const parsed = parseModelKey(model);
+        if (!parsed.ok) return { ok: false, reason: "invalid-usage-gate" };
+        models.push(parsed.key);
+      }
+    }
+    let provider: string | undefined;
+    if (item.provider !== undefined) {
+      if (typeof item.provider !== "string" || !item.provider || item.provider.includes("/")) {
+        return { ok: false, reason: "invalid-usage-gate" };
+      }
+      provider = item.provider;
+    }
+    if (!models && !provider) return { ok: false, reason: "invalid-usage-gate" };
+
+
+    const source = parseUsageSource(item.source, metric);
+    if (!source.ok) return { ok: false, reason: "invalid-usage-gate" };
+    gates.push({
+      ...(models ? { models } : {}),
+      ...(provider ? { provider } : {}),
+      metric,
+      threshold: item.threshold,
+      source: source.source,
+    });
+  }
+  return { ok: true, gates };
+}
+
 /** Parse a JSON value. Extra live keys are ignored. Fail-closed on invalid shape. */
 export function parseFallbackConfig(value: unknown): ParseResult {
   if (!isPlainObject(value)) return { ok: false, reason: "not-object" };
+
 
   if ("enabled" in value && typeof value.enabled !== "boolean") {
     return { ok: false, reason: "not-object" };
   }
   const enabled = value.enabled !== false;
 
+
   const budget = parseBudget(value.maxFailoversPerRequest);
   if (!budget.ok) return { ok: false, reason: "invalid-budget" };
 
+
   const chains = parseChains(value.chains, enabled);
   if (!chains.ok) return chains;
+
+
+  const gates = parseUsageGates(value.usageGates);
+  if (!gates.ok) return gates;
+
 
   const config: FallbackConfig = {
     enabled,
     chains: chains.chains,
     maxFailoversPerRequest: budget.value,
+    ...(gates.gates ? { usageGates: gates.gates } : {}),
   };
   return { ok: true, config };
 }
+

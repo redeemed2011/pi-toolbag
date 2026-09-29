@@ -1,5 +1,8 @@
 export type {
   ModelKey,
+  UsageMetric,
+  UsageSource,
+  UsageGate,
   FallbackChain,
   FallbackConfig,
   FailoverError,

@@ -22,6 +22,7 @@ export class FakeHost implements FallbackHost {
   setModelMode = new Map<string, SetModelMode>();
   emitSettledDuringSetModel = false;
   throwOnSend = false;
+  emitBeforeAgentStartOnSend = false;
   ctx: FallbackCtx;
 
   private handlers = new Map<string, Array<(event: unknown, ctx: FallbackCtx) => unknown>>();
@@ -66,9 +67,10 @@ export class FakeHost implements FallbackHost {
     return true;
   }
 
-  sendUserMessage(content: string): void {
+  sendUserMessage(content: string): void | Promise<void> {
     if (this.throwOnSend) throw new Error("sendUserMessage failed");
     this.sent.push(content);
+    if (this.emitBeforeAgentStartOnSend) return this.emit("before_agent_start");
     if (this.mode === "print" || this.mode === "json") {
       this.idle = false;
       setTimeout(() => {

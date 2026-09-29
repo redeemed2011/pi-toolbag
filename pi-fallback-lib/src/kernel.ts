@@ -31,8 +31,9 @@ export function decideFailover(input: DecideInput): FailoverDecision {
 
   const attempted = new Set(input.attempted);
   attempted.add(current);
+  const blocked = input.blocked;
   for (const key of chain.models) {
-    if (!attempted.has(key)) {
+    if (!attempted.has(key) && !blocked?.has(key)) {
       return { action: "failover", next: key, reason: classification, attempted };
     }
   }

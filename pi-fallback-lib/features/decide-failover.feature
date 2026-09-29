@@ -104,3 +104,14 @@ Feature: Decide next unused chain member
     And attempted keys are "a/one, b/two"
     When I decide failover
     Then the decision is none because "budget-exhausted"
+
+
+  Scenario: a usage-held member is skipped
+    Given a three-model chain with budget 2
+    And the current model is "a/one"
+    And remaining budget is 1
+    And attempted keys are none
+    And blocked keys are "b/two"
+    And an error with text "timeout" and stop reason "error"
+    When I decide failover
+    Then the decision is failover to "c/three" because "transient"
