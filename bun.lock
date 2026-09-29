@@ -52,6 +52,19 @@
         "vitest": "^4.1.5",
       },
     },
+    "pi-foundations": {
+      "name": "pi-foundations",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@earendil-works/pi-coding-agent": "^0.84.4",
+        "@types/node": "^22.0.0",
+        "typescript": "^5.6.0",
+        "vitest": "^4.1.5",
+      },
+      "peerDependencies": {
+        "@earendil-works/pi-coding-agent": "*",
+      },
+    },
   },
   "packages": {
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.91.1", "", { "dependencies": { "json-schema-to-ts": "^3.1.1" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-LAmu761tSN9r66ixvmciswUj/ZC+1Q4iAfpedTfSVLeswRwnY3n2Nb6Tsk+cLPP28aLOPWeMgIuTuCcMC6W/iw=="],
@@ -389,6 +402,8 @@
     "pi-auto-fallback": ["pi-auto-fallback@workspace:pi-auto-fallback"],
 
     "pi-fallback-lib": ["pi-fallback-lib@workspace:pi-fallback-lib"],
+
+    "pi-foundations": ["pi-foundations@workspace:pi-foundations"],
 
     "picocolors": ["picocolors@1.1.1", "", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 

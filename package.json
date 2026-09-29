@@ -2,23 +2,28 @@
   "name": "pi-toolbag",
   "version": "0.1.0",
   "private": true,
-  "description": "Pi extensions: agent memory (ctx) and same-session cross-model failover.",
+  "description": "Pi extensions: agent memory (ctx), same-session cross-model failover, and the first-questions / first-principles rituals.",
   "license": "MIT",
   "type": "module",
   "keywords": ["pi-package"],
   "workspaces": [
     "pi-fallback-lib",
     "pi-ctx",
-    "pi-auto-fallback"
+    "pi-auto-fallback",
+    "pi-foundations"
   ],
   "scripts": {
-    "test": "cd pi-ctx && node ../node_modules/vitest/vitest.mjs run && cd ../pi-fallback-lib && node ../node_modules/vitest/vitest.mjs run",
-    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p pi-ctx && node node_modules/typescript/bin/tsc --noEmit -p pi-fallback-lib && node node_modules/typescript/bin/tsc --noEmit -p pi-auto-fallback"
+    "test": "cd pi-ctx && node ../node_modules/vitest/vitest.mjs run && cd ../pi-fallback-lib && node ../node_modules/vitest/vitest.mjs run && cd ../pi-foundations && node ../node_modules/vitest/vitest.mjs run",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p pi-ctx && node node_modules/typescript/bin/tsc --noEmit -p pi-fallback-lib && node node_modules/typescript/bin/tsc --noEmit -p pi-auto-fallback && node node_modules/typescript/bin/tsc --noEmit -p pi-foundations"
   },
   "pi": {
     "extensions": [
       "./pi-ctx/index.ts",
-      "./pi-auto-fallback/index.ts"
+      "./pi-auto-fallback/index.ts",
+      "./pi-foundations/index.ts"
+    ],
+    "skills": [
+      "./pi-foundations/skills"
     ]
   }
 }
