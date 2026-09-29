@@ -1,3 +1,0 @@
-# Hoist so Node can resolve pi-fallback-lib when Pi loads an extension file.
-[install]
-linker = "hoisted"
