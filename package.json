@@ -1,0 +1,24 @@
+{
+  "name": "pi-toolbag",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pi extensions: agent memory (ctx) and same-session cross-model failover.",
+  "license": "MIT",
+  "type": "module",
+  "keywords": ["pi-package"],
+  "workspaces": [
+    "pi-fallback-lib",
+    "pi-ctx",
+    "pi-auto-fallback"
+  ],
+  "scripts": {
+    "test": "cd pi-ctx && node ../node_modules/vitest/vitest.mjs run && cd ../pi-fallback-lib && node ../node_modules/vitest/vitest.mjs run",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p pi-ctx && node node_modules/typescript/bin/tsc --noEmit -p pi-fallback-lib && node node_modules/typescript/bin/tsc --noEmit -p pi-auto-fallback"
+  },
+  "pi": {
+    "extensions": [
+      "./pi-ctx/index.ts",
+      "./pi-auto-fallback/index.ts"
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 # ctx — agent pickup
 
-Pi 0.84.4 extension. Spec: agent memory — Pi spec (both injects) (not shipped in this repo). **New Pi session:** read `HANDOFF.md` (this dir) or `./AGENTS.md` — same remainder.
+Pi 0.84.4 extension in the pi-toolbag repo. Spec: agent memory — Pi spec (both injects) (not shipped in this repo). New session: read `HANDOFF.md`, then this file.
 
 Do not reopen closed leftovers (15k/5k, cap/stub, stop-hook, Order-flip A, F-packer). The spec’s “PR 1–10” is a **local sequence**, not GitHub pull requests.
 
@@ -41,4 +41,4 @@ Print mode (`hasUI === false`): bind refuse; occupancy **switch** refuses with a
 
 ## Next
 
-Held / out of scope only (Spawn Envelope, packing leftovers). Do not invent Spawn Envelope. See `AGENTS.md`. Do not reimplement shipped surfaces.
+Held / out of scope only (Spawn Envelope, packing leftovers). Do not invent Spawn Envelope. Do not reimplement shipped surfaces.

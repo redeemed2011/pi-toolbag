@@ -8,13 +8,13 @@
     "extensions": ["./index.ts"]
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "typecheck": "node ../node_modules/typescript/bin/tsc --noEmit",
+    "test": "node ../node_modules/vitest/vitest.mjs run",
     "test:watch": "vitest",
     "check-sandbox": "bash scripts/check-sandbox.sh"
   },
   "dependencies": {
-    "pi-fallback-lib": "file:../pi-fallback-lib"
+    "pi-fallback-lib": "*"
   },
   "peerDependencies": {
     "@earendil-works/pi-agent-core": "*",

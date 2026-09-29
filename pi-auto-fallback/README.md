@@ -7,17 +7,15 @@ Do **not** stack this package with `npm:pi-auto-fallback` — both would `setMod
 ## Install (host, not nested `pi` inside cplt)
 
 ```bash
-cd pi-fallback-lib && npm install
-cd pi-auto-fallback && npm install
-pi-unsafe install pi-auto-fallback
-pi-unsafe remove npm:pi-auto-fallback
+pi install git:github.com/redeemed2011/pi-toolbag
+pi remove npm:pi-auto-fallback
 ```
 
-Or edit `~/.pi/agent/settings.json` `packages` in **one** step: replace `"npm:pi-auto-fallback"` with `"pi-auto-fallback"`. Prefer the absolute path (`pi install` may store a path relative to the settings file).
+That installs this extension and `pi-ctx` together. To load only failover, set `extensions` to `["./pi-auto-fallback/index.ts"]` on that git source. Do not also leave `npm:pi-auto-fallback` installed.
 
 ## Rollback
 
-Put `"npm:pi-auto-fallback"` back in `packages` and remove the local path.
+Put `"npm:pi-auto-fallback"` back in `packages` and remove `git:github.com/redeemed2011/pi-toolbag` if failover was the only reason it was installed.
 
 ## Config
 

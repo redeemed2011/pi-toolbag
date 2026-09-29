@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+.DS_Store
+*.log
+.tmp/
+.ctx-test/

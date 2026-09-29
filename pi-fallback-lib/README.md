@@ -7,7 +7,7 @@ Consumers:
 - [`pi-auto-fallback`](../pi-auto-fallback) — interactive extension (`retryAfterTools: false`)
 - [`pi-ctx`](../pi-ctx) `worker.ts` — observer worker (`retryAfterTools: true`)
 
-Not published. Depend via `"pi-fallback-lib": "file:../pi-fallback-lib"`.
+Workspace dependency of this repo. Callers depend on `"pi-fallback-lib": "*"` and install from the repo root.
 
 ```bash
 cd pi-fallback-lib

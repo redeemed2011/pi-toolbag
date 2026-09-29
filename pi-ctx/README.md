@@ -12,14 +12,13 @@ Shipped: local sequence **1–10** — session inject (observers + model-free co
 
 Do not reopen closed leftovers (packing 15k/5k, suffix cap/stub, stop-hook evaluator, Order-flip A, F-packer).
 
-**Next:** sequence 1–10 is in tree; remaining is held / out of scope. After compact: `cd pi-ctx && npm test`, then confirm with the user before coding held items. Pickup: `AGENTS.md` and `AGENTS.md`.
+**Next:** sequence 1–10 is in tree; remaining is held / out of scope. After compact: `cd pi-ctx && npm test`, then confirm with the user before coding held items. Pickup: `AGENTS.md`.
 
 ## Install (development)
 
 ```bash
-cd pi-ctx
-npm install
-npm test
+npm install   # pi-toolbag repo root, once
+cd pi-ctx && npm test
 ```
 
 Load without installing into `~/.pi/agent/extensions`:
