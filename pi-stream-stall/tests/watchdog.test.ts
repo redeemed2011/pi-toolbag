@@ -74,17 +74,41 @@ class Controllable implements StreamSource {
   }
 }
 
-function heldSleep(): { sleep: Sleeper; release: () => void; pending: () => number } {
-  const waiters: Array<() => void> = [];
+function immediateSleep(): Sleeper {
+  return () => ({ promise: Promise.resolve(), cancel() {} });
+}
+
+function neverSleep(): Sleeper {
+  return () => ({ promise: new Promise(() => undefined), cancel() {} });
+}
+
+function heldSleep(): { sleep: Sleeper; release: () => void; pending: () => number; cancelled: () => number } {
+  const waiters: Array<{ resolve: () => void }> = [];
+  let cancelled = 0;
   return {
-    sleep: () =>
-      new Promise((resolve) => {
-        waiters.push(resolve);
-      }),
+    sleep: () => {
+      let resolve!: () => void;
+      const promise = new Promise<void>((done) => {
+        resolve = done;
+      });
+      const waiter = { resolve };
+      waiters.push(waiter);
+      return {
+        promise,
+        cancel: () => {
+          const index = waiters.indexOf(waiter);
+          if (index >= 0) {
+            waiters.splice(index, 1);
+            cancelled += 1;
+          }
+        },
+      };
+    },
     release: () => {
-      waiters.shift()?.();
+      waiters.shift()?.resolve();
     },
     pending: () => waiters.length,
+    cancelled: () => cancelled,
   };
 }
 
@@ -111,8 +135,10 @@ describe("guardStream", () => {
     const inner = new Controllable();
     const events: AssistantMessageEvent[] = [];
     const stream = guardStream(inner, model, 180_000, {
-      sleep: () => Promise.resolve(),
-      onTimeout: () => undefined,
+      sleep: immediateSleep(),
+      onTimeout: () => {
+        throw new Error("toast failed");
+      },
     });
     for await (const event of stream) events.push(event);
     const final = await stream.result();
@@ -121,6 +147,7 @@ describe("guardStream", () => {
     expect(events.map((event) => event.type)).toEqual(["error"]);
     expect(final.stopReason).toBe("error");
     expect(final.errorMessage).toContain("timeout");
+    expect(final.errorMessage).not.toContain("toast failed");
     expect(final.errorMessage).toContain("grok-cli/grok-4.7");
   });
 
@@ -134,9 +161,9 @@ describe("guardStream", () => {
     expect(clock.pending()).toBe(1);
     inner.push({ type: "start", partial });
     await flush();
-    expect(clock.pending()).toBe(2);
+    expect(clock.cancelled()).toBe(1);
+    expect(clock.pending()).toBe(1);
 
-    clock.release();
     clock.release();
     const final = await stream.result();
     expect(final.stopReason).toBe("error");
@@ -150,12 +177,31 @@ describe("guardStream", () => {
     done.stopReason = "stop";
     inner.push({ type: "done", reason: "stop", message: done });
     const stream = guardStream(inner, model, 180_000, {
-      sleep: () => new Promise(() => undefined),
+      sleep: neverSleep(),
     });
     const events: AssistantMessageEvent[] = [];
     for await (const event of stream) events.push(event);
     expect(events.map((event) => event.type)).toEqual(["done"]);
     expect(await stream.result()).toEqual(done);
+  });
+
+  it("toasts when result() hangs after the iterator finishes", async () => {
+    const inner = new Controllable();
+    const clock = heldSleep();
+    const notes: string[] = [];
+    const stream = guardStream(inner, model, 180_000, {
+      sleep: clock.sleep,
+      onTimeout: (message) => notes.push(message),
+    });
+    await flush();
+    inner.finish();
+    await flush();
+    expect(notes).toEqual([]);
+    expect(clock.pending()).toBe(1);
+    clock.release();
+    const final = await stream.result();
+    expect(notes).toEqual([final.errorMessage]);
+    expect(final.errorMessage).toContain("timeout");
   });
 });
 

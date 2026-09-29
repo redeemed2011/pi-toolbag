@@ -12,7 +12,12 @@ export interface StreamSource {
   result?: () => Promise<AssistantMessage>;
 }
 
-export type Sleeper = (ms: number) => Promise<void>;
+export interface IdleWait {
+  promise: Promise<void>;
+  cancel: () => void;
+}
+
+export type Sleeper = (ms: number) => IdleWait;
 
 export interface GuardOptions {
   sleep?: Sleeper;
@@ -26,9 +31,24 @@ const ZERO_USAGE: Usage = {
   cacheWrite: 0,
   totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-};
+}
 
-const defaultSleep: Sleeper = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const defaultSleep: Sleeper = (ms) => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const promise = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      timer = undefined;
+      resolve();
+    }, ms);
+  });
+  return {
+    promise,
+    cancel: () => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+    },
+  };
+}
 
 export function timeoutText(model: GuardModel, idleMs: number): string {
   return `Provider stream timeout (${model.provider}/${model.id}): no data for ${idleMs}ms`;
@@ -66,25 +86,47 @@ function abandon(pending: Promise<unknown>): void {
   );
 }
 
-type Raced<T> = { kind: "timeout" } | { kind: "value"; value: IteratorResult<T> } | { kind: "error"; error: unknown };
 
-async function raceNext<T>(pending: Promise<IteratorResult<T>>, idleMs: number, sleep: Sleeper): Promise<Raced<T>> {
-  let timedOut = false;
-  const timeout = sleep(idleMs).then(() => {
-    timedOut = true;
-    return "timeout" as const;
-  });
+async function raceIdle<T>(
+  pending: Promise<T>,
+  idleMs: number,
+  sleep: Sleeper,
+): Promise<{ kind: "timeout" } | { kind: "value"; value: T } | { kind: "error"; error: unknown }> {
+  const idle = sleep(idleMs);
   const settled = pending.then(
     (value) => ({ kind: "value" as const, value }),
     (error: unknown) => ({ kind: "error" as const, error }),
   );
-  const winner = await Promise.race([timeout, settled]);
-  if (winner === "timeout") {
+  const winner = await Promise.race([
+    idle.promise.then(() => ({ kind: "timeout" as const })),
+    settled,
+  ]);
+  if (winner.kind === "timeout") {
     abandon(settled);
-    return { kind: "timeout" };
+    return winner;
   }
-  if (timedOut) abandon(settled);
+  idle.cancel();
   return winner;
+}
+
+function notifyTimeout(onTimeout: ((message: string) => void) | undefined, text: string): void {
+  try {
+    onTimeout?.(text);
+  } catch {
+    // A toast failure must not replace the timeout the agent is awaiting.
+  }
+}
+
+function endTimeout(
+  outer: AssistantMessageEventStream,
+  onTimeout: ((message: string) => void) | undefined,
+  model: GuardModel,
+  partial: AssistantMessage | undefined,
+  idleMs: number,
+): void {
+  const message = timeoutMessage(model, partial, idleMs);
+  fail(outer, message);
+  notifyTimeout(onTimeout, message.errorMessage ?? timeoutText(model, idleMs));
 }
 
 function fail(outer: AssistantMessageEventStream, message: AssistantMessage): void {
@@ -121,11 +163,9 @@ async function pump(
   try {
     while (true) {
       const pending = iterator.next();
-      const raced = await raceNext(pending, idleMs, sleep);
+      const raced = await raceIdle(pending, idleMs, sleep);
       if (raced.kind === "timeout") {
-        const message = timeoutMessage(model, partial, idleMs);
-        onTimeout?.(message.errorMessage ?? timeoutText(model, idleMs));
-        fail(outer, message);
+        endTimeout(outer, onTimeout, model, partial, idleMs);
         return;
       }
       if (raced.kind === "error") {
@@ -133,9 +173,10 @@ async function pump(
         return;
       }
       if (raced.value.done) {
-        const final = await finishResult(inner, partial, model, idleMs, sleep);
-        if (final.stopReason === "error") fail(outer, final);
-        else outer.end(final);
+        const finished = await finishResult(inner, partial, model, idleMs, sleep);
+        if (finished.timedOut) endTimeout(outer, onTimeout, model, partial, idleMs);
+        else if (finished.message.stopReason === "error") fail(outer, finished.message);
+        else outer.end(finished.message);
         return;
       }
       const event = raced.value.value;
@@ -164,20 +205,10 @@ async function finishResult(
   model: GuardModel,
   idleMs: number,
   sleep: Sleeper,
-): Promise<AssistantMessage> {
-  if (!inner.result) return partial ?? timeoutMessage(model, undefined, idleMs);
-  const pending = inner.result();
-  const raced = await Promise.race([
-    pending.then(
-      (value) => ({ kind: "value" as const, value }),
-      (error: unknown) => ({ kind: "error" as const, error }),
-    ),
-    sleep(idleMs).then(() => ({ kind: "timeout" as const })),
-  ]);
-  if (raced.kind === "timeout") {
-    abandon(pending);
-    return timeoutMessage(model, partial, idleMs);
-  }
-  if (raced.kind === "error") return errorMessage(model, partial, raced.error);
-  return raced.value;
+): Promise<{ message: AssistantMessage; timedOut: boolean }> {
+  if (!inner.result) return { message: partial ?? timeoutMessage(model, undefined, idleMs), timedOut: false };
+  const raced = await raceIdle(inner.result(), idleMs, sleep);
+  if (raced.kind === "timeout") return { message: timeoutMessage(model, partial, idleMs), timedOut: true };
+  if (raced.kind === "error") return { message: errorMessage(model, partial, raced.error), timedOut: false };
+  return { message: raced.value, timedOut: false };
 }
