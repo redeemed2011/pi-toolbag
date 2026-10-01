@@ -11,7 +11,7 @@ ctx is a Pi extension. Session inject (observers + compact inject) must work ins
 | Wrapper | `~/.local/bin/pi` → `cplt --agent pi --yes … -- <pi args>` |
 | Already inside cplt | Wrapper sees `__CPLT_WRAPPED=1` and execs the Bun Pi launcher (no nested jail) |
 | Filesystem | Landlock deny-by-default. Project dir is read+write+exec. Home is not. |
-| Network | Outbound TCP 443 allowed. Localhost blocked except ports you pass (`8787` for Headroom). Secrets stripped from env unless `--pass-env`. |
+| Network | Outbound TCP 443 allowed. Localhost blocked unless you pass `--allow-localhost`. Secrets stripped from env unless `--pass-env`. |
 | Bubblewrap | If `bwrap` is installed, extra namespaces + private `/tmp`. Live probes can return `EROFS` (errno 30) where Landlock-only returns `EACCES` (errno 13). |
 
 cplt version on the design machine: `cplt 2026.08.03-140322-4c056bc`. Newer cplt ([#384](https://github.com/navikt/cplt/pull/384)) narrows `~/.pi/agent` to read-only at the root and writes per subdirectory so `bin/` cannot be both writable and executable. Do not assume the whole of `~/.pi/agent` is writable on a newer cplt.
