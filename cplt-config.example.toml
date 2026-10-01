@@ -1,0 +1,68 @@
+# cplt global config (this machine)
+# Location: ~/.config/cplt/config.toml
+# Precedence: CLI flags > file > built-in defaults
+# Repo policy lives in each repo's .cplt.toml (deny + propose/trust).
+
+[proxy]
+log_file = "/home/bo/.cache/cplt/proxy.log"
+log_level = "error"
+timeout = 300
+# CONNECT proxy on by default (domain filter + logging available)
+# enabled = true
+# forced = false
+# log_level = "none"
+
+# Remote FQDN blocklist (issue #144). Tighten-only: cached domains are
+# unioned into the proxy blocklist and can only add blocks.
+# Applies on the next cplt launch. Refresh: cplt update-lists.
+[proxy.subscriptions]
+refresh = "daily"
+blocklists = [
+  "https://raw.githubusercontent.com/navikt/cplt/main/blocked-domains.txt",
+]
+[allow]
+# Host-wide read-only; write stays project dir + allow.write below
+read = ["/", "~/.pi/web-search.json"]
+# Grok Build auth/sessions/config (RW only; binary is staged by sbx-gk)
+# Obsidian vault (Resilio Sync) — notes live outside the project dir
+write = [
+  "/home/bo/.pi/grok-cli",
+  "/home/bo/.pi/ctx",
+  "/home/bo/.config/pi-hashline-edit-pro",
+  "/home/bo/ResilioSync/Obsidian/My Notes",
+  "~/src",
+]
+# Herdr agent-view hook (pane.report_agent_session over AF_UNIX)
+socket = ["~/.config/herdr/herdr.sock"]
+
+[deny]
+# Global path denials (optional). Prefer repo [deny] for project secrets.
+# paths = []
+
+[sandbox]
+agent = "pi"
+quiet = true
+# Herdr pane identity (exact names; unset vars are harmless)
+pass_env = [
+  "HERDR_ENV",
+  "HERDR_SOCKET_PATH",
+  "HERDR_PANE_ID",
+  "HERDR_TAB_ID",
+  "HERDR_WORKSPACE_ID",
+]
+yes = true
+# scratch_dir = true   # default; go test / node-gyp temp exec
+
+# Soft command guards (PATH wrappers — keep server-side branch protection too)
+[git_guard]
+enabled = true
+# prevent_push=false: regular git push is allowed (user law, 2026-09-22).
+# prevent_force_push stays at default true, so git push --force is still blocked.
+# protect_default_branch_only has no effect while prevent_push is false.
+protect_default_branch_only = true
+prevent_push = false
+# prevent_force_push = true
+
+# Optional: block destructive gh (merge, delete, release, auth token dump)
+# [gh_guard]
+# enabled = true
