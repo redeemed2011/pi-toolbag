@@ -1,10 +1,12 @@
 ---
 name: first-questions
 description: >
-  Before planning, research, design, or code, shrink the request to one
-  sentence and record every other requirement as kept, changed, deferred, or
-  cut in .pi/foundations/first-questions.md. "The user wants it" does not keep
-  a requirement. Start with /first-questions.
+  Shrink a request that has extra requirements or an unconfirmed goal to one
+  sentence, and record every other requirement as kept, changed, deferred, or
+  cut in .pi/foundations/first-questions.md. Use when the request has more than
+  one outcome, bundles extra requirements, or adds an item to an existing
+  contract. Do not use for one bounded task, a fix, a lookup, or work already
+  inside a confirmed contract. Start with /first-questions only in those cases.
 ---
 
 # /first-questions — shrink the request
