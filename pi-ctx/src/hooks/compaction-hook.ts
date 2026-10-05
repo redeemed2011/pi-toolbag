@@ -36,7 +36,12 @@ export function registerCompactionHook(pi: ExtensionAPI, runtime: Runtime): void
 			if (!skip) {
 				if (ctx.hasUI) ctx.ui.notify("ctx: waiting for in-flight observers before folding…", "info");
 				await runtime.whenObserversIdle();
-				branch = (ctx.sessionManager?.getBranch?.() as Entry[] | undefined) ?? (event.branchEntries as Entry[]);
+				try {
+					const fresh = ctx.sessionManager?.getBranch?.() as Entry[] | undefined;
+					branch = fresh ?? (event.branchEntries as Entry[]) ?? branch;
+				} catch {
+					// Stale after the wait. Keep the branch already read; do not fall through to recall_error.
+				}
 				snap = snapCutoff(branch, firstKeptEntryId, tailTokens);
 			}
 

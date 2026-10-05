@@ -25,15 +25,18 @@ function captureHook(runtime: Runtime) {
 
 function ctxOf(
 	branch: ReturnType<typeof userMsg>[],
-	over: { throwOnBranch?: boolean; hasUI?: boolean } = {},
+	over: { throwOnBranch?: boolean; hasUI?: boolean; throwAfter?: number } = {},
 ) {
 	const cwd = mkdtempSync(join(tmpdir(), "ctx-hook-"));
+	let reads = 0;
 	return {
 		hasUI: over.hasUI ?? false,
 		cwd,
 		sessionManager: {
 			getBranch: () => {
+				reads += 1;
 				if (over.throwOnBranch) throw new Error("branch boom");
+				if (over.throwAfter !== undefined && reads > over.throwAfter) throw new Error("stale branch");
 				return branch;
 			},
 		},
@@ -99,6 +102,20 @@ describe("session_before_compact", () => {
 		expect(result.compaction.details.recall_error).toBe(1);
 		expect(result.compaction.details.gate).toBe(1);
 		expect(injectTokens(result.compaction.summary)).toBeLessThanOrEqual(INJECT_CAP);
+	});
+
+	it("a stale getBranch after the observer wait keeps the branch already read", async () => {
+		const runtime = new Runtime();
+		runtime.observersInFlight.set("obs", {
+			controller: new AbortController(),
+			coversUpToId: "not-in-branch",
+		});
+		const result = (await captureHook(runtime)(event, ctxOf(branch, { throwAfter: 1 }))) as {
+			compaction: { summary: string };
+		};
+		expect(runtime.lastCompactionObserverWait).toBe("waited");
+		expect(result.compaction.summary).toContain("no project bound");
+		expect(result.compaction.summary).not.toContain("recall_error");
 	});
 
 	it("malformed event still returns recall_error (never undefined)", async () => {

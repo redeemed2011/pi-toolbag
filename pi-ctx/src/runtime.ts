@@ -73,9 +73,21 @@ export class Runtime {
 		await Promise.allSettled([...this.observerTasks]);
 	}
 
+	readonly workerAborts = new Set<AbortController>();
+
+	trackWorkerAbort(controller: AbortController): void {
+		this.workerAborts.add(controller);
+	}
+
+	untrackWorkerAbort(controller: AbortController): void {
+		this.workerAborts.delete(controller);
+	}
+
 	abortAllWorkers(): void {
 		for (const { controller } of this.observersInFlight.values()) controller.abort();
 		this.observersInFlight.clear();
+		for (const controller of this.workerAborts) controller.abort();
+		this.workerAborts.clear();
 	}
 
 	queueToast(

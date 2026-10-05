@@ -480,6 +480,13 @@ describe("promoter harvest", () => {
 		await third;
 		expect(counts.at(-1)).toBe(0);
 		expect(gate.inFlight).toBe(false);
+		const append = pi.appendEntry.bind(pi);
+		pi.appendEntry = () => {
+			throw new Error("This extension ctx is stale");
+		};
+		await expect(settle()).resolves.toBeUndefined();
+		expect(gate.inFlight).toBe(false);
+		pi.appendEntry = append;
 		const folded = foldLive(loadProjectRecords("p-turns"));
 		expect(folded.pendingReplaces.filter((p) => folded.live.has(p.id))).toHaveLength(1);
 		expect(folded.live.has("c1")).toBe(true);
@@ -490,6 +497,25 @@ describe("promoter harvest", () => {
 		await settle();
 		expect(selects).toBe(1);
 		expect(counts.filter((n) => n !== 0)).toEqual([1, 2, 3]);
+
+		branch.pop();
+		let hitZero = false;
+		pi.appendEntry = (customType: string, data?: unknown) => {
+			const n = (data as { n?: number } | undefined)?.n;
+			if (n === 0) {
+				hitZero = true;
+				throw new Error("This extension ctx is stale");
+			}
+			append(customType, data);
+		};
+		await settle();
+		await settle();
+		const again = settle();
+		expect(selects).toBe(2);
+		resolveSelect(DEFER_ONE);
+		await expect(again).resolves.toBeUndefined();
+		expect(hitZero).toBe(true);
+		expect(gate.inFlight).toBe(false);
 	});
 
 	it("does not count a tool round as a parent turn", () => {

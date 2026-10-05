@@ -150,14 +150,34 @@ export function spawnWorker(opts: {
 		proc.stderr?.on("data", (d: Buffer) => {
 			stderr += d.toString();
 		});
-		proc.on("error", () => resolvePromise({ code: 1, signal: null, stderr: stderr || "spawn error" }));
-		proc.on("close", (code, signal) => resolvePromise({ code, signal, stderr }));
+		let exited = false;
+		proc.on("error", () => {
+			exited = true;
+			resolvePromise({ code: 1, signal: null, stderr: stderr || "spawn error" });
+		});
+		proc.on("close", (code, signal) => {
+			exited = true;
+			resolvePromise({ code, signal, stderr });
+		});
 		if (opts.signal) {
 			const kill = () => {
-				proc.kill("SIGTERM");
-				setTimeout(() => {
-					if (!proc.killed) proc.kill("SIGKILL");
-				}, 3000).unref?.();
+				try {
+					proc.kill("SIGTERM");
+				} catch {
+					// already gone
+				}
+				// `proc.killed` is true as soon as SIGTERM is delivered, even if the process ignores it.
+				const timer = setTimeout(() => {
+					if (exited) return;
+					try {
+						proc.kill("SIGKILL");
+					} catch {
+						// already gone
+					}
+				}, 3000);
+				const stop = () => clearTimeout(timer);
+				proc.on("close", stop);
+				proc.on("error", stop);
 			};
 			if (opts.signal.aborted) kill();
 			else opts.signal.addEventListener("abort", kill, { once: true });

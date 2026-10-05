@@ -189,7 +189,14 @@ async function spawnPromoter(opts: {
 		CTX_RUN_ID: runId,
 		CTX_PROMOTER_TOKEN: "1",
 	};
-	const exit = await spawnWorker({ argv, cwd, env });
+	const controller = new AbortController();
+	opts.runtime.trackWorkerAbort(controller);
+	let exit: Awaited<ReturnType<typeof spawnWorker>>;
+	try {
+		exit = await spawnWorker({ argv, cwd, env, signal: controller.signal });
+	} finally {
+		opts.runtime.untrackWorkerAbort(controller);
+	}
 	if (exit.code !== 0) {
 		throw new Error(
 			`promoter exited with code ${exit.code}${exit.stderr ? `: ${exit.stderr.trim().slice(0, 200)}` : ""}`,

@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { foldSession } from "../fold.js";
 import { rawTokensSinceLastCompaction } from "../progress.js";
 import { sendGuardTokens } from "../render/fonce.js";
+import { notifyFrom } from "../notify.js";
 import type { Runtime } from "../runtime.js";
 import { CTX_RESUME, type Entry } from "../types.js";
 
@@ -52,13 +53,14 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 		if (!contextPressureTokens(ctx, runtime.config.compactAtContextTokens, runtime.sessionId).due) return;
 
 		const shouldResume = runtime.config.resumeAfterMidRunCompaction && turnWillContinue(event);
+		const notify = notifyFrom(ctx);
 		runtime.compactInFlight = true;
-		if (ctx.hasUI) ctx.ui.notify("ctx: context threshold reached — compacting…", "info");
+		notify?.("ctx: context threshold reached — compacting…", "info");
 
 		ctx.compact({
 			onComplete: () => {
 				runtime.compactInFlight = false;
-				if (ctx.hasUI) ctx.ui.notify("ctx: compaction complete", "info");
+				notify?.("ctx: compaction complete", "info");
 				if (!shouldResume || !runtime.enabled || runtime.config.passive) return;
 				try {
 					pi.sendMessage(
@@ -68,13 +70,13 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 				} catch (error) {
 					const msg = error instanceof Error ? error.message : String(error);
 					runtime.lastWorkerError = `resume failed: ${msg}`;
-					if (ctx.hasUI) ctx.ui.notify(`ctx: resume failed — ${msg}`, "error");
+					notify?.(`ctx: resume failed — ${msg}`, "error");
 				}
 			},
 			onError: (error: { message: string }) => {
 				runtime.compactInFlight = false;
 				if (error.message === "Compaction cancelled") return;
-				if (ctx.hasUI) ctx.ui.notify(`ctx: ${error.message}`, "error");
+				notify?.(`ctx: ${error.message}`, "error");
 			},
 		});
 	});

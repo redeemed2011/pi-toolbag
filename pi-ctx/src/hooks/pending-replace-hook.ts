@@ -78,7 +78,11 @@ export async function onPendingReplaceSettled(
 	const sessionId = ctx.sessionManager.getSessionId?.() ?? runtime.sessionId;
 	const fold = foldSession(branch, sessionId);
 	const n = (fold.pendingReplaceTurns ?? 0) + 1;
-	pi.appendEntry(CTX_PENDING_TURN, { n });
+	try {
+		pi.appendEntry(CTX_PENDING_TURN, { n });
+	} catch {
+		return;
+	}
 	if (n < PENDING_HITL_TURNS) return;
 	if (!ctx.hasUI || !ctx.ui) return;
 	gate.inFlight = true;
@@ -95,7 +99,11 @@ export async function onPendingReplaceSettled(
 		});
 		runtime.projectRecords = out.existing;
 		runtime.projectLive = foldLive(out.existing);
-		pi.appendEntry(CTX_PENDING_TURN, { n: 0 });
+		try {
+			pi.appendEntry(CTX_PENDING_TURN, { n: 0 });
+		} catch {
+			// The session is gone. The counter dies with it.
+		}
 	} finally {
 		gate.inFlight = false;
 	}

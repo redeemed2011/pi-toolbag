@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { bodySetCS, bodySetGE, resolveOccupancy } from "../fold.js";
 import { hitlFromCtx } from "../hitl.js";
+import { notifyFrom } from "../notify.js";
 import { mintGateFlags } from "../mint.js";
 import { gateCheck } from "../render/occupancy.js";
 import type { Runtime } from "../runtime.js";
@@ -35,12 +36,13 @@ export function registerCtxCommand(pi: ExtensionAPI, runtime: Runtime): void {
 					if (ctx.hasUI) ctx.ui.notify("ctx is off", "warning");
 					return;
 				}
+				const notify = notifyFrom(ctx);
 				ctx.compact({
 					onComplete: () => {
-						if (ctx.hasUI) ctx.ui.notify("ctx: compaction complete", "info");
+						notify?.("ctx: compaction complete", "info");
 					},
 					onError: (error: { message: string }) => {
-						if (ctx.hasUI) ctx.ui.notify(`ctx: ${error.message}`, "error");
+						notify?.(`ctx: ${error.message}`, "error");
 					},
 				});
 				return;
