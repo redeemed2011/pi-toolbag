@@ -16,6 +16,27 @@ type TriggerCtx = {
 	getContextUsage?: () => { tokens: number | null } | undefined;
 };
 
+type ToastLevel = "info" | "warning" | "error";
+type Toast = (message: string, level?: ToastLevel) => void;
+
+/**
+ * `hasUI` and `ui` call pi's assertActive(). In -p the session is disposed as soon as the
+ * reply is printed, while this observer is still running. Reading either getter then throws,
+ * including from inside the catch, which rejects the background task and exits the process.
+ * Snapshot notify before the first await and do not touch ctx again.
+ */
+function toastFrom(ctx: TriggerCtx): Toast | undefined {
+	if (!ctx.hasUI || !ctx.ui) return undefined;
+	const notify = ctx.ui.notify.bind(ctx.ui);
+	return (message, level) => {
+		try {
+			notify(message, level);
+		} catch {
+			// The UI object can be gone by the time the worker exits.
+		}
+	};
+}
+
 let runCounter = 0;
 
 function nextRunId(): string {
@@ -83,7 +104,9 @@ async function dispatchObserver(
 		"Now compress the chunk above into observations by calling record_observations one or more " +
 		"times. When the chunk is fully covered, stop calling the tool and reply with a one-sentence confirmation.";
 
+	let toast: Toast | undefined;
 	try {
+		toast = toastFrom(ctx);
 		const sessionId = runtime.sessionId || ctx.sessionManager.getSessionId?.() || "session";
 		const { cwd, sessionDir } = prepareWorkerCwd(sessionId, runId);
 		const argv = buildWorkerArgv({
@@ -118,17 +141,18 @@ async function dispatchObserver(
 
 		const commit = coverageCommit({ ok: true, observations, coversUpToId, about_claim_id: stamp });
 		if (commit) pi.appendEntry(commit.customType, commit.data);
-		if (ctx.hasUI && ctx.ui) {
+		if (toast) {
 			runtime.queueToast(
 				`ctx: observer +${observations.length} (~${slice.tokens.toLocaleString()} tok)`,
 				"info",
-				ctx.ui.notify.bind(ctx.ui),
+				toast,
 			);
 		}
 	} catch (error) {
+		if (controller.signal.aborted) return;
 		const message = error instanceof Error ? error.message : String(error);
 		runtime.lastWorkerError = message;
-		if (ctx.hasUI) ctx.ui?.notify(`ctx: observer failed: ${message}`, "error");
+		toast?.(`ctx: observer failed: ${message}`, "error");
 	} finally {
 		runtime.observersInFlight.delete(runId);
 	}

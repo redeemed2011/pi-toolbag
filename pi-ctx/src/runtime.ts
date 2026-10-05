@@ -65,7 +65,8 @@ export class Runtime {
 
 	trackObserverTask(task: Promise<void>): void {
 		this.observerTasks.add(task);
-		void task.finally(() => this.observerTasks.delete(task));
+		// `void task.finally(...)` still rejects. A stale ctx throw must not be unhandled.
+		void task.finally(() => this.observerTasks.delete(task)).catch(() => {});
 	}
 
 	async whenObserversIdle(): Promise<void> {
