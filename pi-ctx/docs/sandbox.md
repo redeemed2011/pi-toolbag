@@ -1,6 +1,6 @@
 # Pi sandbox and how ctx is tested
 
-Default `pi` on this machine is **not** the npm CLI. It is a bash wrapper that launches Pi inside **cplt** (Landlock LSM + seccomp-BPF, optional Bubblewrap). The unsandboxed CLI is `pi-unsafe`. `sbx-pi` is an alias of the wrapper.
+Default `pi` on this machine is **not** the npm CLI. It is a bash wrapper that launches Pi inside **cplt** (Landlock LSM + seccomp-BPF, optional Bubblewrap). The unsandboxed CLI is `pi-unsafe`.
 
 ctx is a Pi extension. Session inject (observers + compact inject) must work inside that sandbox. Project law (shared records under `~/.pi/ctx/`) needs one extra write grant the stock Pi profile does not include.
 
