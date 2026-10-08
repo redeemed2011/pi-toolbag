@@ -14,6 +14,11 @@ export const WORKER_EXTENSION_PATH = join(REPO_ROOT, "worker.ts");
 export function modelArg(model: ConfiguredModel): string {
 	return `${model.provider}/${model.id}`;
 }
+
+/** `spawn` throws if any argv string contains U+0000. Transcript chunks can. */
+export function withoutNullBytes(value: string): string {
+	return value.replaceAll("\0", "");
+}
 /** Numeric nvm dir order. `v9.0.0` is older than `v24.21.0`. */
 export function compareNodeVersionDir(a: string, b: string): number {
 	const parts = (name: string) =>
@@ -126,7 +131,7 @@ export function buildWorkerArgv(opts: {
 		args.push("--exclude-tools", "image_gen");
 	}
 	args.push("-n", opts.sessionName);
-	args.push("-p", opts.kickoffPrompt);
+	args.push("-p", withoutNullBytes(opts.kickoffPrompt));
 	return [pi.command, ...args];
 }
 
@@ -138,7 +143,7 @@ export function spawnWorker(opts: {
 	env: NodeJS.ProcessEnv;
 	signal?: AbortSignal;
 }): Promise<WorkerExit> {
-	const [command, ...rest] = opts.argv;
+	const [command, ...rest] = opts.argv.map(withoutNullBytes);
 	mkdirSync(opts.cwd, { recursive: true });
 	return new Promise((resolvePromise) => {
 		const proc = spawn(command, rest, {

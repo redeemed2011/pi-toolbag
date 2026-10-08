@@ -44,6 +44,18 @@ describe("observer argv", () => {
 		});
 		expect(argv).not.toContain("--thinking");
 	});
+	it("strips null bytes from the kickoff prompt", () => {
+		const argv = buildWorkerArgv({
+			model: { provider: "x", id: "y" },
+			sessionName: "n",
+			kickoffPrompt: "Current local time: 2026-10-08 17:58\n\0\nBelow is one chunk",
+			sessionDir: "/tmp/s",
+		});
+		const prompt = argv[argv.indexOf("-p") + 1];
+		expect(prompt).not.toContain("\0");
+		expect(prompt).toContain("Current local time: 2026-10-08 17:58");
+		expect(prompt).toContain("Below is one chunk");
+	});
 
 	it("formats provider/id", () => {
 		expect(modelArg(model)).toBe("openrouter/z-ai/glm-5.3");
