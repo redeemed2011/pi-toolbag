@@ -78,6 +78,26 @@ describe("evidence", () => {
 		}
 	});
 
+	it("refuses to supersede or block, so the file write cannot retire a rule", () => {
+		const kept = constraint("c1", "keep the rule");
+		const sup = putJudgment({
+			...base,
+			existing: [kept],
+			input: { ...evidenceInput("e1"), supersedes: "c1", reason_class: "decision_change" },
+		});
+		expect(sup.ok).toBe(false);
+		if (!sup.ok) expect(sup.error).toBe("evidence cannot supersede");
+		expect(foldLive([kept]).live.has("c1")).toBe(true);
+
+		const blocked = putJudgment({
+			...base,
+			existing: [question("q1", "work")],
+			input: { ...evidenceInput("e2"), blocks: ["q1"] },
+		});
+		expect(blocked.ok).toBe(false);
+		if (!blocked.ok) expect(blocked.error).toBe("evidence cannot block");
+	});
+
 	it("does not count toward the gate and is not a live-headline conflict", () => {
 		const existing = [
 			question("q1", "do the thing"),

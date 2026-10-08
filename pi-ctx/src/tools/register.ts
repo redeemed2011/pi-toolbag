@@ -288,6 +288,9 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		) {
 			const { fold } = sync(runtime, ctx);
 			let staged: { hash: string; size: number; bytes: Buffer } | undefined;
+			if (params.source_path && params.type !== "evidence") {
+				return jsonResult({ ok: false, error: "source_path only on evidence" });
+			}
 			if (params.type === "evidence") {
 				if (!params.source_path) return jsonResult({ ok: false, error: "source_path required" });
 				const read = readEvidenceFile(params.source_path);

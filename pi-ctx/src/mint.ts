@@ -67,6 +67,10 @@ export function putJudgment(opts: {
 	const { input, existing, occupancy, siblingKnob, claimedId } = opts;
 	const headline = input.headline.trim();
 	if (!headline) return { ok: false, error: "headline required" };
+	if (input.type === "evidence" && input.supersedes) return { ok: false, error: "evidence cannot supersede" };
+	if (input.type === "evidence" && (input.blocks?.length ?? 0) > 0) {
+		return { ok: false, error: "evidence cannot block" };
+	}
 
 	const liveBefore = foldLive(existing);
 
