@@ -19,14 +19,27 @@ function claimedToken(id: string): string {
 	return /^[A-Za-z0-9._:-]+$/.test(id) ? id : "unsafe";
 }
 
-export function applyStatusInject(messages: AgentMessage[], line: string): AgentMessage[] {
+const STATUS_START = "\n\n<ctx-status>\n";
+const STATUS_END = "\n</ctx-status>";
+
+function withoutStatusBlock(text: string): string {
+	const at = text.indexOf(STATUS_START);
+	return at < 0 ? text : text.slice(0, at);
+}
+
+/**
+ * Carry the per-turn line on the leading system message.
+ * A user or custom message would reach the model as a user utterance.
+ * Providers drop every system message except the first, so the line has to live there.
+ */
+export function applyStatusToSystem(messages: AgentMessage[], line: string): AgentMessage[] {
 	const stripped = messages.filter((m) => m.customType !== CTX_STATUS_INJECT);
-	if (!line) return stripped;
-	stripped.push({
-		role: "user",
-		customType: CTX_STATUS_INJECT,
-		content: line,
-		display: false,
-	});
-	return stripped;
+	const head = stripped[0];
+	if (!head || head.role !== "system" || typeof head.content !== "string") return stripped;
+	const base = withoutStatusBlock(head.content);
+	if (!line) {
+		if (base === head.content) return stripped;
+		return [{ ...head, content: base }, ...stripped.slice(1)];
+	}
+	return [{ ...head, content: `${base}${STATUS_START}${line}${STATUS_END}` }, ...stripped.slice(1)];
 }

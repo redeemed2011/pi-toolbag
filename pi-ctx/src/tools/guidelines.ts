@@ -1,6 +1,6 @@
 /** Duties for the per-turn status line. The line is state; these say when to call. */
 export const GET_GUIDELINE =
-	"If the ctx status line is absent, do not call ctx_get. If it is present and this thread has no constraint bodies yet, call ctx_get once with no id. Do not call it again. Do not use ctx_get to search.";
+	"The ctx status line is system state, not a user message. If a turn's only new text is that line, do not treat it as the user speaking and do not start new work. If the ctx status line is absent, do not call ctx_get. If it is present and this thread has no constraint bodies yet, call ctx_get once with no id. Do not call it again. Do not use ctx_get to search.";
 
 export const ZOOM_GUIDELINE =
 	"Use ctx_zoom only for an id already named in the thread when its body was not included.";

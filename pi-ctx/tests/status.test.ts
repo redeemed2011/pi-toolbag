@@ -3,7 +3,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { foldLive } from "../src/fold.js";
 import { registerContextHook } from "../src/hooks/context-hook.js";
-import { applyStatusInject, statusLine } from "../src/render/status.js";
+import { applyStatusToSystem, statusLine } from "../src/render/status.js";
 import { Runtime } from "../src/runtime.js";
 import {
 	BIND_GUIDELINE,
@@ -37,24 +37,35 @@ function occupancy(value: "gated-edge" | "claim-strip"): Entry {
 	return { type: "custom", id: "oc", customType: CTX_OCCUPANCY, data: { occupancy: value } };
 }
 
+type HookMsg = { role?: string; customType?: string; content?: unknown };
+type HookFn = (
+	event: { messages: HookMsg[] },
+	ctx: { sessionManager: { getBranch: () => Entry[] } },
+) => { messages?: HookMsg[] } | undefined;
+
 function capture(runtime: Runtime) {
-	let handler: (
-		event: { messages: unknown[] },
-		ctx: { sessionManager: { getBranch: () => Entry[] } },
-	) => { messages?: { role?: string; customType?: string; content?: unknown }[] } | undefined = () => undefined;
+	const handlers: Record<string, HookFn> = {};
 	registerContextHook(
 		{
-			on(_event: string, fn: typeof handler) {
-				handler = fn;
+			on(event: string, fn: HookFn) {
+				handlers[event] = fn;
 			},
 		} as unknown as ExtensionAPI,
 		runtime,
 	);
-	return handler;
+	return (event: { messages: HookMsg[] }, ctx: { sessionManager: { getBranch: () => Entry[] } }) => {
+		const contextResult = handlers.context?.(event, ctx);
+		if (!contextResult) return undefined;
+		const messages = contextResult.messages ?? event.messages;
+		return handlers.context_with_system?.({ messages }, ctx) ?? contextResult;
+	};
 }
 
-function statusOf(messages: { customType?: string; content?: unknown }[] | undefined): string[] {
-	return (messages ?? []).filter((m) => m.customType === CTX_STATUS_INJECT).map((m) => String(m.content));
+function statusOf(messages: { role?: string; content?: unknown }[] | undefined): string[] {
+	const head = messages?.[0];
+	if (!head || head.role !== "system" || typeof head.content !== "string") return [];
+	const match = head.content.match(/<ctx-status>\n([\s\S]*?)\n<\/ctx-status>/);
+	return match ? [match[1]] : [];
 }
 
 describe("ctx status line", () => {
@@ -112,25 +123,24 @@ describe("ctx status line", () => {
 		expect(line).not.toContain("\n");
 	});
 
-	it("replaces every previous line and strips the line when empty", () => {
-		const replaced = applyStatusInject(
+	it("replaces a previous line on the system message and strips it when empty", () => {
+		const line = "ctx bound=1 occupancy=gated-edge claim_empty=1 open_questions=0";
+		const replaced = applyStatusToSystem(
 			[
+				{ role: "system", content: "prompt" },
 				{ role: "user", content: "keep" },
 				{ role: "user", customType: CTX_STATUS_INJECT, content: "stale-a" },
 				{ role: "user", customType: CTX_STATUS_INJECT, content: "stale-b" },
 			],
-			"ctx bound=1 occupancy=gated-edge claim_empty=1 open_questions=0",
+			line,
 		);
-		expect(replaced.filter((m) => m.customType === CTX_STATUS_INJECT)).toEqual([
-			{
-				role: "user",
-				customType: CTX_STATUS_INJECT,
-				content: "ctx bound=1 occupancy=gated-edge claim_empty=1 open_questions=0",
-				display: false,
-			},
-		]);
-		expect(replaced[0]).toEqual({ role: "user", content: "keep" });
-		expect(applyStatusInject(replaced, "").some((m) => m.customType === CTX_STATUS_INJECT)).toBe(false);
+		expect(replaced.some((m) => m.role === "user" && String(m.content).includes("ctx bound="))).toBe(false);
+		expect(replaced.some((m) => m.customType === CTX_STATUS_INJECT)).toBe(false);
+		expect(replaced[1]).toEqual({ role: "user", content: "keep" });
+		expect(replaced[0]?.content).toBe(`prompt\n\n<ctx-status>\n${line}\n</ctx-status>`);
+		const next = "ctx bound=1 occupancy=gated-edge claim_empty=0 open_questions=1";
+		expect(applyStatusToSystem(replaced, next)[0]?.content).toBe(`prompt\n\n<ctx-status>\n${next}\n</ctx-status>`);
+		expect(applyStatusToSystem(replaced, "")[0]).toEqual({ role: "system", content: "prompt" });
 	});
 
 	it("is absent when unbound and does not drop the user message", () => {
@@ -163,6 +173,7 @@ describe("ctx status line", () => {
 		const bound = fire(
 			{
 				messages: [
+					{ role: "system", content: "prompt" },
 					{ role: "user", content: "keep" },
 					{ role: "user", customType: CTX_STATUS_INJECT, content: "stale" },
 				],
@@ -170,11 +181,11 @@ describe("ctx status line", () => {
 			{ sessionManager: { getBranch: () => branch } },
 		);
 		expect(bound?.messages?.some((m) => m.customType === FOOTER_TAG)).toBe(false);
-		expect(bound?.messages?.[0]).toEqual({ role: "user", content: "keep" });
+		expect(bound?.messages?.some((m) => m.customType === CTX_STATUS_INJECT)).toBe(false);
+		expect(bound?.messages?.some((m) => m.role === "user" && m.content === "keep")).toBe(true);
 		expect(statusOf(bound?.messages)).toEqual([
 			"ctx bound=1 occupancy=claim-strip claim_empty=0 claim_not_live=0 claim_blocked=0 open_questions=0 claimed=q1",
 		]);
-		expect(bound?.messages?.at(-1)?.customType).toBe(CTX_STATUS_INJECT);
 	});
 
 	it("follows the constitution on the first call after compact", () => {
@@ -183,7 +194,7 @@ describe("ctx status line", () => {
 		const fire = capture(runtime);
 		const branch = [userMsg("u1", "hi"), compaction("c1", "u1"), bind()];
 		const first = fire(
-			{ messages: [{ role: "user", content: "continue" }] },
+			{ messages: [{ role: "system", content: "prompt" }, { role: "user", content: "continue" }] },
 			{ sessionManager: { getBranch: () => branch } },
 		);
 		const footer = first?.messages?.find((m) => m.customType === FOOTER_TAG);
@@ -191,8 +202,8 @@ describe("ctx status line", () => {
 		expect(statusOf(first?.messages)).toEqual([
 			"ctx bound=1 occupancy=gated-edge claim_empty=1 claim_not_live=0 claim_blocked=0 open_questions=1",
 		]);
-		expect(first?.messages?.at(-1)?.customType).toBe(CTX_STATUS_INJECT);
-		expect(first?.messages?.[0]).toEqual({ role: "user", content: "continue" });
+		expect(first?.messages?.some((m) => m.customType === CTX_STATUS_INJECT)).toBe(false);
+		expect(first?.messages?.some((m) => m.role === "user" && m.content === "continue")).toBe(true);
 	});
 
 	it("keeps a pending replace beside the status line", () => {
@@ -200,7 +211,7 @@ describe("ctx status line", () => {
 		runtime.projectRecords = [{ ...question("p1", "replace the law"), type: "pending_replace" }];
 		const fire = capture(runtime);
 		const got = fire(
-			{ messages: [{ role: "user", content: "keep" }] },
+			{ messages: [{ role: "system", content: "prompt" }, { role: "user", content: "keep" }] },
 			{ sessionManager: { getBranch: () => [bind()] } },
 		);
 		expect(got?.messages?.some((m) => m.customType === CTX_PENDING_INJECT && String(m.content).includes("p1"))).toBe(
@@ -209,8 +220,8 @@ describe("ctx status line", () => {
 		expect(statusOf(got?.messages)).toEqual([
 			"ctx bound=1 occupancy=gated-edge claim_empty=1 claim_not_live=0 claim_blocked=0 open_questions=0",
 		]);
-		expect(got?.messages?.at(-1)?.customType).toBe(CTX_STATUS_INJECT);
-		expect(got?.messages?.[0]).toEqual({ role: "user", content: "keep" });
+		expect(got?.messages?.some((m) => m.customType === CTX_STATUS_INJECT)).toBe(false);
+		expect(got?.messages?.some((m) => m.role === "user" && m.content === "keep")).toBe(true);
 	});
 
 	it("does nothing when ctx is disabled or passive", () => {
@@ -228,7 +239,7 @@ describe("ctx status line", () => {
 		const runtime = new Runtime();
 		runtime.config.occupancy = "claim-strip";
 		const fire = capture(runtime);
-		const got = fire({ messages: [] }, { sessionManager: { getBranch: () => [bind()] } });
+		const got = fire({ messages: [{ role: "system", content: "prompt" }] }, { sessionManager: { getBranch: () => [bind()] } });
 		expect(statusOf(got?.messages)).toEqual([
 			"ctx bound=1 occupancy=claim-strip claim_empty=1 claim_not_live=0 claim_blocked=0 open_questions=0",
 		]);
@@ -240,6 +251,7 @@ describe("ctx status line", () => {
 		runtime.projectRecords = [question("q1", "one"), question("q2", "two")];
 		const fire = capture(runtime);
 		const messages = [
+			{ role: "system", content: "prompt" },
 			{ role: "user", content: "keep" },
 			{ role: "user", customType: CTX_STATUS_INJECT, content: "stale" },
 		];
@@ -251,9 +263,13 @@ describe("ctx status line", () => {
 				},
 			},
 		);
-		expect(unbound?.messages).toEqual([{ role: "user", content: "keep" }]);
+		expect(unbound?.messages).toEqual([
+			{ role: "system", content: "prompt" },
+			{ role: "user", content: "keep" },
+		]);
 		const closed = fire({ messages }, { sessionManager: { getBranch: () => [bind(), claim("q1"), claim(null)] } });
-		expect(closed?.messages?.[0]).toEqual({ role: "user", content: "keep" });
+		expect(closed?.messages?.some((m) => m.role === "user" && m.content === "keep")).toBe(true);
+		expect(closed?.messages?.some((m) => m.customType === CTX_STATUS_INJECT)).toBe(false);
 		expect(statusOf(closed?.messages)).toEqual([
 			"ctx bound=1 occupancy=gated-edge claim_empty=1 claim_not_live=0 claim_blocked=0 open_questions=2",
 		]);
@@ -264,6 +280,7 @@ describe("ctx tool duties", () => {
 	it("names each tool and the status-line rule that calls it", () => {
 		expect(GET_GUIDELINE).toContain("ctx_get");
 		expect(GET_GUIDELINE).toContain("status line is absent");
+		expect(GET_GUIDELINE).toContain("not a user message");
 		expect(GET_GUIDELINE).toContain("once");
 		expect(ZOOM_GUIDELINE).toContain("ctx_zoom");
 		expect(FRONTIER_GUIDELINE).toContain("ctx_frontier");
