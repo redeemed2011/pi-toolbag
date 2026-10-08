@@ -65,6 +65,43 @@ Feature: Attach failover to a Pi session
     Then setModel was not called
     And continue was not sent
 
+  Scenario: a safety phrase sends the block continue message
+    Given attach with retryAfterTools true
+    And a session start
+    And the last assistant error is "guardrail_blocked"
+    When the agent settles
+    Then setModel was called with "xai/grok-4.6"
+    And the continue message was "The previous model was blocked. Do not repeat that approach. The tool results already in the conversation are done; do not repeat them. Finish the request a different way."
+
+  Scenario: quota wording that contains a safety phrase sends the stop continue message
+    Given attach with retryAfterTools true
+    And a session start
+    And the last assistant error is "billing guardrail_blocked"
+    When the agent settles
+    Then setModel was called with "xai/grok-4.6"
+    And the continue message was "The previous model stopped. The tool results already in the conversation are done; do not repeat them. Finish the original request."
+
+  Scenario: overflow after tools does not failover
+    Given attach with retryAfterTools true
+    And a session start
+    And a tool has started
+    And the last assistant error is "prompt too long"
+    When the agent settles
+    Then setModel was not called
+    And continue was not sent
+
+  Scenario: an abort after tools does not failover
+    Given attach with retryAfterTools true
+    And a session start
+    And a tool has started
+    And the last assistant was aborted
+    When the agent settles
+    Then setModel was not called
+    And continue was not sent
+
+  Scenario: the interactive extension retries after tools
+    Then the interactive extension passes retryAfterTools true
+
   Scenario: user model select becomes preferred
     Given attach with retryAfterTools false
     And a session start

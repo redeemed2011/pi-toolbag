@@ -1,8 +1,8 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { attachFallback, CONTINUE_AFTER_BLOCK, CONTINUE_AFTER_STOP } from "../src/attach.js";
+import { attachFallback } from "../src/attach.js";
 import { classifyError, isFailoverWorthy } from "../src/classify.js";
 import { extractLastAssistantError } from "../src/extract.js";
 import { decideFailover } from "../src/kernel.js";
@@ -461,11 +461,25 @@ Then("setModel was not called", (world) => {
 });
 
 Then("continue was sent once", (world) => {
-  expect(hostOf(world).sent).toEqual([CONTINUE_AFTER_STOP]);
+  expect(hostOf(world).sent).toEqual([
+    "The previous model stopped. The tool results already in the conversation are done; do not repeat them. Finish the original request.",
+  ]);
 });
 
 Then("the block continue message was sent once", (world) => {
-  expect(hostOf(world).sent).toEqual([CONTINUE_AFTER_BLOCK]);
+  expect(hostOf(world).sent).toEqual([
+    "The previous model was blocked. Do not repeat that approach. The tool results already in the conversation are done; do not repeat them. Finish the request a different way.",
+  ]);
+});
+
+Then(/^the continue message was "(.*)"$/, (world, text) => {
+  expect(hostOf(world).sent).toEqual([text]);
+});
+
+Then("the interactive extension passes retryAfterTools true", () => {
+  const src = readFileSync(new URL("../../pi-auto-fallback/index.ts", import.meta.url), "utf8");
+  expect(src).toMatch(/retryAfterTools:\s*true/);
+  expect(src).not.toMatch(/retryAfterTools:\s*false/);
 });
 
 Then("continue was not sent", (world) => {
