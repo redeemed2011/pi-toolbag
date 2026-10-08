@@ -151,7 +151,8 @@ export function executeGet(opts: {
 	observations: Observation[];
 	recency: Observation[];
 	now?: number;
-}): unknown {
+}): Record<string, unknown> {
 	if (!opts.enabled) return { error: "ctx is off" };
 	if (opts.id) return lookupRecord(opts.id, opts.live, opts.records, opts.observations, opts.now);
+	return defaultRetrieve(opts);
 }

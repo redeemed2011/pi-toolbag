@@ -9,7 +9,7 @@ export function executeFrontier(opts: {
 	claimedId: string | null;
 	live: LiveSet;
 	include_blocked?: boolean;
-}): unknown {
+}): Record<string, unknown> {
 	if (!opts.enabled) return { error: "ctx is off" };
 	if (!opts.bound) return { error: "no project bound" };
 	const items = frontierItems(opts.live, opts.claimedId, opts.include_blocked === true);

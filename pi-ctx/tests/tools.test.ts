@@ -5,7 +5,7 @@ import { applyClaim } from "../src/tools/claim.js";
 import { executeFrontier, FRONTIER_CAP } from "../src/tools/frontier.js";
 import { defaultRetrieve, executeGet, RETRIEVE_HEADLINE_CAP } from "../src/tools/get.js";
 import { registerTools } from "../src/tools/register.js";
-import { dropKeys } from "../src/tools/result.js";
+import { dropKeys, jsonResult } from "../src/tools/result.js";
 import { constraint, obs, question } from "./fixtures.js";
 
 const live = foldLive([
@@ -80,6 +80,8 @@ describe("get / zoom", () => {
 	it("does not fold search-like keys into id", () => {
 		const cleaned = dropKeys({ q: "foo", similar: "x", id: "c-all" }, ["q", "similar", "related", "search"]);
 		expect(cleaned).toEqual({ id: "c-all" });
+		expect(dropKeys(undefined, ["q"])).toEqual({});
+		expect(dropKeys(null, ["q"])).toEqual({});
 	});
 
 	it("registers no ranking API", () => {
@@ -106,6 +108,67 @@ describe("get / zoom", () => {
 			recency,
 		}) as { recency: unknown[] };
 		expect(got.recency).toHaveLength(RETRIEVE_HEADLINE_CAP);
+	});
+});
+
+describe("tool results pi can replay", () => {
+	const base = {
+		enabled: true,
+		bound: false,
+		occupancy: "gated-edge" as const,
+		claimedId: null,
+		live: foldLive([]),
+		records: [],
+		observations: [],
+		recency: [],
+	};
+
+	function replayedText(result: { content: Array<{ type: string; text?: unknown }> }): string {
+		const stored = JSON.parse(JSON.stringify(result)) as { content: Array<{ text?: unknown }> };
+		const text = stored.content[0]?.text;
+		expect(typeof text).toBe("string");
+		return text as string;
+	}
+
+	it("get with no id returns the default retrieve, not undefined", () => {
+		const got = executeGet(base);
+		expect(got).toEqual({ bound: false, message: "no project bound", recency: [] });
+		expect(replayedText(jsonResult(got))).toContain("no project bound");
+	});
+
+	it("jsonResult never stores text that stringify drops", () => {
+		const text = replayedText(jsonResult(undefined));
+		expect(text).toContain("empty tool result");
+	});
+
+	it("every ctx tool execute returns replayable text", async () => {
+		const tools = new Map<string, { execute: (...args: never[]) => Promise<{ content: Array<{ type: string; text?: unknown }> }> }>();
+		registerTools(
+			{
+				registerTool: (tool: { name: string; execute: (...args: never[]) => Promise<{ content: Array<{ type: string; text?: unknown }> }> }) => {
+					tools.set(tool.name, tool);
+				},
+				appendEntry: () => {},
+			} as never,
+			new Runtime(),
+		);
+		const ctx = {
+			hasUI: false,
+			cwd: "/tmp",
+			sessionManager: { getBranch: () => [], getSessionId: () => "s" },
+		};
+		const calls: Array<[string, unknown]> = [
+			["ctx_get", {}],
+			["ctx_zoom", { id: "missing" }],
+			["ctx_frontier", {}],
+			["ctx_claim", { action: "status" }],
+			["ctx_bind", {}],
+			["ctx_record", { type: "question", headline: "note" }],
+		];
+		for (const [name, params] of calls) {
+			const result = await tools.get(name)!.execute("call" as never, params as never, undefined as never, undefined as never, ctx as never);
+			expect(replayedText(result).length).toBeGreaterThan(0);
+		}
 	});
 });
 
