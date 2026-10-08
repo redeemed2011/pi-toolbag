@@ -184,9 +184,75 @@ export function summarizeEdit(rows: readonly ToolView[]): { text: string; runnin
 	return { text: `${running ? "Editing" : "Edited"} ${name}`, running, failed, added, removed };
 }
 
-function thoughtLine(child: unknown): { text: string; running: boolean } {
-	const streaming = (child as unknown as { isStreaming?: boolean }).isStreaming === true;
-	return streaming ? { text: "Thinking…", running: true } : { text: "Thought", running: false };
+function revealTools(rows: readonly ToolView[], expanded: boolean): void {
+	for (const row of rows) {
+		if (row.expanded === expanded) continue;
+		const tool = row as ToolView & { setExpanded?: (value: boolean) => void };
+		if (typeof tool.setExpanded === "function") tool.setExpanded(expanded);
+		else tool.expanded = expanded;
+	}
+}
+
+function thoughtStreaming(members: readonly Member[]): boolean {
+	return members.some((member) => (member as { isStreaming?: boolean }).isStreaming === true);
+}
+
+function thoughtText(members: readonly Member[]): string {
+	const parts: string[] = [];
+	for (const member of members) {
+		const content = (member as { lastMessage?: { content?: Array<{ type?: string; thinking?: string; thinkingSignature?: string }> } }).lastMessage?.content;
+		if (!Array.isArray(content)) continue;
+		for (const block of content) {
+			if (block?.type !== "thinking") continue;
+			const written = block.thinking?.trim();
+			if (written) {
+				parts.push(written);
+				continue;
+			}
+			const summary = signatureSummary(block.thinkingSignature);
+			if (summary) parts.push(summary);
+		}
+	}
+	return parts.join(" ");
+}
+
+function signatureSummary(signature: string | undefined): string {
+	if (!signature) return "";
+	try {
+		const summary = (JSON.parse(signature) as { summary?: Array<{ text?: string }> }).summary;
+		if (!Array.isArray(summary)) return "";
+		return summary.map((part) => part?.text?.trim() ?? "").filter(Boolean).join(" ");
+	} catch {
+		return "";
+	}
+}
+
+function wrapPlain(text: string, width: number): string[] {
+	const clean = text.replace(/\s+/g, " ").trim();
+	if (!clean) return [];
+	const lines: string[] = [];
+	let current = "";
+	for (const word of clean.split(" ")) {
+		if (!current) {
+			current = word;
+			continue;
+		}
+		if (current.length + 1 + word.length > width) {
+			lines.push(current);
+			current = word;
+		} else {
+			current = `${current} ${word}`;
+		}
+	}
+	if (current) lines.push(current);
+	return lines;
+}
+
+function renderThoughtBody(members: readonly Member[], theme: Theme | undefined, width: number): string[] {
+	const wrapped = wrapPlain(thoughtText(members), Math.max(1, width - 2));
+	if (wrapped.length === 0) return [];
+	const mark = paint(theme, "dim", "•");
+	return wrapped.map((line, index) => truncateToWidth(index === 0 ? `${mark} ${line}` : `  ${line}`, Math.max(1, width), "…"));
 }
 function formatToolName(toolName: string): string {
 	const spaced = toolName
@@ -261,8 +327,11 @@ class SummaryGroup extends Container {
 			return { text: `${name}${running ? "…" : ""}`, running, failed };
 		}
 		if (this.mode === "thought") {
-			const line = thoughtLine(this.members[0]);
-			return { text: paint(this.theme, line.running ? "accent" : "bashMode", bold(this.theme, line.text)), running: line.running, failed: false };
+			const running = thoughtStreaming(this.members);
+			const label = paint(this.theme, "dim", running ? "Thinking…" : "Thinking");
+			const preview = thoughtText(this.members).replace(/\s+/g, " ").trim();
+			const rest = !running && preview ? ` ${paint(this.theme, "dim", "·")} ${preview}` : "";
+			return { text: `${label}${rest}`, running, failed: false };
 		}
 		const summary = summarizeLook(this.rows);
 		const body = paint(this.theme, summary.running ? "accent" : "bashMode", bold(this.theme, summary.text));
@@ -271,19 +340,21 @@ class SummaryGroup extends Container {
 	}
 
 	render(width: number): string[] {
-		const host = this.rows[0];
-		if (host && this.state.lastHostExpanded !== host.expanded) {
-			this.state.lastHostExpanded = host.expanded;
-			this.state.expanded = host.expanded;
+		revealTools(this.rows, this.state.expanded);
+		if (this.rows[0]) this.state.lastHostExpanded = this.rows[0].expanded;
+		if (this.state.expanded) {
+			const lines = this.mode === "thought" ? renderThoughtBody(this.members, this.theme, width) : this.members.flatMap((member) => renderMember(this.mode, member, width));
+			if (this.mode !== "thought" || lines.length > 0) {
+				if (lines.length === 0 || lines[0] !== "") lines.unshift("");
+				return lines;
+			}
 		}
 		const title = this.title();
 		const frames = ["◐", "◓", "◑", "◒"];
-		const markChar = title.failed ? "✗" : title.running ? frames[Math.floor(Date.now() / 160) % frames.length]! : "●";
-		const mark = paint(this.theme, title.failed ? "error" : title.running ? "accent" : "success", markChar);
-		const lines = ["", truncateToWidth(`${mark} ${title.text}`, Math.max(1, width), "…")];
-		if (!this.state.expanded) return lines;
-		for (const member of this.members) lines.push(...renderMember(this.mode, member, width));
-		return lines;
+		const quiet = this.mode === "thought";
+		const markChar = title.failed ? "✗" : title.running ? frames[Math.floor(Date.now() / 160) % frames.length]! : quiet ? "•" : "●";
+		const mark = paint(this.theme, title.failed ? "error" : title.running ? "accent" : quiet ? "dim" : "success", markChar);
+		return ["", truncateToWidth(`${mark} ${title.text}`, Math.max(1, width), "…")];
 	}
 }
 
