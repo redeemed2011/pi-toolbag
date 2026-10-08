@@ -34,6 +34,7 @@ export const CTX_FOLDED = "ctx.folded";
 export const CTX_PROMOTER_LATCH = "ctx.promoter.latch";
 export const CTX_PENDING_TURN = "ctx.pending_replace.turns";
 export const CTX_PENDING_INJECT = "ctx.pending_replace.inject";
+export const CTX_STATUS_INJECT = "ctx.status";
 export const FOOTER_TAG = "ctx.constitution-footer";
 
 export type Occupancy = "gated-edge" | "claim-strip";

@@ -13,6 +13,14 @@ import { executeFrontier } from "./frontier.js";
 import { executeGet } from "./get.js";
 import { dropKeys, jsonResult } from "./result.js";
 import { executeZoom } from "./zoom.js";
+import {
+	BIND_GUIDELINE,
+	CLAIM_GUIDELINE,
+	FRONTIER_GUIDELINE,
+	GET_GUIDELINE,
+	RECORD_GUIDELINE,
+	ZOOM_GUIDELINE,
+} from "./guidelines.js";
 
 function sync(runtime: Runtime, ctx: ExtensionContext) {
 	const branch = ctx.sessionManager.getBranch() as Entry[];
@@ -34,9 +42,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		label: "ctx get",
 		description: "Point lookup or default retrieve. Omit id for default retrieve. Must not scan the observation corpus.",
 		promptSnippet: "Retrieve ctx default law/claim or a record by id",
-		promptGuidelines: [
-			"Use ctx_get when you need default retrieve or a record body by id. Omit id for default retrieve. Do not use ctx_get to search.",
-		],
+		promptGuidelines: [GET_GUIDELINE],
 		parameters: Type.Object({
 			id: Type.Optional(Type.String({ description: "Record id. Omit for default retrieve." })),
 		}),
@@ -66,7 +72,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		label: "ctx zoom",
 		description: "Full body of a record by id. Never paraphrase.",
 		promptSnippet: "Zoom a ctx record body by id",
-		promptGuidelines: ["Use ctx_zoom when you need the full body of a known record id."],
+		promptGuidelines: [ZOOM_GUIDELINE],
 		parameters: Type.Object({
 			id: Type.String({ description: "Record id" }),
 		}),
@@ -89,9 +95,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		label: "ctx frontier",
 		description: "Open unblocked unclaimed questions in mint-time order. Cap 20; remainder in elided.",
 		promptSnippet: "List open unclaimed ctx questions",
-		promptGuidelines: [
-			"Use ctx_frontier when you need open unblocked unclaimed questions in mint-time order. Do not dump frontier into inject.",
-		],
+		promptGuidelines: [FRONTIER_GUIDELINE],
 		parameters: Type.Object({
 			include_blocked: Type.Optional(Type.Boolean()),
 		}),
@@ -120,9 +124,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		label: "ctx claim",
 		description: "Read or set the session claim. Live swap refuses; close first or user /ctx claim.",
 		promptSnippet: "Status, claim, or close the ctx claim",
-		promptGuidelines: [
-			"Use ctx_claim to read or set the session claim when claimed_id is empty, or to close. Do not silent-swap a live claim; close first or ask the user to run /ctx claim.",
-		],
+		promptGuidelines: [CLAIM_GUIDELINE],
 		parameters: Type.Object({
 			action: StringEnum(["status", "claim", "close"] as const),
 			question_id: Type.Optional(Type.String()),
@@ -164,9 +166,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		label: "ctx bind",
 		description: "Start the bind HITL flow (name, confirm). Never silent. Print mode refuses. Does not promote observations into law.",
 		promptSnippet: "Bind this session to a ctx project",
-		promptGuidelines: [
-			"Use ctx_bind when the user asked to create a ctx project or you propose one. Bind always requires HITL; never bind silently. Bind sets the project pointer only; it does not ask to ratify observer notes. Mint law with ctx_record.",
-		],
+		promptGuidelines: [BIND_GUIDELINE],
 		parameters: Type.Object({
 			name: Type.Optional(
 				Type.String({ description: "Suggested project name. Collision still HITL." }),
@@ -197,9 +197,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		label: "ctx record",
 		description: "Append a new judgment record to the bound project log. Never overwrite. Observers cannot call this.",
 		promptSnippet: "Mint a ctx judgment record",
-		promptGuidelines: [
-			"Use ctx_record to append a new judgment record to the bound project. Never overwrite. Constraints require applies_to and directive. Missing applies_to refuses; it never defaults to all. live_conflict refuses in print; TUI selects which to supersede. GATE overflow refuses in print; TUI select is refuse-first vs supersede/split.",
-		],
+		promptGuidelines: [RECORD_GUIDELINE],
 		parameters: Type.Object({
 			type: StringEnum([
 				"constraint",
