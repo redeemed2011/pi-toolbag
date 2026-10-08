@@ -1,6 +1,7 @@
 # ctx — agent pickup
 
 Pi 0.84.4 extension in the pi-toolbag repo. Spec: agent memory — Pi spec (both injects) (not shipped in this repo). New session: read `HANDOFF.md`, then this file.
+Goals and closed non-goals: `GOALS.md`. Read that before changing what ctx is for.
 
 Do not reopen closed leftovers (15k/5k, cap/stub, stop-hook, Order-flip A, F-packer). The spec’s “PR 1–10” is a **local sequence**, not GitHub pull requests.
 

@@ -1,78 +1,64 @@
 # First Principles
 
-**Session date**: 2026-10-01
-**Scope**: A raw copy of this machine's cplt global config lives in pi-toolbag as an example, secrets are the only thing that may be redacted, and one agent-visible instruction keeps that copy identical to ~/.config/cplt/config.toml.
+**Session date**: 2026-10-08
+**Scope**: A ctx checkout states the extension's goals so a later session on another computer can improve ctx toward those goals.
 
 ## Bedrock facts
 
-### Fact 1 — Live file is what cplt reads
+### Fact 1 — The vault states the goal; the checkout does not
 
-**Statement**: cplt reads `~/.config/cplt/config.toml` unless `CPLT_CONFIG` is set. On this machine that file exists and `CPLT_CONFIG` is unset in `~/.bashrc`, `~/.bash_profile`, `~/.zshrc`, and `~/.profile`.
-**Why it is load-bearing**: The example has to be a copy of the file cplt actually uses, not of a second invented config.
-**Source / evidence**: `cplt config --help` (2026-10-01): "cplt reads config from `~/.config/cplt/config.toml` by default (override with `CPLT_CONFIG`)." Shell rc search the same day found no `CPLT_CONFIG`.
+**Statement**: The vault's one-sentence goal is: design a Pi memory system that by default keeps a session coherent across many compact cycles, and that can be explicitly bound to a named, machine-global, repo-independent project so multiple sessions share append-only law. The ctx README points at "agent memory — Pi spec (both injects)" and says that spec is not shipped in this repo.
+**Why it is load-bearing**: Another computer clones pi-toolbag. It does not have the Obsidian vault. Without a statement in the checkout, that session cannot tell the goal from the code alone.
+**Source / evidence**: `/home/bo/ResilioSync/Obsidian/My Notes/AI Ideas/agent memory — first questions.md` (updated 2026-09-18). `pi-ctx/README.md` Status section, read 2026-10-08.
 **Status**: Verified
 
-### Fact 2 — The live file has no secret values
+### Fact 2 — The spec's goals and non-goals are a closed list
 
-**Statement**: `~/.config/cplt/config.toml` contains settings and `/home/bo` paths. It does not contain a password, token, API key, or private key. The only matches for those words are comments ("project secrets", "auth token dump").
-**Why it is load-bearing**: The copy may be raw. Secrets are the only allowed redaction, and there is nothing to redact today.
-**Source / evidence**: Full read of the file and a case-insensitive scan on 2026-10-01. User, same day: paths are not secrets; the only sanitization is secrets.
+**Statement**: The spec's goals are: session inject default on; project law only after explicit bind to a machine-global named project; an 8k typed inject at compact, plus F-once A; tools `ctx_get`, `ctx_zoom`, `ctx_frontier`, `ctx_claim`, `ctx_bind`, `ctx_record`; both occupancy renderers, default Gated Edge, per-session switch; compact is O(live), no LLM in that hook; one Pi extension. The non-goals include deleting either renderer, a third occupancy, F-packer, growing the inject with the window, observers minting judgment types, defaulting a missing `applies_to` to `all`, auto-next after close, body-GC, embeddings, a shared sqlite store, and forking Pi.
+**Why it is load-bearing**: A later session that "improves" ctx by reopening a non-goal has failed the goal. The list is the thing the checkout has to carry.
+**Source / evidence**: Same vault, `agent memory — Pi spec (both injects).md`, section "Goals & Non-Goals", read 2026-10-08.
+**Status**: Verified as the vault's list. Not yet checked line-by-line against today's code (see Hypothesis 1).
+
+### Fact 3 — The vault's paths are stale
+
+**Statement**: The vault's handoff still says the code is `/home/bo/src/projects/pi-ctx/`. The live tree is `/home/bo/src/pi-toolbag/pi-ctx`. The user said ctx has been enhanced since those notes.
+**Why it is load-bearing**: A verbatim copy of the vault would ship stale paths and stale status. The checkout has to say what is still true.
+**Source / evidence**: Vault `agent memory — HANDOFF.md` (paths read 2026-10-08). Live tree listed the same day. User, 2026-10-08.
 **Status**: Verified
 
-### Fact 3 — Pi injects one global context file, then cwd ancestors
+### Fact 4 — This effort's contract limits the artifact
 
-**Statement**: Pi 0.99.1 loads a context file from the agent directory first, then walks from the working directory to the filesystem root. The agent directory defaults to `~/.pi/agent`. Candidates, in order, are `AGENTS.override.md`, `AGENTS.md`, `AGENTS.MD`, `CLAUDE.md`, `CLAUDE.MD`. A file applies across working directories only if it is the agent-directory file. A project `AGENTS.md` applies only when the working directory is that directory or below it.
-**Why it is load-bearing**: The sync rule has to be visible when either file is edited. Those edits do not share a working directory.
-**Source / evidence**: `docs/configuration.md` ("User instructions applied across working directories"; "Pi loads them from the agent directory, the working directory, and its parent directories"). `dist/core/resource-loader.js` `loadProjectContextFiles` and `loadContextFileFromDir` in package 0.99.1. This session's cwd is `/home/bo/src/projects` and its injected project instructions are `projects/AGENTS.md`, not `pi-toolbag/AGENTS.md`.
-**Status**: Verified
-
-### Fact 4 — The global context file does not exist
-
-**Statement**: `~/.pi/agent/AGENTS.md` and `~/.pi/agent/AGENTS.override.md` are absent. `pi-toolbag/AGENTS.md` exists.
-**Why it is load-bearing**: A rule that is not in a file Pi loads is not injected. The global file has to be created; the repo file already is, and it is the wrong scope.
-**Source / evidence**: `ls` of those paths on 2026-10-01. `loadContextFileFromDir` returns null when no candidate exists.
-**Status**: Verified
-
-### Fact 5 — A comment in config.toml is not injected
-
-**Statement**: Pi does not load `config.toml` as a context file. A comment there is seen only if an agent reads that file.
-**Why it is load-bearing**: A comment cannot be the instruction that keeps the two files in sync, because editing one file does not read the other.
-**Source / evidence**: `loadContextFileFromDir` candidate list in Fact 3. No other loader in that function reads toml.
-**Status**: Verified
-
-### Fact 6 — One instruction site, raw copy, no extra machinery
-
-**Statement**: The confirmed contract keeps one instruction site, a raw copy, and secret-only redaction. It cuts path rewriting, trust/blocklist/wrapper sync, and a script, symlink, or CI check.
-**Why it is load-bearing**: Extra sites and extra mechanisms are out of scope even if they would catch drift better.
-**Source / evidence**: `.pi/foundations/first-questions.md`, confirmed 2026-10-01. User: "the only sanitization is secrets."
+**Statement**: The checked-in statement is the smallest text a later session can read. Record a decision only where that session would otherwise undo it. Do not archive the vault. Do not keep two forms that say the same thing. The valid-output checker is the next effort, not this one.
+**Why it is load-bearing**: A full ADR series or a second spec fails the one-sentence goal by size and drift.
+**Source / evidence**: `pi-toolbag/.pi/foundations/first-questions.md`, written 2026-10-08 from the user's "start with #2, then #1".
 **Status**: Verified
 
 ## Hypotheses requiring fresh verification
 
-- None that block the solution. `--no-context-files` disables Fact 3; that is an explicit opt-out, not the default.
+- Hypothesis 1: Which spec goals and non-goals the current pi-ctx code still implements. The user said ctx was enhanced after the vault. A goals file written before that check can ship a rule the code no longer has.
+- Hypothesis 2: Which of those rules a later session would actually undo if they were left unstated. Fact 4 says record only those.
 
 ## Reconstructed minimal solution
 
 ### Core approach
 
-Create `~/.pi/agent/AGENTS.md` with the sync rule, and put a raw copy of `~/.config/cplt/config.toml` at `pi-toolbag/cplt-config.example.toml`. Nothing else.
+One markdown file in `pi-ctx/` that states the vault's one-sentence goal, the goals that current code still has, and the non-goals a later session must not reopen. It names the vault note as history, not as a second copy. It is written only after Hypothesis 1 is checked against the code.
 
 ### Justified components
 
-1. **`~/src/pi-toolbag/cplt-config.example.toml`** — required by the goal (a raw copy lives in pi-toolbag as an example) and Fact 2 (today that copy is byte-identical). One file at the repo root. The name says it is an example, so it is not a second live config. No fact requires a new directory.
-2. **`~/.pi/agent/AGENTS.md`** — required by Facts 3, 4, and 6. It is the only one of the three named sites that Pi injects for an edit in pi-toolbag and for an edit of `~/.config/cplt/config.toml` from another cwd. It does not exist, so it has to be created.
-3. **Rule text in that file** — required by Facts 1, 2, and 6. It must name both paths, say the live file is what cplt reads, say the example stays a raw copy, and say the only allowed difference is a redacted secret in the example. A redacted value must not be copied back over the live file. Paths and other settings are not rewritten. Trust, the blocklist cache, and `~/.local/bin/pi` are not part of the copy.
+- The one-sentence goal in the file. Fact 1 requires it. A code comment does not travel as the thing another session reads first.
+- The surviving goals and the non-goals. Fact 2 requires the closed list. Fact 3 requires dropping anything the code no longer does.
+- A pointer that the long spec stays in the vault. Fact 4 rejects shipping the spec itself.
+- Nothing else. A checker, a status-line change, and a bind-promotion change do not help another computer read the goals.
 
 ### Explicitly rejected approaches
 
-- Comment only in `~/.config/cplt/config.toml` — Fact 5: not injected.
-- Rule only in `pi-toolbag/AGENTS.md` — Fact 3: not loaded when cwd is outside that repo. This session is the measurement.
-- Rule in all three sites — Fact 6. Three copies of the rule drift.
-- `APPEND_SYSTEM.md` — also global, but it is not one of the three sites the user named, and Fact 3 already names `AGENTS.md`.
-- Path placeholders or a markdown rendering of the config — contradicts the raw-copy goal and Fact 2.
-- `examples/` directory or a home under `pi-ctx/docs/` — no fact requires a new tree. `pi-ctx/docs/sandbox.md` is about ctx tests, not this file.
-- Script, symlink, or CI check — Fact 6.
+- Copying the vault spec, handoff, or ADR history into the repo. Fact 3 and Fact 4.
+- An ADR series plus a separate goals spec. Fact 4. They would drift.
+- Writing the goals file before checking the code. Hypothesis 1. The user said the vault is stale.
+- Treating the per-turn status line or "Promoted none" as part of this solution. Those are separate questions. They do not state the goals.
 
 ## Open questions on foundations
 
-1. None. The example filename is a choice justified above, not a spec. Challenge it before the copy if the path is wrong.
+1. Hypothesis 1: which vault goals does current ctx still implement?
+2. Hypothesis 2: which of those, if omitted, would a later session undo?

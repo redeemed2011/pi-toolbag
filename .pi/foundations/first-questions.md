@@ -1,67 +1,67 @@
 # First Questions
 
-**Session date**: 2026-10-01
-**Status**: CONFIRMED
+**Session date**: 2026-10-08
+**Status**: ACTIVE
 
 ## The one-sentence goal
 
-> "A raw copy of this machine's cplt global config lives in pi-toolbag as an example, secrets are the only thing that may be redacted, and one agent-visible instruction keeps that copy identical to ~/.config/cplt/config.toml."
+> "A ctx checkout states the extension's goals so a later session on another computer can improve ctx toward those goals."
 
 ## Interrogated items
 
-### Example of the global config in pi-toolbag
+### Goals a later session can follow
 
-- **Original request**: "i'd like the cplt global config to be provided in pi-toolbag as an example"
-- **Source / who / when**: User, 2026-10-01, after finding ~/.config/cplt/config.toml is not in any repo.
+- **Original request**: "i want other computers that use ctx to be able to determine the most important goals of the ctx extension and work towards improving ctx according to those goals."
+- **Source / who / when**: User, 2026-10-08. Chosen as the first outcome with "start with #2, then #1".
 - **Alignment with the goal**: Strong
 - **Outcome**: KEPT
-- **Challenges**: This is the goal, not an add-on. The smallest version is one example file, not a second config system.
-- **Decision rationale**: Without a file in the repo, there is nothing to keep in sync and nothing for another machine to copy.
+- **Challenges**: This is the goal. The smallest version is a checked-in statement of the current goals, readable from a ctx checkout without the Obsidian vault.
+- **Decision rationale**: Without that statement in the checkout, another computer cannot tell which improvements matter.
 
-### Always kept in sync
+### ADRs or specs in the ctx folder
 
-- **Original request**: "yet it is always kept in sync"
-- **Source / who / when**: User, 2026-10-01.
-- **Alignment with the goal**: Strong
-- **Outcome**: KEPT
-- **Challenges**: An instruction does not mechanically prevent drift. It is still the mechanism the user named. A script, symlink, or test was cut.
-- **Decision rationale**: The example is useless if it can silently diverge from the live file. Sync means the example stays a raw copy of config.toml.
+- **Original request**: "add proper ADRs or specs to ctx extension's folder so future sessions understand the design intent."
+- **Source / who / when**: User, 2026-10-08. "ADRs or specs" was the offered form, not a demand for both.
+- **Alignment with the goal**: Strong that the statement lives in the ctx extension folder. Weak that the form must be a full ADR series.
+- **Outcome**: MODIFIED to the smallest checked-in statement of the current goals, in the ctx extension folder. Record a decision only where a later session would otherwise undo it. Do not archive the vault's history.
+- **Challenges**: A historical ADR dump does not tell another computer what to improve next. Two parallel forms would drift.
+- **Decision rationale**: The goal is the goals, not the document type. The form is whatever a later session can read and follow.
 
-### Three possible instruction sites
+### Update from the Obsidian vault
 
-- **Original request**: "because of either instructions in the repo's agents.md or a comment in the global cplt config or in pi's global agents.md"
-- **Source / who / when**: User, 2026-10-01. Offered as alternatives, not as a stack.
-- **Alignment with the goal**: Strong that some agent-visible instruction exists. Weak that all three exist.
-- **Outcome**: MODIFIED to exactly one instruction site, whichever is actually injected when either file would be edited. Do not maintain all three.
-- **Challenges**: Three copies of the rule will drift from each other. A comment only in ~/.config/cplt/config.toml is invisible to an agent that edits only the example. Repo AGENTS.md is invisible to a session whose cwd is not pi-toolbag. Pi's global AGENTS.md is the only candidate that can cover both edit paths, and only if Pi actually injects it.
-- **Decision rationale**: The user asked for a choice. One site is the smallest version that can still meet "always". Which site is an open question, not a second goal.
+- **Original request**: "these ADRs or specs probably have to be updated from the source material in my obsidian vault since i've enhanced ctx since then."
+- **Source / who / when**: User, 2026-10-08. The vault is named as the source, and current ctx as the reason a raw copy would be stale.
+- **Alignment with the goal**: Strong as input. None as a second copy of the vault.
+- **Outcome**: MODIFIED to read the vault for the original goals, then write the goals as they stand in current ctx. Do not copy vault notes verbatim.
+- **Challenges**: The vault is not on the other computer. A verbatim copy would ship stale intent.
+- **Decision rationale**: The checkout has to carry the current goals. The vault is evidence for what those goals were, not the deliverable.
 
-### Secrets check, not sanitizing
+### Commit and push
 
-- **Original request**: "nevermind about sanitizing. there's no secrets in there and the LLM will likely mistakenly generate incorrect configuration. just raw copy the file, making sure there's no secrets in the file."
-- **Source / who / when**: User, 2026-10-01. Withdraws the sanitizing preference from the previous turn.
-- **Alignment with the goal**: Strong. A rewritten example is what they now want to avoid.
-- **Outcome**: KEPT. Copy the file raw. The only sanitization allowed is redacting a secret if one is present. Paths, comments, and settings are not rewritten.
-- **Challenges**: Machine paths are not secrets. Rewriting them is the failure mode they named: an agent inventing a config that is not the live one. A scan on 2026-10-01 found no secret values in ~/.config/cplt/config.toml; the only hits were the words "secrets" and "auth token dump" in comments.
-- **Decision rationale**: Raw copy is the smallest way to keep the example true. If a secret appears later, redact that value only and leave the rest byte-for-byte.
+- **Original request**: "commit and push"
+- **Source / who / when**: User, 2026-10-08, in the same request, before the goals work.
+- **Alignment with the goal**: Strong as the way another computer receives the statement. None as a commit of unrelated work.
+- **Outcome**: KEPT as the last step of this goal, and only for the goals statement. The valid-output work is not part of that commit.
+- **Challenges**: Pushing before the statement exists does not help another computer. Pushing the deferred checker in the same commit mixes two outcomes.
+- **Decision rationale**: Other computers see the goals only after the statement is pushed.
 
-### Trust store, blocklist cache, and the pi wrapper
+### Valid ctx output, and a check that fails
 
-- **Original request**: not requested. Nearby files: ~/.config/cplt/trust/, subscriptions/, ~/.local/bin/pi.
-- **Source / who / when**: Found while answering the previous question, 2026-10-01.
-- **Alignment with the goal**: None. The goal names the global config.
-- **Outcome**: DELETED
-- **Challenges**: Trust and the blocklist cache are machine state, not the config. The pi wrapper already comments that its flags are mirrored in config.toml. Folding it in would be a second sync problem.
-- **Decision rationale**: Copying them does not help the example stay identical to config.toml, and it widens the secret/state surface.
+- **Original request**: "ensure that the ctx extension's funcs always return valid output. we need some sort of tooling to detect such issues."
+- **Source / who / when**: User, 2026-10-08. Sequenced second with "start with #2, then #1".
+- **Alignment with the goal**: Weak. A checker does not tell another computer what ctx is for.
+- **Outcome**: DEFERRED until the goals statement is in the checkout and pushed.
+- **Challenges**: Existing law already says ctx must be reliable and must not return undefined unless the consumer allows it. The user still wants a detector, but not before the goals exist. Building it now delays the thing another computer needs.
+- **Decision rationale**: The goal can be met with no checker. Do this next, after the goals statement is pushed.
 
 ## Deleted / avoided scope
 
-- Maintaining the sync rule in all three of repo AGENTS.md, the live config comment, and Pi's global AGENTS.md — they would drift from each other.
-- Syncing ~/.config/cplt/trust/, the blocklist cache, or ~/.local/bin/pi — not the global config.
-- Sanitizing or placeholder-rewriting paths — user withdrew that; a rewritten file is the incorrect config they want to avoid.
-- A script, symlink, or CI check — not asked for; instructions are the named mechanism.
+- A full historical ADR archive copied from the vault — another computer needs current goals, not the note history.
+- Keeping both an ADR series and a separate spec that say the same thing — they would drift.
+- Committing the valid-output checker in the same change as the goals statement — that work is the next outcome, not this one.
+- Claiming the open question "record tool cannot mint applies_to all via LLM tool-calling" as this goal — that is the deferred checker, not the goals statement.
 
 ## Open questions
 
-1. None for the goal. Raw copy plus a secrets check is confirmed.
-3. Which single instruction site does Pi actually inject for an edit to either file? Answered in first-principles, not by guessing.
+1. Which vault notes are the source of the goals, and which of those goals current ctx still has?
+2. Which decisions, if left unstated, would a later session undo?
