@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { runBindFlow } from "../commands/bind.js";
+import { statusSink } from "../render/bound-status.js";
 import { runRecordFlow } from "../commands/record.js";
 import { foldLive, parseAppliesTo, resolveOccupancy } from "../fold.js";
 import { hitlFromCtx } from "../hitl.js";
@@ -180,6 +181,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 			_onUpdate: unknown,
 			ctx: ExtensionContext,
 		) {
+			const setStatus = statusSink(ctx);
 			const { branch } = sync(runtime, ctx);
 			const result = await runBindFlow({
 				pi,
@@ -188,6 +190,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 				cwd: ctx.cwd,
 				branch,
 				suggestedName: params.name,
+				status: setStatus,
 			});
 			return jsonResult(result);
 		},

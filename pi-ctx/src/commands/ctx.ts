@@ -6,6 +6,7 @@ import { mintGateFlags } from "../mint.js";
 import { gateCheck } from "../render/occupancy.js";
 import type { Runtime } from "../runtime.js";
 import { CTX_ENABLED, type Entry } from "../types.js";
+import { publishRuntimeBoundStatus, statusSink } from "../render/bound-status.js";
 import { runBindFlow, runUnbind } from "./bind.js";
 import { runClaimFlow } from "./claim.js";
 import { occupancyStatusLine, runOccupancyFlow } from "./occupancy.js";
@@ -18,9 +19,11 @@ export function registerCtxCommand(pi: ExtensionAPI, runtime: Runtime): void {
 			const parts = (args ?? "").trim().split(/\s+/).filter(Boolean);
 			const cmd = (parts[0] || "status").toLowerCase();
 			const hitl = hitlFromCtx(ctx);
+			const setStatus = statusSink(ctx);
 			const branch = (ctx.sessionManager?.getBranch?.() as Entry[]) ?? [];
 			if (ctx.sessionManager?.getSessionId) {
 				runtime.restoreFromBranch(branch, ctx.sessionManager.getSessionId());
+				publishRuntimeBoundStatus(setStatus, runtime);
 			}
 
 			if (cmd === "on" || cmd === "off") {
@@ -69,13 +72,14 @@ export function registerCtxCommand(pi: ExtensionAPI, runtime: Runtime): void {
 					cwd: ctx.cwd ?? "",
 					branch,
 					suggestedName: suggested,
+					status: setStatus,
 				});
 				if (!result.ok && ctx.hasUI) ctx.ui.notify(result.error, "warning");
 				return;
 			}
 
 			if (cmd === "unbind") {
-				const result = runUnbind({ pi, runtime, hitl });
+				const result = runUnbind({ pi, runtime, hitl, status: setStatus });
 				if (!result.ok && ctx.hasUI) ctx.ui.notify(result.error, "warning");
 				return;
 			}

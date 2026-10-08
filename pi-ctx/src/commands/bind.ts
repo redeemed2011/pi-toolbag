@@ -3,6 +3,7 @@ import type { Hitl } from "../hitl.js";
 import type { Runtime } from "../runtime.js";
 import { createProject, listProjects, readProjectMeta, slugify } from "../store/project.js";
 import { harvestAfterBind, type HarvestReceipt, type PromoterRunFn } from "../promoter/run.js";
+import { publishBoundStatus, type StatusSink } from "../render/bound-status.js";
 import { CTX_BIND, type Entry } from "../types.js";
 
 export type BindPi = { appendEntry: (customType: string, data?: unknown) => void };
@@ -92,6 +93,7 @@ export async function runBindFlow(opts: {
 	suggestedName?: string;
 	promoterRun?: PromoterRunFn;
 	sessionModel?: import("../config.js").SessionModelSource;
+	status?: StatusSink;
 }): Promise<BindResult> {
 	const { pi, runtime, hitl, cwd, suggestedName } = opts;
 	if (!runtime.enabled) return { ok: false, error: "ctx is off" };
@@ -131,10 +133,11 @@ export async function runBindFlow(opts: {
 		hitl.notify(`Promoted none (${message})`, "warning");
 		harvest = { promoted: [], pending: 0, skipped: 0, note: message };
 	}
+	publishBoundStatus(opts.status, { bound: true, projectId: meta.id, projectName: meta.name });
 	return { ok: true, project_id: meta.id, project_name: meta.name, harvest };
 }
 
-export function runUnbind(opts: { pi: BindPi; runtime: Runtime; hitl: Hitl }): BindResult {
+export function runUnbind(opts: { pi: BindPi; runtime: Runtime; hitl: Hitl; status?: StatusSink }): BindResult {
 	const { pi, runtime, hitl } = opts;
 	if (!runtime.enabled) return { ok: false, error: "ctx is off" };
 	if (!runtime.bound) return { ok: false, error: "not bound" };
@@ -143,5 +146,6 @@ export function runUnbind(opts: { pi: BindPi; runtime: Runtime; hitl: Hitl }): B
 	runtime.projectId = null;
 	runtime.reloadProject();
 	hitl.notify("unbound (project law kept)", "info");
+	publishBoundStatus(opts.status, { bound: false, projectId: null });
 	return { ok: true, project_id: "", project_name: "" };
 }
