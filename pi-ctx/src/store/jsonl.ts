@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import type { JudgmentRecord, ReasonClass } from "../types.js";
 import { isJudgmentType, isPlainRecord, isNonEmptyString, isReasonClass } from "../types.js";
+import { parseEvidenceMeta } from "../evidence.js";
 import { parseAppliesTo } from "../fold.js";
 
 export type JsonlLine = {
@@ -112,6 +113,13 @@ export function lineToJudgment(line: JsonlLine): JudgmentRecord | undefined {
 	const reason_class: ReasonClass | undefined = isReasonClass(line.reason_class)
 		? line.reason_class
 		: undefined;
+	const evidence = type === "evidence" ? parseEvidenceMeta({
+		blob_hash: line.blob_hash,
+		byte_size: line.byte_size,
+		producer: line.producer,
+		expires_at: line.expires_at,
+	}) : undefined;
+	if (evidence && !evidence.ok) return undefined;
 	return {
 		id: line.id,
 		type,
@@ -128,5 +136,9 @@ export function lineToJudgment(line: JsonlLine): JudgmentRecord | undefined {
 		conflicts_with: parseIdList(line.conflicts_with),
 		reason_class,
 		citation_target: typeof line.citation_target === "string" ? line.citation_target : undefined,
+		blob_hash: evidence?.blob_hash,
+		byte_size: evidence?.byte_size,
+		producer: evidence?.producer,
+		expires_at: evidence?.expires_at,
 	};
 }

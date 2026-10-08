@@ -28,6 +28,14 @@ export function writerLogPath(projectId: string, sessionId: string, home = ctxHo
 	return join(projectLogsDir(projectId, home), `${sessionId}.jsonl`);
 }
 
+export function projectBlobsDir(projectId: string, home = ctxHome()): string {
+	return join(projectDir(projectId, home), "blobs");
+}
+
+export function blobPath(projectId: string, hash: string, home = ctxHome()): string {
+	return join(projectBlobsDir(projectId, home), hash);
+}
+
 /** Worker cwd + session-dir: cplt scratch (`$TMPDIR`) so session inject needs no `~/.pi/ctx` grant. */
 export function workerRunDir(sessionId: string, runId: string): string {
 	const root = process.env.TMPDIR || tmpdir();

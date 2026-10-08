@@ -6,6 +6,7 @@ import { runRecordFlow } from "../commands/record.js";
 import { foldLive, parseAppliesTo, resolveOccupancy } from "../fold.js";
 import { hitlFromCtx } from "../hitl.js";
 import { appendProjectRecord } from "../store/project.js";
+import { readEvidenceFile, storeBlob } from "../store/blobs.js";
 import type { Runtime } from "../runtime.js";
 import { CTX_CLAIM, isReasonClass, type Entry } from "../types.js";
 import { applyClaim } from "./claim.js";
@@ -195,7 +196,8 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 	pi.registerTool({
 		name: "ctx_record",
 		label: "ctx record",
-		description: "Append a new judgment record to the bound project log. Never overwrite. Observers cannot call this.",
+		description:
+			"Append a new project record to the bound project log. Never overwrite. Observers cannot call this. Evidence copies a file by hash and is not a constraint.",
 		promptSnippet: "Mint a ctx judgment record",
 		promptGuidelines: [RECORD_GUIDELINE],
 		parameters: Type.Object({
@@ -209,6 +211,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 				"finding",
 				"tombstone",
 				"citation",
+				"evidence",
 			] as const),
 			headline: Type.String(),
 			directive: Type.Optional(
@@ -228,10 +231,21 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 			blocks: Type.Optional(Type.Array(Type.String())),
 			conflicts_with: Type.Optional(Type.Array(Type.String())),
 			citation_target: Type.Optional(Type.String()),
+			source_path: Type.Optional(
+				Type.String({
+					description: "File to copy into the blob store. Required when type is evidence. Not stored as the locator.",
+				}),
+			),
+			producer: Type.Optional(Type.String({ description: "Who produced the file. Required on evidence." })),
+			expires_at: Type.Optional(
+				Type.String({
+					description: "ISO expiry. Required on evidence. Read-time stale mark; does not retire a citing constraint.",
+				}),
+			),
 		}),
 		prepareArguments(args: unknown) {
 			const input = dropKeys<{
-				type: "constraint" | "decision" | "question" | "fog" | "destination" | "out_of_scope" | "finding" | "tombstone" | "citation";
+				type: "constraint" | "decision" | "question" | "fog" | "destination" | "out_of_scope" | "finding" | "tombstone" | "citation" | "evidence";
 				headline: string;
 				directive?: string;
 				rationale?: string;
@@ -242,6 +256,9 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 				blocks?: string[];
 				conflicts_with?: string[];
 				citation_target?: string;
+				source_path?: string;
+				producer?: string;
+				expires_at?: string;
 			}>(args, []);
 			const applies = parseAppliesTo(input.applies_to);
 			if (applies !== undefined) input.applies_to = applies;
@@ -250,7 +267,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		async execute(
 			_id: string,
 			params: {
-				type: "constraint" | "decision" | "question" | "fog" | "destination" | "out_of_scope" | "finding" | "tombstone" | "citation";
+				type: "constraint" | "decision" | "question" | "fog" | "destination" | "out_of_scope" | "finding" | "tombstone" | "citation" | "evidence";
 				headline: string;
 				directive?: string;
 				rationale?: string;
@@ -261,12 +278,22 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 				blocks?: string[];
 				conflicts_with?: string[];
 				citation_target?: string;
+				source_path?: string;
+				producer?: string;
+				expires_at?: string;
 			},
 			_signal: AbortSignal | undefined,
 			_onUpdate: unknown,
 			ctx: ExtensionContext,
 		) {
 			const { fold } = sync(runtime, ctx);
+			let staged: { hash: string; size: number; bytes: Buffer } | undefined;
+			if (params.type === "evidence") {
+				if (!params.source_path) return jsonResult({ ok: false, error: "source_path required" });
+				const read = readEvidenceFile(params.source_path);
+				if (!read.ok) return jsonResult(read);
+				staged = { hash: read.hash, size: read.size, bytes: read.bytes };
+			}
 			const result = await runRecordFlow({
 				hitl: hitlFromCtx(ctx),
 				enabled: runtime.enabled,
@@ -287,10 +314,24 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 					blocks: params.blocks,
 					conflicts_with: params.conflicts_with,
 					citation_target: params.citation_target,
+					blob_hash: staged?.hash,
+					byte_size: staged?.size,
+					producer: params.producer,
+					expires_at: params.expires_at,
 					session: runtime.sessionId,
 				},
 			});
+			if (result.ok && staged && !runtime.projectId) {
+				return jsonResult({ ok: false, error: "no project bound" });
+			}
 			if (result.ok && runtime.projectId) {
+				if (staged) {
+					try {
+						storeBlob(runtime.projectId, staged.hash, staged.bytes);
+					} catch {
+						return jsonResult({ ok: false, error: "blob_corrupt" });
+					}
+				}
 				appendProjectRecord(runtime.projectId, runtime.sessionId, result.line);
 				runtime.reloadProject();
 			}

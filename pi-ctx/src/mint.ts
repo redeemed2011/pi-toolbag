@@ -3,6 +3,7 @@ import { bodySetCS, bodySetGE, foldLive } from "./fold.js";
 import { claimSlotFits, gateCheck } from "./render/occupancy.js";
 import { validateAppliesTo } from "./store/jsonl.js";
 import type { AppliesTo, JudgmentRecord, LiveSet, Occupancy, ReasonClass } from "./types.js";
+import { parseEvidenceMeta, type EvidenceMeta } from "./evidence.js";
 
 export function mintGateFlags(
 	live: LiveSet,
@@ -31,6 +32,10 @@ export type PutInput = {
 	blocks?: string[];
 	conflicts_with?: string[];
 	citation_target?: string;
+	blob_hash?: string;
+	byte_size?: number;
+	producer?: string;
+	expires_at?: string;
 	id?: string;
 	ts?: string;
 	session: string;
@@ -106,6 +111,13 @@ export function putJudgment(opts: {
 		}
 	}
 
+	let evidence: EvidenceMeta | undefined;
+	if (input.type === "evidence") {
+		const parsed = parseEvidenceMeta(input);
+		if (!parsed.ok) return { ok: false, error: parsed.error };
+		evidence = parsed;
+	}
+
 	const directive = input.directive?.trim() || undefined;
 	const record: JudgmentRecord = {
 		id: input.id ?? randomUUID(),
@@ -123,6 +135,10 @@ export function putJudgment(opts: {
 		conflicts_with: input.conflicts_with,
 		reason_class: input.reason_class,
 		citation_target: input.citation_target,
+		blob_hash: evidence?.blob_hash,
+		byte_size: evidence?.byte_size,
+		producer: evidence?.producer,
+		expires_at: evidence?.expires_at,
 	};
 
 	const after = foldLive([...existing, record]);

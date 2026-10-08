@@ -2,6 +2,7 @@ import { bodySetCS, bodySetGE } from "../fold.js";
 import { claimedBodyOrEmpty } from "../render/gated-edge.js";
 import { gateCheck } from "../render/occupancy.js";
 import type { JudgmentRecord, LiveSet, Observation, Occupancy } from "../types.js";
+import { evidenceExpired } from "../evidence.js";
 
 export const RETRIEVE_HEADLINE_CAP = 20;
 
@@ -18,15 +19,29 @@ export function claimView(live: LiveSet, claimedId: string | null) {
 	};
 }
 
+function supportExpired(
+	rec: JudgmentRecord,
+	live: LiveSet,
+	records: JudgmentRecord[],
+	now: number,
+): boolean | undefined {
+	const id = rec.citation_target;
+	if (!id) return undefined;
+	const target = live.byId.get(id) ?? records.find((r) => r.id === id);
+	if (!target || target.type !== "evidence" || !target.expires_at) return undefined;
+	return evidenceExpired(target.expires_at, now);
+}
+
 export function lookupRecord(
 	id: string,
 	live: LiveSet,
 	records: JudgmentRecord[],
 	observations: Observation[],
+	now = Date.now(),
 ): Record<string, unknown> {
 	const rec = live.byId.get(id) ?? records.find((r) => r.id === id);
 	if (rec) {
-		return {
+		const view: Record<string, unknown> = {
 			id: rec.id,
 			type: rec.type,
 			ts: rec.ts,
@@ -41,6 +56,17 @@ export function lookupRecord(
 			blocked: live.blocked.has(rec.id),
 			body: rec.body,
 		};
+		if (rec.citation_target) view.citation_target = rec.citation_target;
+		if (rec.type === "evidence") {
+			view.blob_hash = rec.blob_hash;
+			view.byte_size = rec.byte_size;
+			view.producer = rec.producer;
+			view.expires_at = rec.expires_at;
+			view.expired = rec.expires_at ? evidenceExpired(rec.expires_at, now) : true;
+		}
+		const support = supportExpired(rec, live, records, now);
+		if (support !== undefined) view.support_expired = support;
+		return view;
 	}
 	const obs = observations.find((o) => o.id === id);
 	if (obs) {
@@ -124,8 +150,8 @@ export function executeGet(opts: {
 	records: JudgmentRecord[];
 	observations: Observation[];
 	recency: Observation[];
+	now?: number;
 }): unknown {
 	if (!opts.enabled) return { error: "ctx is off" };
-	if (opts.id) return lookupRecord(opts.id, opts.live, opts.records, opts.observations);
-	return defaultRetrieve(opts);
+	if (opts.id) return lookupRecord(opts.id, opts.live, opts.records, opts.observations, opts.now);
 }

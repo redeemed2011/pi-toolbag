@@ -70,6 +70,7 @@ export type RecordKind =
 	| "finding"
 	| "tombstone"
 	| "citation"
+	| "evidence"
 	| "pending_replace"
 	| "observation";
 
@@ -97,6 +98,10 @@ export type JudgmentRecord = {
 	about_claim_id?: string;
 	reason_class?: ReasonClass;
 	citation_target?: string;
+	blob_hash?: string;
+	byte_size?: number;
+	producer?: string;
+	expires_at?: string;
 };
 
 export type LiveSet = {
@@ -149,6 +154,7 @@ export function isJudgmentType(value: string): value is Exclude<RecordKind, "obs
 		value === "finding" ||
 		value === "tombstone" ||
 		value === "citation" ||
+		value === "evidence" ||
 		value === "pending_replace"
 	);
 }

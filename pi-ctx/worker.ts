@@ -1,7 +1,7 @@
 /**
  * Observer worker. Registers only record_observations.
  * Must not register orchestrator hooks (compact inject, compact trigger, observer clock).
- * Cannot construct constraint / decision / question / fog / destination / out_of_scope / pending_replace.
+ * Cannot construct constraint / decision / question / fog / destination / out_of_scope / pending_replace / evidence.
  */
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
