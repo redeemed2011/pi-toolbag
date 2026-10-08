@@ -42,16 +42,21 @@ export type FailoverError = {
   /**
    * Optional HTTP status for kernel unit tests that pass an object directly.
    * Production `extractLastAssistantError` never sets this field (no
-   * `after_provider_response`). Attach classifies from `errorMessage` text only.
+   * `after_provider_response`). Attach classifies from the error text and rawStopReason.
    */
   status?: number;
   text: string;
   stopReason?: string;
+  /** Provider stop token copied by extract. Absent when the message has none. */
+  rawStopReason?: string;
+  /** Anthropic stop_details.category when attach saw it on the stream. Not stored on the message. */
+  category?: string;
 };
 
 export type ErrorClass =
   | "quota"
   | "transient"
+  | "safety"
   | "auth"
   | "invalid-model"
   | "overflow"
@@ -205,6 +210,7 @@ export type FallbackCtx = {
       message?: {
         role?: string;
         stopReason?: string;
+        rawStopReason?: string;
         errorMessage?: string;
       };
     }>;

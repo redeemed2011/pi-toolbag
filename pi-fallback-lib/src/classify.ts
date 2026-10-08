@@ -47,6 +47,29 @@ const BARE_STATUS = /\b([45]\d{2})\b/g;
 const QUOTA_402 = /\b402\b/i;
 const TRANSIENT_STATUSES = new Set([408, 409, 425, 429]);
 
+
+const SAFETY_STOPS = new Set([
+  "refusal",
+  "sensitive",
+  "content_filtered",
+  "guardrail_intervened",
+  "content_filter",
+  "incomplete.content_filter",
+  "SAFETY",
+  "PROHIBITED_CONTENT",
+  "BLOCKLIST",
+  "SPII",
+  "RECITATION",
+  "IMAGE_SAFETY",
+  "IMAGE_PROHIBITED_CONTENT",
+  "IMAGE_RECITATION",
+]);
+
+const SAFETY_PHRASES = [
+  "Output blocked by content filtering policy",
+  "The request was rejected due to inappropriate content",
+  "guardrail_blocked",
+];
 function includesAny(text: string, needles: readonly string[]): boolean {
   const lower = text.toLowerCase();
   return needles.some((needle) => lower.includes(needle.toLowerCase()));
@@ -67,6 +90,11 @@ export function classifyError(error: FailoverError): ErrorClass {
   if (error.stopReason === "aborted") return "aborted";
   if (error.stopReason !== undefined && error.stopReason !== "error") return "other";
 
+  if (error.rawStopReason !== undefined && SAFETY_STOPS.has(error.rawStopReason)) {
+    if (error.rawStopReason === "refusal" && error.category === "reasoning_extraction") return "other";
+    return "safety";
+  }
+
   const text = error.text ?? "";
   const status = error.status ?? parseStatusFromText(text);
   if (!text.trim() && status === undefined) return "other";
@@ -85,11 +113,12 @@ export function classifyError(error: FailoverError): ErrorClass {
   ) {
     return "transient";
   }
+  if (SAFETY_PHRASES.some((phrase) => text.includes(phrase))) return "safety";
   return "other";
 }
 
-export function isFailoverWorthy(c: ErrorClass): c is "quota" | "transient" {
-  return c === "quota" || c === "transient";
+export function isFailoverWorthy(c: ErrorClass): c is "quota" | "transient" | "safety" {
+  return c === "quota" || c === "transient" || c === "safety";
 }
 
 export function isQuotaError(c: ErrorClass): c is "quota" {

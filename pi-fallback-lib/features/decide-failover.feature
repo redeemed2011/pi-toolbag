@@ -115,3 +115,21 @@ Feature: Decide next unused chain member
     And an error with text "timeout" and stop reason "error"
     When I decide failover
     Then the decision is failover to "c/three" because "transient"
+
+  Scenario: safety refusal failovers to the next chain member
+    Given the live grok chain config with budget 1
+    And the current model is "grok-cli/grok-4.6"
+    And remaining budget is 1
+    And attempted keys are none
+    And an error with raw stop reason "refusal"
+    When I decide failover
+    Then the decision is failover to "xai/grok-4.6" because "safety"
+
+  Scenario: reasoning extraction does not failover
+    Given the live grok chain config with budget 1
+    And the current model is "grok-cli/grok-4.6"
+    And remaining budget is 1
+    And attempted keys are none
+    And an error with raw stop reason "refusal" and category "reasoning_extraction"
+    When I decide failover
+    Then the decision is none because "not-failover-worthy"

@@ -6,12 +6,13 @@ type BranchEntry = {
     role?: string;
     stopReason?: string;
     errorMessage?: string;
+    rawStopReason?: string;
   };
 };
 
 /**
- * Last assistant on the branch. Never fills `status` — production classifies
- * from `errorMessage` text only (no `after_provider_response`).
+ * Last assistant on the branch. Never fills `status`. Copies `rawStopReason`
+ * when the message has one.
  */
 export function extractLastAssistantError(
   branch: ReadonlyArray<BranchEntry>,
@@ -25,7 +26,12 @@ export function extractLastAssistantError(
       return { text: msg.errorMessage ?? "", stopReason: "aborted" };
     }
     if (msg.stopReason !== "error") return undefined;
-    return { text: msg.errorMessage ?? "", stopReason: "error" };
+    const rawStopReason = typeof msg.rawStopReason === "string" && msg.rawStopReason ? msg.rawStopReason : undefined;
+    return {
+      text: msg.errorMessage ?? "",
+      stopReason: "error",
+      ...(rawStopReason ? { rawStopReason } : {}),
+    };
   }
   return undefined;
 }

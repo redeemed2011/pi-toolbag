@@ -203,3 +203,39 @@ Feature: Attach failover to a Pi session
     When the agent settles
     Then a failover event was emitted
     And no warning was notified
+
+  Scenario: a safety refusal failovers and continues
+    Given attach with retryAfterTools false
+    And a session start
+    And the last assistant raw stop reason is "refusal"
+    When the agent settles
+    Then setModel was called with "xai/grok-4.6"
+    And continue was sent once
+
+  Scenario: reasoning extraction refusal does not failover
+    Given attach with retryAfterTools false
+    And a session start
+    And the provider stream reported category "reasoning_extraction"
+    And the last assistant raw stop reason is "refusal"
+    When the agent settles
+    Then setModel was not called
+    And continue was not sent
+
+  Scenario: reasoning extraction does not stick to the next turn
+    Given attach with retryAfterTools false
+    And a session start
+    And the provider stream reported category "reasoning_extraction"
+    And a new turn starts
+    And the last assistant raw stop reason is "refusal"
+    When the agent settles
+    Then setModel was called with "xai/grok-4.6"
+    And continue was sent once
+
+  Scenario: a non-delta stream event does not suppress a refusal
+    Given attach with retryAfterTools false
+    And a session start
+    And the provider stream reported category "reasoning_extraction" on a non-delta event
+    And the last assistant raw stop reason is "refusal"
+    When the agent settles
+    Then setModel was called with "xai/grok-4.6"
+    And continue was sent once

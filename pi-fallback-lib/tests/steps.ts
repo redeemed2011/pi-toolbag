@@ -133,6 +133,26 @@ Given("an error with empty text and no status", (world) => {
   world.error = { text: "", stopReason: "error" };
 });
 
+Given(/^an error with raw stop reason "([^"]*)"$/, (world, raw) => {
+  world.error = { text: "", stopReason: "error", rawStopReason: raw };
+});
+
+Given(/^an error with raw stop reason "([^"]*)" and category "([^"]*)"$/, (world, raw, category) => {
+  world.error = { text: "", stopReason: "error", rawStopReason: raw, category };
+});
+
+Given(/^an error with text "(.*)" and raw stop reason "(.*)"$/, (world, text, raw) => {
+  world.error = { text, stopReason: "error", rawStopReason: raw };
+});
+
+Given(/^an error with text "([^"]*)", raw stop reason "([^"]*)" and category "([^"]*)"$/, (world, text, raw, category) => {
+  world.error = { text, stopReason: "error", rawStopReason: raw, category };
+});
+
+Given(/^an aborted error with raw stop reason "([^"]*)"$/, (world, raw) => {
+  world.error = { text: "The model refused to complete the request", stopReason: "aborted", rawStopReason: raw };
+});
+
 When("I classify the error", (world) => {
   world.class = classifyError(errorOf(world));
 });
@@ -207,7 +227,7 @@ Then(/^the decision is none because "(.*)"$/, (world, reason) => {
   if (decision.action === "none") expect(decision.reason).toBe(reason);
 });
 
-Given(/^a branch whose last assistant error is "(.*)"$/, (world, text) => {
+Given(/^a branch whose last assistant error is "([^"]*)"$/, (world, text) => {
   world.branch = [{ type: "message", message: { role: "assistant", stopReason: "error", errorMessage: text } }];
 });
 
@@ -219,6 +239,16 @@ Given("a branch whose last assistant completed", (world) => {
   world.branch = [{ type: "message", message: { role: "assistant", stopReason: "stop" } }];
 });
 
+
+Given(/^a branch whose last assistant error is "([^"]*)" with raw stop reason "([^"]*)"$/, (world, text, raw) => {
+  world.branch = [
+    { type: "message", message: { role: "assistant", stopReason: "error", errorMessage: text, rawStopReason: raw } },
+  ];
+});
+
+Given(/^a branch whose last assistant completed with raw stop reason "(.*)"$/, (world, raw) => {
+  world.branch = [{ type: "message", message: { role: "assistant", stopReason: "stop", rawStopReason: raw } }];
+});
 When("I extract the last assistant error", (world) => {
   world.extracted = extractLastAssistantError(world.branch as never);
 });
@@ -238,6 +268,10 @@ Then(/^classifying the extracted error yields "(.*)"$/, (world, expected) => {
 
 Then(/^the extracted stop reason is "(.*)"$/, (world, reason) => {
   expect((world.extracted as FailoverError | undefined)?.stopReason).toBe(reason);
+});
+
+Then(/^the extracted raw stop reason is "(.*)"$/, (world, raw) => {
+  expect((world.extracted as FailoverError | undefined)?.rawStopReason).toBe(raw);
 });
 
 Then("there is no extracted error", (world) => {
@@ -326,6 +360,43 @@ Given("a tool has started", async (world) => {
 
 Given(/^the last assistant error is "(.*)"$/, (world, text) => {
   hostOf(world).setAssistantError(text);
+});
+
+Given(/^the last assistant raw stop reason is "(.*)"$/, (world, raw) => {
+  hostOf(world).setAssistantError("The model refused to complete the request", "error", raw);
+});
+
+Given(/^the provider stream reported category "(.*)"$/, async (world, category) => {
+  await hostOf(world).emit("provider_stream_event", {
+    provider: "anthropic",
+    api: "anthropic-messages",
+    model: "claude",
+    data: {
+      type: "message_delta",
+      delta: {
+        stop_reason: "refusal",
+        stop_details: { type: "refusal", category },
+      },
+    },
+  });
+});
+
+Given(/^the provider stream reported category "([^"]*)" on a non-delta event$/, async (world, category) => {
+  await hostOf(world).emit("provider_stream_event", {
+    provider: "anthropic",
+    api: "anthropic-messages",
+    model: "claude",
+    data: {
+      type: "content_block_delta",
+      delta: {
+        stop_details: { type: "refusal", category },
+      },
+    },
+  });
+});
+
+Given("a new turn starts", async (world) => {
+  await hostOf(world).emit("before_agent_start", { prompt: "next" });
 });
 Given("the last assistant was aborted", (world) => {
   hostOf(world).setAssistantError("", "aborted");

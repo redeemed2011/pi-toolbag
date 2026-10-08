@@ -28,6 +28,8 @@ type EpochState = {
   usageHeld: Set<ModelKey>;
   /** The continue retry must stay on the fallback. Cleared by the next prompt. */
   deferReturn: boolean;
+  /** Anthropic stop_details.category from this turn's stream. Cleared when the next turn starts. */
+  refusalCategory?: string;
 }
 
 function currentKey(ctx: FallbackCtx): ModelKey | undefined {
@@ -56,6 +58,19 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function refusalCategoryFromStream(event: unknown): string | undefined {
+  const data = eventRecord(event).data;
+  if (data === null || typeof data !== "object" || Array.isArray(data)) return undefined;
+  const message = data as Record<string, unknown>;
+  if (message.type !== "message_delta") return undefined;
+  const delta = message.delta;
+  if (delta === null || typeof delta !== "object" || Array.isArray(delta)) return undefined;
+  const details = (delta as Record<string, unknown>).stop_details;
+  if (details === null || typeof details !== "object" || Array.isArray(details)) return undefined;
+  const category = (details as Record<string, unknown>).category;
+  return typeof category === "string" && category ? category : undefined;
 }
 
 /**
@@ -117,6 +132,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     state.attempted = new Set();
     state.remainingBudget = config?.maxFailoversPerRequest ?? 0;
     state.toolsThisTurn = false;
+    state.refusalCategory = undefined;
   };
 
   const snapshotPreferred = (ctx: FallbackCtx): void => {
@@ -272,7 +288,13 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     state.toolsThisTurn = true;
   });
 
+  pi.on("provider_stream_event", (event) => {
+    const category = refusalCategoryFromStream(event);
+    if (category) state.refusalCategory = category;
+  });
+
   pi.on("before_agent_start", async (_event, ctx) => {
+    state.refusalCategory = undefined;
     if (options.checkUsage === false) return;
     if (!config?.enabled) return;
     if (state.deferReturn) {
@@ -393,6 +415,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       state.toolsThisTurn = false;
       return;
     }
+    if (state.refusalCategory) error.category = state.refusalCategory;
 
     if (!options.retryAfterTools && state.toolsThisTurn) {
       emit({ type: "skip", reason: "tools-already-started" }, ctx);
