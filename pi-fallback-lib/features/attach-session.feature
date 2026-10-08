@@ -1,5 +1,5 @@
 Feature: Attach failover to a Pi session
-  Timing A. setModel plus continue. Interactive skips after tools. Observers may retry after tools.
+  Timing A. setModel plus a class-specific continue. retryAfterTools false skips after tools. Interactive and observers pass true.
 
   Background:
     Given a fake host on "grok-cli/grok-4.6" with thinking "low"
@@ -17,7 +17,7 @@ Feature: Attach failover to a Pi session
     And thinking was reapplied as "low"
     And the remaining failover budget is 0
 
-  Scenario: interactive does not failover after tools
+  Scenario: retryAfterTools false does not failover after tools
     Given attach with retryAfterTools false
     And a session start
     And a tool has started
@@ -34,6 +34,36 @@ Feature: Attach failover to a Pi session
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
     And continue was sent once
+
+
+  Scenario: safety after tools sends the block continue message
+    Given attach with retryAfterTools true
+    And a session start
+    And a tool has started
+    And the last assistant raw stop reason is "refusal"
+    When the agent settles
+    Then setModel was called with "xai/grok-4.6"
+    And the block continue message was sent once
+    And the remaining failover budget is 0
+
+  Scenario: auth after tools does not failover
+    Given attach with retryAfterTools true
+    And a session start
+    And a tool has started
+    And the last assistant error is "forbidden"
+    When the agent settles
+    Then setModel was not called
+    And continue was not sent
+
+  Scenario: reasoning extraction after tools does not failover
+    Given attach with retryAfterTools true
+    And a session start
+    And a tool has started
+    And the provider stream reported category "reasoning_extraction"
+    And the last assistant raw stop reason is "refusal"
+    When the agent settles
+    Then setModel was not called
+    And continue was not sent
 
   Scenario: user model select becomes preferred
     Given attach with retryAfterTools false
@@ -210,7 +240,7 @@ Feature: Attach failover to a Pi session
     And the last assistant raw stop reason is "refusal"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And continue was sent once
+    And the block continue message was sent once
 
   Scenario: reasoning extraction refusal does not failover
     Given attach with retryAfterTools false
@@ -229,7 +259,7 @@ Feature: Attach failover to a Pi session
     And the last assistant raw stop reason is "refusal"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And continue was sent once
+    And the block continue message was sent once
 
   Scenario: a non-delta stream event does not suppress a refusal
     Given attach with retryAfterTools false
@@ -238,4 +268,4 @@ Feature: Attach failover to a Pi session
     And the last assistant raw stop reason is "refusal"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And continue was sent once
+    And the block continue message was sent once

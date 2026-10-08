@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { attachFallback } from "../src/attach.js";
+import { attachFallback, CONTINUE_AFTER_BLOCK, CONTINUE_AFTER_STOP } from "../src/attach.js";
 import { classifyError, isFailoverWorthy } from "../src/classify.js";
 import { extractLastAssistantError } from "../src/extract.js";
 import { decideFailover } from "../src/kernel.js";
@@ -461,7 +461,11 @@ Then("setModel was not called", (world) => {
 });
 
 Then("continue was sent once", (world) => {
-  expect(hostOf(world).sent).toEqual(["continue"]);
+  expect(hostOf(world).sent).toEqual([CONTINUE_AFTER_STOP]);
+});
+
+Then("the block continue message was sent once", (world) => {
+  expect(hostOf(world).sent).toEqual([CONTINUE_AFTER_BLOCK]);
 });
 
 Then("continue was not sent", (world) => {

@@ -40,7 +40,7 @@ function notifyFallback(event: FallbackEvent, ctx?: FallbackCtx): void {
 
 export default function piAutoFallback(pi: ExtensionAPI): void {
   attachFallback(pi, {
-    retryAfterTools: false,
+    retryAfterTools: true,
     configPath: join(getAgentDir(), "auto-fallback.json"),
     onEvent: notifyFallback,
   });

@@ -23,4 +23,4 @@ export { loadFallbackConfigFile } from "./load.js";
 export { classifyError, isFailoverWorthy, isQuotaError, parseStatusFromText } from "./classify.js";
 export { decideFailover, findChain, splitModelKey, modelKey } from "./kernel.js";
 export { extractLastAssistantError } from "./extract.js";
-export { attachFallback, CONTINUE_USER_MESSAGE } from "./attach.js";
+export { attachFallback, CONTINUE_AFTER_BLOCK, CONTINUE_AFTER_STOP } from "./attach.js";

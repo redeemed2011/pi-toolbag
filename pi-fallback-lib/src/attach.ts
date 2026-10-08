@@ -16,7 +16,11 @@ import type {
 } from "./types.js";
 import { matchingGate, reportedUsage, thresholdCrossed, usageRecovered } from "./usage.js";
 
-export const CONTINUE_USER_MESSAGE = "continue" as const;
+export const CONTINUE_AFTER_STOP =
+  "The previous model stopped. The tool results already in the conversation are done; do not repeat them. Finish the original request.";
+
+export const CONTINUE_AFTER_BLOCK =
+  "The previous model was blocked. Do not repeat that approach. The tool results already in the conversation are done; do not repeat them. Finish the request a different way.";
 
 type EpochState = {
   preferred?: ModelKey;
@@ -481,7 +485,9 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
           // when the host is synchronous (tests). Budget decrements after
           // a successful call from this process.
           state.deferReturn = true;
-          const sent = pi.sendUserMessage(CONTINUE_USER_MESSAGE);
+          const sent = pi.sendUserMessage(
+            classification === "safety" ? CONTINUE_AFTER_BLOCK : CONTINUE_AFTER_STOP,
+          );
           await maybeAwait(sent);
         } catch (err) {
           state.deferReturn = false;
