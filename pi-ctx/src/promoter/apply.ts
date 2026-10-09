@@ -8,6 +8,8 @@ import {
 	PENDING_REPLACE_CAP,
 	PROMOTER_CHARS,
 	PROMOTER_N,
+	PROMOTER_SHELF_N,
+	shelfBodyIsUserOnly,
 	type PromoterResult,
 } from "./schema.js";
 
@@ -19,12 +21,14 @@ export type ApplyOpts = {
 	claimedId: string | null;
 	existing: JudgmentRecord[];
 	corpus: string[];
+	assistant?: string[];
 	result: PromoterResult;
 };
 
 export type ApplyReport = {
 	promoted: JudgmentRecord[];
 	pending: JudgmentRecord[];
+	shelf: JudgmentRecord[];
 	skipped: string[];
 	stopped?: "gate" | "live_conflict";
 	existing: JudgmentRecord[];
@@ -39,6 +43,7 @@ export function applyPromoterResult(opts: ApplyOpts): ApplyReport {
 	let existing = [...opts.existing];
 	const promoted: JudgmentRecord[] = [];
 	const pending: JudgmentRecord[] = [];
+	const shelf: JudgmentRecord[] = [];
 	const skipped: string[] = [];
 	const pendingQuotes = new Set<string>();
 
@@ -143,5 +148,63 @@ export function applyPromoterResult(opts: ApplyOpts): ApplyReport {
 		promoted.push(minted.record);
 	}
 
-	return { promoted, pending, skipped, stopped, existing };
+	const assistant = opts.assistant ?? [];
+	const shelfItems = (opts.result.shelf ?? []).slice(0, PROMOTER_SHELF_N);
+	for (const item of shelfItems) {
+		const quote = item.quote.trim();
+		if (quote.length > PROMOTER_CHARS) {
+			skipped.push("shelf over 280");
+			continue;
+		}
+		const fromUser = quoteInCorpus(quote, opts.corpus);
+		const fromAssistant = quoteInCorpus(quote, assistant);
+		if (shelfBodyIsUserOnly(item.type)) {
+			if (!fromUser) {
+				skipped.push("shelf not user verbatim");
+				continue;
+			}
+		} else if (!fromUser && !fromAssistant) {
+			skipped.push("shelf not verbatim");
+			continue;
+		}
+		const source = fromUser ? "user" : "assistant";
+		const live = foldLive(existing);
+		if (item.type === "destination" && live.destinations.some((d) => live.live.has(d.id))) {
+			skipped.push("shelf destination exists");
+			continue;
+		}
+		const head = headlineOf(quote, item.headline);
+		const norm = normalizeHeadline(head);
+		const duplicate = [...live.byId.values()].some(
+			(r) => live.live.has(r.id) && normalizeHeadline(r.headline) === norm,
+		);
+		if (duplicate) {
+			skipped.push("shelf duplicate headline");
+			continue;
+		}
+		const minted = executeRecord({
+			enabled: true,
+			bound: true,
+			occupancy: opts.occupancy,
+			siblingKnob: opts.siblingKnob,
+			claimedId: opts.claimedId,
+			existing,
+			input: {
+				type: item.type,
+				headline: head,
+				body: quote,
+				rationale: `source: ${source}`,
+				session: opts.sessionId,
+			},
+		});
+		if (!minted.ok) {
+			skipped.push(`shelf ${minted.error}`);
+			continue;
+		}
+		appendProjectRecord(opts.projectId, opts.sessionId, minted.line);
+		existing = [...existing, minted.record];
+		shelf.push(minted.record);
+	}
+
+	return { promoted, pending, shelf, skipped, stopped, existing };
 }

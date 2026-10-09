@@ -33,3 +33,15 @@ export function quoteInCorpus(quote: string, corpus: string[]): boolean {
 	if (!q) return false;
 	return corpus.some((line) => normalizeWs(line).includes(q));
 }
+
+/** User-facing assistant text only. Thinking blocks, tool calls, and other roles are not included. */
+export function extractAssistantQuotes(branch: Entry[]): string[] {
+	const out: string[] = [];
+	for (const entry of branch) {
+		if (entry.type !== "message") continue;
+		if (entry.message?.role !== "assistant") continue;
+		const text = textOf(entry.message.content).replace(/\s+/g, " ").trim();
+		if (text) out.push(text);
+	}
+	return out;
+}

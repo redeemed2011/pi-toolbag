@@ -1,0 +1,16 @@
+Never store a shelf record as a constraint.
+
+The destination is to see shelf records written at bind.
+
+Rewriting the observer is out of scope.
+
+Does the receipt name the finding?
+
+It is unclear whether the headline will be shortened.
+
+Should we never mention the cap in the receipt? For now, skip evidence.
+
+Reply with exactly three lines and no other text. Use your own wording. Do not quote me.
+Line 1, a decision: one sentence that the shelf cap is ten records total.
+Line 2, a finding: one sentence that an assistant reply can be stored as a finding.
+Line 3, a fog note: one sentence that you are unsure a second destination is skipped.

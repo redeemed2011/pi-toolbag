@@ -10,8 +10,8 @@ import { CTX_PROMOTER_LATCH, type Entry, type JudgmentRecord } from "../types.js
 import { applyPromoterResult } from "./apply.js";
 import { runPendingReplaceHitl } from "./hitl.js";
 import { promoterKickoffPrompt, readPromoterResult, writePromoterKickoff } from "./io.js";
-import { extractUserQuotes } from "./quotes.js";
-import { PROMOTER_CHARS, PROMOTER_N, emptyPromoterResult, parsePromoterResult } from "./schema.js";
+import { extractAssistantQuotes, extractUserQuotes } from "./quotes.js";
+import { PROMOTER_CHARS, PROMOTER_N, PROMOTER_SHELF_N, emptyPromoterResult, parsePromoterResult } from "./schema.js";
 
 export const PROMOTER_EXTENSION_PATH = join(
 	dirname(fileURLToPath(import.meta.url)),
@@ -28,31 +28,43 @@ export type BindPi = {
 
 export type PromoterRunFn = (input: {
 	corpus: string[];
+	assistant: string[];
 	live: { id: string; headline: string; body: string }[];
 }) => Promise<unknown>;
 
 export type HarvestReceipt = {
 	promoted: string[];
+	recorded: string[];
 	pending: number;
 	skipped: number;
 	note?: string;
 };
 
-const emptyReceipt = (): HarvestReceipt => ({ promoted: [], pending: 0, skipped: 0 });
+const emptyReceipt = (): HarvestReceipt => ({ promoted: [], recorded: [], pending: 0, skipped: 0 });
 
 
 export function receiptText(opts: {
 	projectName: string;
 	promoted: JudgmentRecord[];
 	pending: JudgmentRecord[];
+	shelf: JudgmentRecord[];
 	skipped: string[];
+	returnedNothing?: boolean;
 }): string {
 	const heads = opts.promoted.map((r) => `"${r.headline}"`).join(" ");
+	const shelfHeads = opts.shelf.map((r) => `${r.type} "${r.headline}"`).join("; ");
 	const parts = [`bound to ${opts.projectName}.`];
-	if (opts.promoted.length === 0 && opts.pending.length === 0) parts.push("Promoted none.");
+	const nothing = opts.promoted.length === 0 && opts.pending.length === 0 && opts.shelf.length === 0;
+	if (nothing) parts.push("Promoted none.");
+	else if (opts.promoted.length === 0) parts.push("Promoted none.");
 	else parts.push(`Promoted ${opts.promoted.length}: ${heads}`.trim());
+	if (opts.shelf.length) parts.push(`Recorded ${opts.shelf.length} (cap ${PROMOTER_SHELF_N}): ${shelfHeads}.`);
+	if (opts.shelf.some((r) => r.type === "fog" || r.type === "decision" || r.type === "finding")) {
+		parts.push("Fog text, decisions, and findings are not injected.");
+	}
 	if (opts.pending.length) parts.push(`Pending replace: ${opts.pending.length}.`);
 	if (opts.skipped.length) parts.push(`Skipped ${opts.skipped.length}.`);
+	else if (nothing && opts.returnedNothing) parts.push("Promoter returned nothing.");
 	return parts.join(" ");
 }
 
@@ -71,13 +83,14 @@ export async function harvestAfterBind(opts: {
 	if (fold.promoterLatched) return { ...emptyReceipt(), note: "already harvested this session" };
 
 	const corpus = extractUserQuotes(branch);
+	const assistant = extractAssistantQuotes(branch);
 	const occupancy = resolveOccupancy({ occupancy: runtime.occupancy }, runtime.config.occupancy);
 	const siblingKnob = runtime.config.gatedEdgeSiblingHeadlines;
 	const existing = runtime.projectRecords;
 	const live = foldLive(existing);
 
 	let raw: unknown = emptyPromoterResult();
-	if (corpus.length > 0) {
+	if (corpus.length > 0 || assistant.length > 0) {
 		const livePayload = live.constraints
 			.filter((c) => live.live.has(c.id))
 			.map((c) => ({
@@ -87,13 +100,14 @@ export async function harvestAfterBind(opts: {
 			}));
 		try {
 			if (opts.promoterRun) {
-				raw = await opts.promoterRun({ corpus, live: livePayload });
+				raw = await opts.promoterRun({ corpus, assistant, live: livePayload });
 			} else if (process.env.PI_CTX_NO_WORKERS === "1") {
 				raw = emptyPromoterResult();
 			} else {
 				raw = await spawnPromoter({
 					runtime,
 					corpus,
+					assistant,
 					live: livePayload,
 					sessionModel:
 						opts.sessionModel ?? {
@@ -109,6 +123,12 @@ export async function harvestAfterBind(opts: {
 		}
 	}
 
+	const result = parsePromoterResult(raw);
+	const returnedNothing =
+		(corpus.length > 0 || assistant.length > 0) &&
+		result.promote.length === 0 &&
+		result.pending_replace.length === 0 &&
+		(result.shelf?.length ?? 0) === 0;
 	const applied = applyPromoterResult({
 		projectId: runtime.projectId,
 		sessionId: runtime.sessionId,
@@ -117,7 +137,8 @@ export async function harvestAfterBind(opts: {
 		claimedId: runtime.claimedId,
 		existing,
 		corpus,
-		result: parsePromoterResult(raw),
+		assistant,
+		result,
 	});
 	runtime.projectRecords = applied.existing;
 	runtime.projectLive = foldLive(applied.existing);
@@ -140,6 +161,7 @@ export async function harvestAfterBind(opts: {
 	const folded = foldLive(runtime.projectRecords);
 	const receipt: HarvestReceipt = {
 		promoted: applied.promoted.map((r) => r.headline),
+		recorded: applied.shelf.map((r) => r.headline),
 		pending: applied.pending.filter((p) => folded.live.has(p.id)).length,
 		skipped: applied.skipped.length,
 	};
@@ -148,7 +170,9 @@ export async function harvestAfterBind(opts: {
 			projectName: opts.projectName,
 			promoted: applied.promoted,
 			pending: folded.pendingReplaces.filter((p) => folded.live.has(p.id)),
+			shelf: applied.shelf,
 			skipped: applied.skipped,
+			returnedNothing,
 		}),
 		"info",
 	);
@@ -158,6 +182,7 @@ export async function harvestAfterBind(opts: {
 async function spawnPromoter(opts: {
 	runtime: Runtime;
 	corpus: string[];
+	assistant: string[];
 	live: { id: string; headline: string; body: string }[];
 	sessionModel?: SessionModelSource;
 }): Promise<unknown> {
@@ -165,13 +190,17 @@ async function spawnPromoter(opts: {
 	const { cwd, sessionDir } = prepareWorkerCwd(opts.runtime.sessionId || "session", runId);
 	writePromoterKickoff(cwd, {
 		corpus: opts.corpus,
+		assistant: opts.assistant,
 		live: opts.live,
+		shelf_n: PROMOTER_SHELF_N,
 		n: PROMOTER_N,
 		chars: PROMOTER_CHARS,
 	});
 	const kickoff = promoterKickoffPrompt({
 		corpus: opts.corpus,
+		assistant: opts.assistant,
 		live: opts.live,
+		shelf_n: PROMOTER_SHELF_N,
 		n: PROMOTER_N,
 		chars: PROMOTER_CHARS,
 	});

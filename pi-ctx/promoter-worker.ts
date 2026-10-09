@@ -27,6 +27,20 @@ const HarvestSchema = Type.Object({
 			reason: Type.Optional(Type.String()),
 		}),
 	),
+	shelf: Type.Array(
+		Type.Object({
+			type: Type.Union([
+				Type.Literal("destination"),
+				Type.Literal("decision"),
+				Type.Literal("out_of_scope"),
+				Type.Literal("question"),
+				Type.Literal("fog"),
+				Type.Literal("finding"),
+			]),
+			quote: Type.String({ minLength: 1 }),
+			headline: Type.Optional(Type.String()),
+		}),
+	),
 });
 
 export default function ctxPromoterWorker(pi: ExtensionAPI): void {
@@ -57,11 +71,15 @@ export default function ctxPromoterWorker(pi: ExtensionAPI): void {
 		name: "submit_harvest",
 		label: "Submit harvest",
 		description:
-			"Submit standing house-rule quotes to promote and live-law replace offers. Call once. Kickoff JSON is in cwd.",
+			"Submit house-rule quotes, pending replaces, and non-law shelf records. Call once. Kickoff JSON is in cwd.",
 		parameters: HarvestSchema,
 		async execute(
 			_id: string,
-			params: { promote: { quote: string; headline?: string }[]; pending_replace: { quote: string; live_id: string; reason?: string }[] },
+			params: {
+				promote: { quote: string; headline?: string }[];
+				pending_replace: { quote: string; live_id: string; reason?: string }[];
+				shelf?: { type: "destination" | "decision" | "out_of_scope" | "question" | "fog" | "finding"; quote: string; headline?: string }[];
+			},
 			_signal: AbortSignal | undefined,
 			_onUpdate: unknown,
 			_ctx: ExtensionContext,
@@ -69,6 +87,7 @@ export default function ctxPromoterWorker(pi: ExtensionAPI): void {
 			writePromoterResult(resultPath, {
 				promote: params.promote ?? [],
 				pending_replace: params.pending_replace ?? [],
+				shelf: params.shelf ?? [],
 			});
 			return {
 				content: [{ type: "text" as const, text: `harvest recorded. kickoff_bytes=${kickoff.length}` }],

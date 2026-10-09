@@ -2,6 +2,20 @@ export const PROMOTER_N = 10;
 export const PROMOTER_CHARS = 280;
 export const PENDING_REPLACE_CAP = 10;
 export const PENDING_HITL_TURNS = 3;
+export const PROMOTER_SHELF_N = 10;
+
+export const SHELF_TYPES = ["destination", "decision", "out_of_scope", "question", "fog", "finding"] as const;
+export type ShelfType = (typeof SHELF_TYPES)[number];
+
+const USER_BODY_TYPES = new Set<ShelfType>(["destination", "out_of_scope", "question"]);
+
+export function isShelfType(value: string): value is ShelfType {
+	return (SHELF_TYPES as readonly string[]).includes(value);
+}
+
+export function shelfBodyIsUserOnly(type: ShelfType): boolean {
+	return USER_BODY_TYPES.has(type);
+}
 
 export type PromoterPromote = {
 	quote: string;
@@ -14,13 +28,20 @@ export type PromoterPending = {
 	reason?: string;
 };
 
+export type PromoterShelf = {
+	type: ShelfType;
+	quote: string;
+	headline?: string;
+};
+
 export type PromoterResult = {
 	promote: PromoterPromote[];
 	pending_replace: PromoterPending[];
+	shelf?: PromoterShelf[];
 };
 
 export function emptyPromoterResult(): PromoterResult {
-	return { promote: [], pending_replace: [] };
+	return { promote: [], pending_replace: [], shelf: [] };
 }
 
 function asString(value: unknown): string | undefined {
@@ -52,5 +73,17 @@ export function parsePromoterResult(raw: unknown): PromoterResult {
 			pending_replace.push(reason ? { quote, live_id, reason } : { quote, live_id });
 		}
 	}
-	return { promote, pending_replace };
+	const shelf: PromoterShelf[] = [];
+	if (Array.isArray(obj.shelf)) {
+		for (const item of obj.shelf) {
+			if (!item || typeof item !== "object") continue;
+			const rec = item as { type?: unknown; quote?: unknown; headline?: unknown };
+			const type = asString(rec.type);
+			const quote = asString(rec.quote);
+			if (!type || !isShelfType(type) || !quote) continue;
+			const headline = asString(rec.headline);
+			shelf.push(headline ? { type, quote, headline } : { type, quote });
+		}
+	}
+	return { promote, pending_replace, shelf };
 }

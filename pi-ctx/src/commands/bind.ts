@@ -3,6 +3,7 @@ import type { Hitl } from "../hitl.js";
 import type { Runtime } from "../runtime.js";
 import { createProject, listProjects, readProjectMeta, slugify } from "../store/project.js";
 import { harvestAfterBind, type HarvestReceipt, type PromoterRunFn } from "../promoter/run.js";
+import { PROMOTER_N, PROMOTER_SHELF_N } from "../promoter/schema.js";
 import { publishBoundStatus, type StatusSink } from "../render/bound-status.js";
 import { CTX_BIND, type Entry } from "../types.js";
 
@@ -107,7 +108,7 @@ export async function runBindFlow(opts: {
 
 	const ok = await hitl.confirm(
 		"Confirm bind",
-		`Bind this session to "${picked.name}" [${picked.id}]? Occupancy stays Gated Edge. This does not dump the session. After Yes, a nested promoter may record up to 10 short house rules you stated in this chat (checked against live law). Unclear is skipped. Fights with live law become pending-replace for you to decide.`,
+		`Bind this session to "${picked.name}" [${picked.id}]? Occupancy stays Gated Edge. This does not dump the session. After Yes, a nested promoter may record up to ${PROMOTER_N} short house rules you stated in this chat (checked against live law). Unclear is skipped. Fights with live law become pending-replace for you to decide. It may also record up to ${PROMOTER_SHELF_N} other items, which are not house rules: one destination, out-of-scope lines, and questions taken only from your words, plus fog, decisions, and findings from your words or the assistant's replies. Fog text, decisions, and findings are stored and not injected.`,
 	);
 	if (!ok) return { ok: false, error: "cancelled" };
 
@@ -131,7 +132,7 @@ export async function runBindFlow(opts: {
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		hitl.notify(`Promoted none (${message})`, "warning");
-		harvest = { promoted: [], pending: 0, skipped: 0, note: message };
+		harvest = { promoted: [], recorded: [], pending: 0, skipped: 0, note: message };
 	}
 	publishBoundStatus(opts.status, { bound: true, projectId: meta.id, projectName: meta.name });
 	return { ok: true, project_id: meta.id, project_name: meta.name, harvest };
