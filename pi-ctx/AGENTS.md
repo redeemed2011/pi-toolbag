@@ -14,6 +14,7 @@ npm run typecheck
 ```
 
 Default `pi` is cplt. Details: [docs/sandbox.md](docs/sandbox.md). Tests use `CTX_HOME`. Project-law store is `~/.pi/ctx/projects/<id>/` and needs a host write grant. Observer model: live session (`getModel`) unless `ctx.models.observer` is set. Fallback is `auto-fallback.json` via `pi-fallback-lib` in `worker.ts`. Tests isolate `PI_CODING_AGENT_DIR`.
+Before committing, run `npm test` from the pi-toolbag root. `npm test` in this directory is only the ctx suite.
 
 ## What exists
 

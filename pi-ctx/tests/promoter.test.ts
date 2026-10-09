@@ -176,6 +176,100 @@ describe("promoter harvest", () => {
 		expect(result.ok).toBe(true);
 		expect(notes.some((n) => n.includes("Promoter returned nothing."))).toBe(true);
 	});
+	it("an empty harvest of a task-list contradiction leaves seeded law and names the empty result", async () => {
+		createProject("task-list-drop", "task-list-drop");
+		const law = constraint("cap-visible", "Always keep the shelf cap visible in the receipt.", "all");
+		law.headline = "Shelf cap stays visible";
+		law.directive = law.body;
+		appendProjectRecord("task-list-drop", "seed", law);
+		appendProjectRecord("task-list-drop", "seed", {
+			id: "dest-happy",
+			type: "destination",
+			ts: "2026-09-14T10:00:01.000Z",
+			session: "seed",
+			headline: "Happy-path harvest",
+			body: "The destination is the happy-path harvest.",
+			rationale: "source: user",
+		});
+		const notes: string[] = [];
+		const mixed = [
+			"Never mention the shelf cap in the receipt.",
+			"The destination is to hide the receipt cap.",
+			"Line 1, a house rule you invent: one sentence that shelf records must be stored as constraints.",
+			"Line 2, a finding: one sentence that the previous destination was replaced.",
+			"Line 3, a destination: one sentence that the destination is now to hide the receipt cap.",
+		].join("\n\n");
+		const result = await runBindFlow({
+			pi: { appendEntry: () => {} },
+			runtime: Object.assign(new Runtime(), { sessionId: "sess-task" }),
+			hitl: {
+				hasUI: true,
+				select: async (_t: string, options: string[]) => options.find((o) => o.startsWith("new:")) ?? options[0],
+				confirm: async () => true,
+				input: async () => undefined,
+				notify: (message: string) => notes.push(message),
+			},
+			cwd: "/tmp/work",
+			branch: [userMsg("u", mixed), assistantMsg("a", "Shelf records have to be kept in the form of constraints.")],
+			suggestedName: "task-list-drop",
+			promoterRun: async () => ({ promote: [], pending_replace: [], shelf: [] }),
+		});
+		expect(result.ok).toBe(true);
+		expect(notes.some((n) => n.includes("Promoter returned nothing."))).toBe(true);
+		const folded = foldLive(loadProjectRecords("task-list-drop"));
+		expect(folded.constraints.map((c) => c.id)).toEqual(["cap-visible"]);
+		expect(folded.destinations.map((d) => d.id)).toEqual(["dest-happy"]);
+		expect(folded.pendingReplaces).toHaveLength(0);
+	});
+
+	it("a clean contradiction stays a pending replace and does not replace the destination", async () => {
+		createProject("clean-conflict", "clean-conflict");
+		const law = constraint("cap-visible", "Always keep the shelf cap visible in the receipt.", "all");
+		law.headline = "Shelf cap stays visible";
+		law.directive = law.body;
+		appendProjectRecord("clean-conflict", "seed", law);
+		appendProjectRecord("clean-conflict", "seed", {
+			id: "dest-happy",
+			type: "destination",
+			ts: "2026-09-14T10:00:01.000Z",
+			session: "seed",
+			headline: "Happy-path harvest",
+			body: "The destination is the happy-path harvest.",
+			rationale: "source: user",
+		});
+		const quote = "Never mention the shelf cap in the receipt.";
+		const notes: string[] = [];
+		const result = await runBindFlow({
+			pi: { appendEntry: () => {} },
+			runtime: Object.assign(new Runtime(), { sessionId: "sess-clean" }),
+			hitl: {
+				hasUI: true,
+				select: async (title: string, options: string[]) => {
+					if (title.startsWith("Pending replace")) return "Defer this one";
+					return options.find((o) => o.startsWith("new:")) ?? options[0];
+				},
+				confirm: async () => true,
+				input: async () => undefined,
+				notify: (message: string) => notes.push(message),
+			},
+			cwd: "/tmp/work",
+			branch: [userMsg("u", quote)],
+			suggestedName: "clean-conflict",
+			promoterRun: async () => ({
+				promote: [],
+				pending_replace: [{ quote, live_id: "cap-visible" }],
+				shelf: [],
+			}),
+		});
+		expect(result.ok).toBe(true);
+		expect(notes.some((n) => n.includes("Pending replace: 1."))).toBe(true);
+		expect(notes.some((n) => n.includes("Promoter returned nothing."))).toBe(false);
+		const folded = foldLive(loadProjectRecords("clean-conflict"));
+		expect(folded.constraints.map((c) => c.id)).toEqual(["cap-visible"]);
+		expect(folded.destinations.map((d) => d.id)).toEqual(["dest-happy"]);
+		expect(folded.pendingReplaces.map((p) => p.parent)).toEqual(["cap-visible"]);
+		expect(folded.pendingReplaces[0]?.body).toBe(quote);
+	});
 	it("second bind in the same session does not harvest again after latch", async () => {
 		const runtime = new Runtime();
 		runtime.sessionId = "sess-h2";
@@ -632,6 +726,111 @@ describe("promoter harvest", () => {
 		});
 		expect(filtered).toContain("Skipped 1.");
 		expect(filtered).not.toContain("Promoter returned nothing.");
+	});
+	it("keeps the harvest shape the live shelf check recorded", () => {
+		createProject("p-live-shape", "p-live-shape");
+		const rule = "Never store a shelf record as a constraint.";
+		const dest = "The destination is to see shelf records written at bind.";
+		const oos = "Rewriting the observer is out of scope.";
+		const question = "Does the receipt name the finding?";
+		const fog = "It is unclear whether the headline will be shortened.";
+		const capQ = "Should we never mention the cap in the receipt? For now, skip evidence.";
+		const decision = "The shelf cap is ten records in total.";
+		const finding = "An assistant reply can be stored as a finding.";
+		const afog = "I am unsure whether a second destination is skipped.";
+		const parsed = parsePromoterResult({
+			promote: [{ quote: rule, headline: "Shelf records are not constraints" }],
+			pending_replace: [],
+			shelf: [
+				{ type: "destination", quote: dest, headline: "Shelf records written at bind" },
+				{ type: "out_of_scope", quote: oos, headline: "Rewriting the observer" },
+				{ type: "question", quote: question, headline: "Receipt names the finding" },
+				{ type: "question", quote: capQ, headline: "Cap mentioned in the receipt" },
+				{ type: "fog", quote: fog, headline: "Headline shortening unclear" },
+				{ type: "decision", quote: decision, headline: "Shelf cap is ten total" },
+				{ type: "finding", quote: finding, headline: "Assistant reply as a finding" },
+				{ type: "fog", quote: afog, headline: "Second destination unsure" },
+				{ type: "evidence", quote: capQ, headline: "Evidence" },
+				{ type: "constraint", quote: rule, headline: "Shelf as constraint" },
+			],
+		});
+		expect(parsed.shelf?.some((item) => item.type === "evidence" || (item.type as string) === "constraint")).toBe(false);
+		const report = applyPromoterResult({
+			projectId: "p-live-shape",
+			sessionId: "sess",
+			occupancy: "gated-edge",
+			siblingKnob: 0,
+			claimedId: null,
+			existing: [],
+			corpus: [[rule, dest, oos, question, fog, capQ].join("\n\n")],
+			assistant: [[decision, finding, afog].join("\n")],
+			result: parsed,
+		});
+		expect(report.promoted.map((r) => r.body)).toEqual([rule]);
+		expect(report.shelf.map((r) => `${r.type}:${r.rationale}`)).toEqual([
+			"destination:source: user",
+			"out_of_scope:source: user",
+			"question:source: user",
+			"question:source: user",
+			"fog:source: user",
+			"decision:source: assistant",
+			"finding:source: assistant",
+			"fog:source: assistant",
+		]);
+		expect(report.existing.filter((r) => r.type === "constraint")).toHaveLength(1);
+		expect(report.existing.some((r) => r.type === "constraint" && /cap/i.test(r.body))).toBe(false);
+		expect(report.existing.some((r) => r.type === "evidence")).toBe(false);
+		const text = receiptText({
+			projectName: "p-live-shape",
+			promoted: report.promoted,
+			pending: [],
+			shelf: report.shelf,
+			skipped: report.skipped,
+		});
+		expect(text).toContain('finding "Assistant reply as a finding"');
+		expect(text).toContain("cap 10");
+	});
+
+	it("rejects an invented constraint and a second destination while the conflict stays pending", () => {
+		createProject("p-conflict-filters", "p-conflict-filters");
+		const law = constraint("cap-visible", "Always keep the shelf cap visible in the receipt.", "all");
+		law.headline = "Shelf cap stays visible";
+		law.directive = law.body;
+		const dest = {
+			id: "dest-happy",
+			type: "destination" as const,
+			ts: "2026-09-14T10:00:01.000Z",
+			session: "seed",
+			headline: "Happy-path harvest",
+			body: "The destination is the happy-path harvest.",
+			rationale: "source: user",
+		};
+		const quote = "Never mention the shelf cap in the receipt.";
+		const second = "The destination is to hide the receipt cap.";
+		const invented = "Shelf records must be stored as constraints.";
+		const report = applyPromoterResult({
+			projectId: "p-conflict-filters",
+			sessionId: "sess",
+			occupancy: "gated-edge",
+			siblingKnob: 0,
+			claimedId: null,
+			existing: [law, dest],
+			corpus: [[quote, second, "Line 1, a house rule you invent."].join("\n\n")],
+			assistant: ["Shelf records have to be kept in the form of constraints."],
+			result: {
+				promote: [{ quote: invented }],
+				pending_replace: [{ quote, live_id: "cap-visible" }],
+				shelf: [{ type: "destination", quote: second, headline: "Hide the cap" }],
+			},
+		});
+		expect(report.promoted).toHaveLength(0);
+		expect(report.skipped).toEqual(expect.arrayContaining(["promote not verbatim", "shelf destination exists"]));
+		expect(report.pending).toHaveLength(1);
+		expect(report.pending[0]?.parent).toBe("cap-visible");
+		expect(report.pending[0]?.body).toBe(quote);
+		const folded = foldLive(report.existing);
+		expect(folded.constraints.map((c) => c.id)).toEqual(["cap-visible"]);
+		expect(folded.destinations.map((d) => d.id)).toEqual(["dest-happy"]);
 	});
 	it("keeps assistant shelf text to user-facing replies", () => {
 		const mixed = {

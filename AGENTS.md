@@ -11,6 +11,7 @@ npm run typecheck
 ```
 
 Tests use vitest and `CTX_HOME`. Never invoke the `pi` wrapper. Details: `pi-ctx/docs/sandbox.md`.
+Before any commit, run `npm test` from this repo root and do not commit if it fails. A single file such as `pi-ctx/tests/promoter.test.ts` is not the suite.
 
 ## Where to work
 
