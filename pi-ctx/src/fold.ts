@@ -59,12 +59,20 @@ export function foldSession(entries: Entry[], sessionId = ""): SessionFold {
 		if (typeof data.claimed_question_id === "string") return data.claimed_question_id;
 		return undefined;
 	});
-	const projectId = lastCustom(entries, CTX_BIND, (data) => {
+	const bind = lastCustom(entries, CTX_BIND, (data) => {
 		if (!isPlainRecord(data)) return undefined;
-		if (data.project_id === null || data.projectId === null) return null;
-		if (typeof data.project_id === "string") return data.project_id;
-		if (typeof data.projectId === "string") return data.projectId;
-		return undefined;
+		if (data.project_id === null || data.projectId === null) {
+			return { projectId: null as string | null, grantId: null as string | null, grantQuestionId: null as string | null };
+		}
+		const projectId = typeof data.project_id === "string"
+			? data.project_id
+			: typeof data.projectId === "string"
+				? data.projectId
+				: undefined;
+		if (projectId === undefined) return undefined;
+		const grantId = typeof data.grant_id === "string" && data.grant_id.length > 0 ? data.grant_id : null;
+		const grantQuestionId = typeof data.question_id === "string" && data.question_id.length > 0 ? data.question_id : null;
+		return { projectId, grantId, grantQuestionId };
 	});
 
 	const observations: Observation[] = [];
@@ -86,8 +94,10 @@ export function foldSession(entries: Entry[], sessionId = ""): SessionFold {
 
 	return {
 		enabled: enabled ?? true,
-		bound: typeof projectId === "string" && projectId.length > 0,
-		projectId: typeof projectId === "string" ? projectId : null,
+		bound: typeof bind?.projectId === "string" && bind.projectId.length > 0,
+		projectId: typeof bind?.projectId === "string" ? bind.projectId : null,
+		grantId: bind?.grantId ?? null,
+		grantQuestionId: bind?.grantQuestionId ?? null,
 		claimedId: claimedId === undefined ? null : claimedId,
 		occupancy: occupancy ?? null,
 		observations,

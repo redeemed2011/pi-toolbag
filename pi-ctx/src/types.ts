@@ -127,6 +127,8 @@ export type SessionFold = {
 	recency: Observation[];
 	promoterLatched?: boolean;
 	pendingReplaceTurns?: number;
+	grantId: string | null;
+	grantQuestionId: string | null;
 };
 
 export type PackedInject = {

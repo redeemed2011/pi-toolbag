@@ -14,6 +14,8 @@ export async function runClaimFlow(opts: {
 	question_id?: string;
 }): Promise<{ ok: true; claimed_id: string | null } | { ok: false; error: string }> {
 	const { pi, runtime, hitl } = opts;
+	if (!runtime.enabled) return { ok: false, error: "ctx is off" };
+	if (!runtime.bound) return { ok: false, error: "no project bound" };
 	const occupancy = resolveOccupancy({ occupancy: runtime.occupancy }, runtime.config.occupancy);
 	const live = runtime.projectLive ?? foldLive(runtime.projectRecords);
 	const action = opts.action;

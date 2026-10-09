@@ -16,13 +16,20 @@ import { executeGet } from "./get.js";
 import { dropKeys, jsonResult } from "./result.js";
 import { executeZoom } from "./zoom.js";
 import {
+	ATTACH_GUIDELINE,
 	BIND_GUIDELINE,
 	CLAIM_GUIDELINE,
+	FINDING_GUIDELINE,
 	FRONTIER_GUIDELINE,
 	GET_GUIDELINE,
+	GRANT_GUIDELINE,
 	RECORD_GUIDELINE,
 	ZOOM_GUIDELINE,
 } from "./guidelines.js";
+import { executeAttach } from "./attach.js";
+import { executeFinding } from "./finding.js";
+import { findingRawError } from "../grant.js";
+import { executeGrant } from "./grant.js";
 
 function sync(runtime: Runtime, ctx: ExtensionContext) {
 	const branch = ctx.sessionManager.getBranch() as Entry[];
@@ -145,6 +152,9 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 			ctx: ExtensionContext,
 		) {
 			const { fold } = sync(runtime, ctx);
+			if (fold.grantId && params.action === "claim" && params.question_id !== fold.grantQuestionId) {
+				return jsonResult({ ok: false, error: "worker claim limited" });
+			}
 			const result = applyClaim({
 				action: params.action,
 				question_id: params.question_id,
@@ -182,7 +192,8 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 			ctx: ExtensionContext,
 		) {
 			const setStatus = statusSink(ctx);
-			const { branch } = sync(runtime, ctx);
+			const { fold, branch } = sync(runtime, ctx);
+			if (fold.grantId) return jsonResult({ ok: false, error: "worker cannot bind" });
 			const result = await runBindFlow({
 				pi,
 				runtime,
@@ -290,6 +301,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 			ctx: ExtensionContext,
 		) {
 			const { fold } = sync(runtime, ctx);
+			if (fold.grantId) return jsonResult({ ok: false, error: "worker cannot record" });
 			let staged: { hash: string; size: number; bytes: Buffer } | undefined;
 			if (params.source_path && params.type !== "evidence") {
 				return jsonResult({ ok: false, error: "source_path only on evidence" });
@@ -338,6 +350,110 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 						return jsonResult({ ok: false, error: "blob_corrupt" });
 					}
 				}
+				appendProjectRecord(runtime.projectId, runtime.sessionId, result.line);
+				runtime.reloadProject();
+			}
+			return jsonResult(result);
+		},
+	});
+	pi.registerTool({
+		name: "ctx_grant",
+		label: "ctx grant",
+		description: "Hand one live question to a new session. Returns a project id and a token. Does not start that session.",
+		promptSnippet: "Grant one live ctx question to a new session",
+		promptGuidelines: [GRANT_GUIDELINE],
+		parameters: Type.Object({
+			question_id: Type.String(),
+		}),
+		async execute(
+			_id: string,
+			params: { question_id?: string },
+			_signal: AbortSignal | undefined,
+			_onUpdate: unknown,
+			ctx: ExtensionContext,
+		) {
+			const { fold } = sync(runtime, ctx);
+			return jsonResult(executeGrant({
+				enabled: runtime.enabled,
+				bound: fold.bound,
+				grantId: fold.grantId,
+				projectId: runtime.projectId,
+				sessionId: runtime.sessionId,
+				questionId: params.question_id,
+				live: liveOf(runtime),
+			}));
+		},
+	});
+
+	pi.registerTool({
+		name: "ctx_attach",
+		label: "ctx attach",
+		description: "Bind a fresh session to a granted question. Refuses a session that has ever been bound. Does not harvest.",
+		promptSnippet: "Attach this fresh session to a granted ctx question",
+		promptGuidelines: [ATTACH_GUIDELINE],
+		parameters: Type.Object({
+			project_id: Type.String(),
+			token: Type.String(),
+		}),
+		async execute(
+			_id: string,
+			params: { project_id?: string; token?: string },
+			_signal: AbortSignal | undefined,
+			_onUpdate: unknown,
+			ctx: ExtensionContext,
+		) {
+			const { branch } = sync(runtime, ctx);
+			return jsonResult(executeAttach({
+				pi,
+				runtime,
+				branch,
+				projectId: params.project_id,
+				token: params.token,
+				status: statusSink(ctx),
+			}));
+		},
+	});
+
+	pi.registerTool({
+		name: "ctx_finding",
+		label: "ctx finding",
+		description: "File a finding on the granted question. Headline and body only. The server sets the type and the parent.",
+		promptSnippet: "File a ctx finding on the granted question",
+		promptGuidelines: [FINDING_GUIDELINE],
+		parameters: Type.Object({
+			headline: Type.String(),
+			body: Type.String(),
+		}),
+		prepareArguments(args: unknown) {
+			const refused = findingRawError(args);
+			if (refused) return { headline: "", body: "", __refuse: refused };
+			const raw = args as { headline: string; body: string };
+			return { headline: raw.headline, body: raw.body };
+		},
+		async execute(
+			_id: string,
+			params: { headline?: string; body?: string; __refuse?: string },
+			_signal: AbortSignal | undefined,
+			_onUpdate: unknown,
+			ctx: ExtensionContext,
+		) {
+			if (params.__refuse) return jsonResult({ ok: false, error: params.__refuse });
+			const { fold } = sync(runtime, ctx);
+			const result = executeFinding({
+				enabled: runtime.enabled,
+				bound: fold.bound,
+				grantId: fold.grantId,
+				grantQuestionId: fold.grantQuestionId,
+				projectId: runtime.projectId,
+				occupancy: occupancyOf(runtime),
+				siblingKnob: runtime.config.gatedEdgeSiblingHeadlines,
+				claimedId: fold.claimedId,
+				existing: runtime.projectRecords,
+				headline: params.headline ?? "",
+				body: params.body ?? "",
+				sessionId: runtime.sessionId,
+			});
+			if (result.ok && runtime.projectId) {
 				appendProjectRecord(runtime.projectId, runtime.sessionId, result.line);
 				runtime.reloadProject();
 			}

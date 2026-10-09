@@ -16,6 +16,8 @@ describe("unbound inject", () => {
 				occupancy: null,
 				observations: [obs("o1", "did the thing", "u1")],
 				recency: [obs("o1", "did the thing", "u1")],
+				grantId: null,
+				grantQuestionId: null,
 			},
 			branch: [],
 			firstKeptId: "u2",

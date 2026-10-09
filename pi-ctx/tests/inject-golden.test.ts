@@ -14,6 +14,8 @@ const session = (over: Partial<SessionFold> = {}): SessionFold => ({
 	occupancy: null,
 	observations: [],
 	recency: [],
+	grantId: null,
+	grantQuestionId: null,
 	...over,
 });
 

@@ -12,6 +12,8 @@ const bound: SessionFold = {
 	occupancy: null,
 	observations: [],
 	recency: [],
+	grantId: null,
+	grantQuestionId: null,
 };
 
 describe("F-once A", () => {

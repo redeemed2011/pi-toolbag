@@ -6,10 +6,13 @@ import { registerContextHook } from "../src/hooks/context-hook.js";
 import { applyStatusToSystem, statusLine } from "../src/render/status.js";
 import { Runtime } from "../src/runtime.js";
 import {
+	ATTACH_GUIDELINE,
 	BIND_GUIDELINE,
 	CLAIM_GUIDELINE,
+	FINDING_GUIDELINE,
 	FRONTIER_GUIDELINE,
 	GET_GUIDELINE,
+	GRANT_GUIDELINE,
 	RECORD_GUIDELINE,
 	ZOOM_GUIDELINE,
 } from "../src/tools/guidelines.js";
@@ -294,6 +297,12 @@ describe("ctx tool duties", () => {
 		expect(BIND_GUIDELINE).toContain("never bind silently");
 		expect(RECORD_GUIDELINE).toContain("ctx_record");
 		expect(RECORD_GUIDELINE).toContain("turn notes");
+		expect(GRANT_GUIDELINE).toContain("ctx_grant");
+		expect(ATTACH_GUIDELINE).toContain("ctx_attach");
+		expect(FINDING_GUIDELINE).toContain("ctx_finding");
+		expect(FINDING_GUIDELINE).toContain("ctx_record");
+		expect(FINDING_GUIDELINE).toContain("ctx_bind");
+		expect(BIND_GUIDELINE).toContain("Mint law with ctx_record.");
 		const register = readFileSync(new URL("../src/tools/register.ts", import.meta.url), "utf8");
 		for (const name of [
 			"GET_GUIDELINE",
@@ -302,6 +311,9 @@ describe("ctx tool duties", () => {
 			"CLAIM_GUIDELINE",
 			"BIND_GUIDELINE",
 			"RECORD_GUIDELINE",
+			"GRANT_GUIDELINE",
+			"ATTACH_GUIDELINE",
+			"FINDING_GUIDELINE",
 		]) {
 			expect(register).toContain(`promptGuidelines: [${name}]`);
 		}

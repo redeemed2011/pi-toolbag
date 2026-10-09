@@ -75,4 +75,32 @@ describe("claim HITL / empty claim", () => {
 			}),
 		).toEqual({ ok: false, error: "question_too_large" });
 	});
+	it("does not ask to close and claim while unbound", async () => {
+		const runtime = new Runtime();
+		runtime.enabled = true;
+		runtime.bound = false;
+		runtime.claimedId = "q1";
+		runtime.projectRecords = [question("q1", "one"), question("q2", "two")];
+		runtime.projectLive = foldLive(runtime.projectRecords);
+		let confirms = 0;
+		const result = await runClaimFlow({
+			pi: { appendEntry: () => {} },
+			runtime,
+			hitl: {
+				hasUI: true,
+				select: async () => undefined,
+				confirm: async () => {
+					confirms += 1;
+					return true;
+				},
+				input: async () => undefined,
+				notify: () => {},
+			},
+			action: "claim",
+			question_id: "q2",
+		});
+		expect(result).toEqual({ ok: false, error: "no project bound" });
+		expect(confirms).toBe(0);
+		expect(runtime.claimedId).toBe("q1");
+	});
 });

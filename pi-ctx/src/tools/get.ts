@@ -56,6 +56,16 @@ export function lookupRecord(
 			blocked: live.blocked.has(rec.id),
 			body: rec.body,
 		};
+		if (rec.type === "question") {
+			view.findings = records
+				.filter((item) => item.type === "finding" && item.parent === rec.id)
+				.map((item) => ({
+					id: item.id,
+					session: item.session,
+					headline: item.headline,
+					live: live.live.has(item.id),
+				}));
+		}
 		if (rec.citation_target) view.citation_target = rec.citation_target;
 		if (rec.type === "evidence") {
 			view.blob_hash = rec.blob_hash;

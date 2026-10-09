@@ -32,6 +32,8 @@ describe("injectTokens", () => {
 				occupancy: null,
 				observations: [],
 				recency: [],
+				grantId: null,
+				grantQuestionId: null,
 			},
 			branch: [],
 			firstKeptId: "u1",

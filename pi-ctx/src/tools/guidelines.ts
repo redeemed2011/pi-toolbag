@@ -14,5 +14,14 @@ export const CLAIM_GUIDELINE =
 export const BIND_GUIDELINE =
 	"Use ctx_bind when the user asked to create a ctx project or you propose one. Bind always requires HITL; never bind silently. Bind sets the project pointer only; it does not ask to ratify observer notes. Mint law with ctx_record.";
 
+export const GRANT_GUIDELINE =
+	"Use ctx_grant when this session is bound and you are handing one live question to a new session. It returns a project id and a token. It does not start the other session.";
+
+export const ATTACH_GUIDELINE =
+	"Use ctx_attach only in a session that has never been bound, with the project id and token from ctx_grant. It binds this session to that question. Do not call it to switch questions.";
+
+export const FINDING_GUIDELINE =
+	"A worker files results with ctx_finding, not ctx_record or ctx_bind, and claims only its granted question. ctx_finding takes a headline and a body. The server sets the type and the parent question.";
+
 export const RECORD_GUIDELINE =
 	"Use ctx_record for a constraint, decision, or question that should survive the next compaction. Do not record turn notes or observations. Never overwrite. Constraints require applies_to and directive. Missing applies_to refuses; it never defaults to all. live_conflict refuses in print; TUI selects which to supersede. GATE overflow refuses in print; TUI select is refuse-first vs supersede/split. Evidence copies a file into the project blob store by hash, with size, producer, and expiry. It is not a constraint and does not count toward the gate. An expired file marks that support stale and does not retire the citing constraint. A filename in a body is not evidence. Point citation_target at the evidence id. Evidence cannot supersede or block.";

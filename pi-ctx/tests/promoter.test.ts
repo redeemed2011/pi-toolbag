@@ -456,6 +456,8 @@ describe("promoter harvest", () => {
 				occupancy: "gated-edge",
 				observations: [],
 				recency: [],
+				grantId: null,
+				grantQuestionId: null,
 			},
 			branch: [],
 			firstKeptId: "u1",

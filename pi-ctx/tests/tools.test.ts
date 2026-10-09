@@ -94,7 +94,7 @@ describe("get / zoom", () => {
 			} as never,
 			new Runtime(),
 		);
-		expect(names).toEqual(["ctx_get", "ctx_zoom", "ctx_frontier", "ctx_claim", "ctx_bind", "ctx_record"]);
+		expect(names).toEqual(["ctx_get", "ctx_zoom", "ctx_frontier", "ctx_claim", "ctx_bind", "ctx_record", "ctx_grant", "ctx_attach", "ctx_finding"]);
 		expect(names).not.toContain("search_similar");
 	});
 
@@ -164,6 +164,9 @@ describe("tool results pi can replay", () => {
 			["ctx_claim", { action: "status" }],
 			["ctx_bind", {}],
 			["ctx_record", { type: "question", headline: "note" }],
+			["ctx_grant", {}],
+			["ctx_attach", {}],
+			["ctx_finding", {}],
 		];
 		for (const [name, params] of calls) {
 			const result = await tools.get(name)!.execute("call" as never, params as never, undefined as never, undefined as never, ctx as never);
