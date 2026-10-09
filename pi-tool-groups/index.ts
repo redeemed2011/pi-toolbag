@@ -1,9 +1,12 @@
 import {
 	AssistantMessageComponent,
+	renderDiff,
 	ToolExecutionComponent,
 	type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { renderHashlineResult, type HashlinePainters } from "./diff-render.ts";
+import { loadSplitPaint } from "./split-paint.ts";
 
 /**
  * Fold a consecutive run of read, search, and list tool calls into one row.
@@ -12,7 +15,9 @@ import { Container, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui
  * While any call in the run is still going, the verbs stay progressive.
  * A shell command is its own `Ran` row and splits the run.
  * A thought is its own row, and so is any other tool. Consecutive edits of one file become `Edited <file> +N/-M`.
- * pi-droid-styling owns the working row; this file never touches it.
+ * pi-droid-styling owns the working row. Its default badge then replaces any
+ * non-builtin result with the raw text, so a finished hashline edit puts the
+ * rich diff back. A changed diff shape keeps that raw text.
  * Droid also replaces chat.render, so the wrap is put back on each frame.
  */
 
@@ -166,6 +171,14 @@ function baseName(path: string): string {
 	return name && name.length > 0 ? name : path;
 }
 
+/** Lines in a finished write. The expanded card counts `content.split("\n")` the same way. */
+function writtenLineCount(row: ToolView): number | undefined {
+	if (row.toolName !== "write" || phase(row) !== "done") return undefined;
+	const content = argsOf(row).content;
+	if (typeof content !== "string" || content.length === 0) return undefined;
+	return content.split("\n").length;
+}
+
 /** Sum line adds and removes for one file. Past tense once every edit has finished. */
 export function summarizeEdit(rows: readonly ToolView[]): { text: string; running: boolean; failed: number; added: number; removed: number } {
 	const running = rows.some((row) => phase(row) === "running");
@@ -176,7 +189,8 @@ export function summarizeEdit(rows: readonly ToolView[]): { text: string; runnin
 	for (const row of rows) {
 		if (!file) file = editFile(row);
 		const metrics = (row.result?.details as { metrics?: { added_lines?: number; removed_lines?: number } } | undefined)?.metrics;
-		added += metrics?.added_lines ?? 0;
+		if (typeof metrics?.added_lines === "number") added += metrics.added_lines;
+		else added += writtenLineCount(row) ?? 0;
 		removed += metrics?.removed_lines ?? 0;
 		if (phase(row) === "error") failed += 1;
 	}
@@ -306,16 +320,16 @@ class SummaryGroup extends Container {
 	private title(): { text: string; running: boolean; failed: boolean } {
 		if (this.mode === "shell") {
 			const line = shellLine(this.rows[0]!);
-			const verb = paint(this.theme, line.failed ? "error" : line.running ? "accent" : "bashMode", bold(this.theme, line.verb));
+			const verb = paint(this.theme, line.failed ? "error" : "toolTitle", bold(this.theme, line.verb));
 			const command = line.command ? ` ${paint(this.theme, "dim", line.command)}` : "";
 			return { text: `${verb}${command}`, running: line.running, failed: line.failed };
 		}
 		if (this.mode === "edit") {
 			const summary = summarizeEdit(this.rows);
-			const body = paint(this.theme, summary.running ? "accent" : "bashMode", bold(this.theme, summary.text));
-			const stat = !summary.running && (summary.added > 0 || summary.removed > 0)
-				? `${paint(this.theme, "success", ` +${summary.added}`)}${paint(this.theme, "error", `/-${summary.removed}`)}`
-				: "";
+			const body = paint(this.theme, "toolTitle", bold(this.theme, summary.text));
+			const addedStat = summary.added > 0 ? paint(this.theme, "success", ` +${summary.added}`) : "";
+			const removedStat = summary.removed > 0 ? paint(this.theme, "error", `/-${summary.removed}`) : "";
+			const stat = !summary.running ? `${addedStat}${removedStat}` : "";
 			const fail = summary.failed > 0 ? paint(this.theme, "error", ` · ${summary.failed} failed`) : "";
 			return { text: `${body}${stat}${summary.running ? "…" : ""}${fail}`, running: summary.running, failed: summary.failed > 0 };
 		}
@@ -323,7 +337,7 @@ class SummaryGroup extends Container {
 			const row = this.rows[0]!;
 			const running = phase(row) === "running";
 			const failed = phase(row) === "error";
-			const name = paint(this.theme, failed ? "error" : running ? "accent" : "bashMode", bold(this.theme, formatToolName(row.toolName)));
+			const name = paint(this.theme, failed ? "error" : "toolTitle", bold(this.theme, formatToolName(row.toolName)));
 			return { text: `${name}${running ? "…" : ""}`, running, failed };
 		}
 		if (this.mode === "thought") {
@@ -334,18 +348,30 @@ class SummaryGroup extends Container {
 			return { text: `${label}${rest}`, running, failed: false };
 		}
 		const summary = summarizeLook(this.rows);
-		const body = paint(this.theme, summary.running ? "accent" : "bashMode", bold(this.theme, summary.text));
+		const body = paint(this.theme, "toolTitle", bold(this.theme, summary.text));
 		const fail = summary.failed > 0 ? paint(this.theme, "error", ` · ${summary.failed} failed`) : "";
 		return { text: `${body}${summary.running ? "…" : ""}${fail}`, running: summary.running, failed: summary.failed > 0 };
 	}
 
-	render(width: number): string[] {
+	setExpanded(expanded: boolean): void {
+		this.state.expanded = expanded;
+		this.invalidate();
+	}
+
+	/** A global expand writes the tool flag. A click on this row writes group state. Keep whichever changed. */
+	private syncExpanded(): void {
+		const host = this.rows[0];
+		if (host && host.expanded !== this.state.lastHostExpanded) this.state.expanded = host.expanded;
 		revealTools(this.rows, this.state.expanded);
-		if (this.rows[0]) this.state.lastHostExpanded = this.rows[0].expanded;
+		this.state.lastHostExpanded = this.state.expanded;
+	}
+
+	render(width: number): string[] {
+		this.syncExpanded();
 		if (this.state.expanded) {
 			const lines = this.mode === "thought" ? renderThoughtBody(this.members, this.theme, width) : this.members.flatMap((member) => renderMember(this.mode, member, width));
 			if (this.mode !== "thought" || lines.length > 0) {
-				if (lines.length === 0 || lines[0] !== "") lines.unshift("");
+				if (lines.length === 0 || lines[lines.length - 1] !== "") lines.push("");
 				return lines;
 			}
 		}
@@ -354,7 +380,7 @@ class SummaryGroup extends Container {
 		const quiet = this.mode === "thought";
 		const markChar = title.failed ? "✗" : title.running ? frames[Math.floor(Date.now() / 160) % frames.length]! : quiet ? "•" : "●";
 		const mark = paint(this.theme, title.failed ? "error" : title.running ? "accent" : quiet ? "dim" : "success", markChar);
-		return ["", truncateToWidth(`${mark} ${title.text}`, Math.max(1, width), "…")];
+		return [truncateToWidth(`${mark} ${title.text}`, Math.max(1, width), "…"), ""];
 	}
 }
 
@@ -416,8 +442,12 @@ export function groupChildren(children: readonly unknown[], theme: Theme | undef
 		}
 		if (isThinkingOnly(child)) {
 			flush();
-			grouped.push(new SummaryGroup("thought", [], [...pending, child] as Member[], stateFor(child, states), theme));
+			const spacers = pending;
 			pending = [];
+			const thoughtMembers = [...spacers, child] as Member[];
+			if (thoughtStreaming(thoughtMembers) || thoughtText(thoughtMembers)) {
+				grouped.push(new SummaryGroup("thought", [], thoughtMembers, stateFor(child, states), theme));
+			} else if (spacers.length > 0) grouped.push(...spacers);
 			continue;
 		}
 		if (child instanceof ToolExecutionComponent) {
@@ -439,6 +469,152 @@ export function groupChildren(children: readonly unknown[], theme: Theme | undef
 	return grouped;
 }
 
+const DIFF_PATCH = Symbol.for("pi.tool-groups.hashline-diff");
+const DIFF_TOOLS = new Set(["replace", "replace_match", "insert", "copy", "move", "undo_last_change"]);
+type ResultRenderer = (result: unknown, options: unknown, theme: unknown, context: unknown) => { render?: (width: number) => string[] } | undefined;
+
+let splitPaint: HashlinePainters["split"] | undefined;
+
+function unifiedPaint(gutter: string): string[] | null {
+	try {
+		const text = renderDiff(gutter);
+		return typeof text === "string" && text.length > 0 ? text.split("\n") : null;
+	} catch {
+		return null;
+	}
+}
+
+function loadSplitPainter(): void {
+	if (splitPaint !== undefined) return;
+	splitPaint = null;
+	void loadSplitPaint().then((paint) => {
+		splitPaint = paint;
+	}).catch(() => {
+		splitPaint = null;
+	});
+}
+
+function installDiffRenderer(): void {
+	const proto = ToolExecutionComponent.prototype as unknown as {
+		getResultRenderer?: ((this: { toolName?: string }, ...args: unknown[]) => ResultRenderer | undefined) & Record<PropertyKey, unknown>;
+	};
+	const current = proto.getResultRenderer;
+	if (typeof current !== "function" || current[DIFF_PATCH] === true) return;
+	function wrapped(this: { toolName?: string }, ...args: unknown[]) {
+		const original = current!.apply(this, args);
+		if (!DIFF_TOOLS.has(this.toolName ?? "")) return original;
+		return (result: unknown, options: unknown, theme: unknown, context: unknown) => ({
+			render(width: number) {
+				return renderHashlineResult(result as { details?: { diff?: unknown; diffLineNumbers?: unknown } }, width, theme, {
+					split: splitPaint ?? null,
+					unified: (gutter) => unifiedPaint(gutter),
+				}, () => {
+					try {
+						const lines = original?.(result, options, theme, context)?.render?.(width);
+						return Array.isArray(lines) ? lines : [];
+					} catch {
+						return [];
+					}
+				});
+			},
+			invalidate() {},
+		});
+	}
+	(wrapped as { [DIFF_PATCH]?: boolean })[DIFF_PATCH] = true;
+	proto.getResultRenderer = wrapped as typeof current;
+}
+
+const DISPLAY_PATCH = Symbol.for("pi.tool-groups.hashline-display");
+let activeTheme: Theme | undefined;
+
+type DiffShell = { clear?: () => void; addChild?: (child: unknown) => void };
+type DiffHost = {
+	toolName?: string;
+	args?: unknown;
+	result?: { content?: unknown; details?: { diff?: unknown; diffLineNumbers?: unknown; warnings?: string[] }; isError?: boolean };
+	isPartial?: boolean;
+	contentBox?: DiffShell;
+	selfRenderContainer?: DiffShell;
+	getRenderShell?: () => string;
+};
+
+function resultLines(result: DiffHost["result"]): string[] {
+	const content = result?.content;
+	if (!Array.isArray(content)) return [];
+	const text = content
+		.filter((block): block is { type: string; text?: string } => Boolean(block) && typeof block === "object" && (block as { type?: string }).type === "text")
+		.map((block) => String(block.text ?? ""))
+		.join("\n")
+		.replace(/\r/g, "")
+		.trimEnd();
+	return text.length > 0 ? text.split("\n") : [];
+}
+
+function paramLine(args: unknown): string {
+	if (!args || typeof args !== "object" || Array.isArray(args)) return "";
+	const parts: string[] = [];
+	for (const [key, value] of Object.entries(args as Record<string, unknown>)) {
+		if (typeof value !== "string" || value.length === 0) continue;
+		const flat = value.replace(/\s+/g, " ");
+		const shown = flat.length > 60 ? `${flat.slice(0, 57)}…` : flat;
+		const spaced = key.replace(/[_-]+/g, " ").trim();
+		const label = spaced.length > 0 ? spaced[0]!.toUpperCase() + spaced.slice(1) : key;
+		parts.push(`${label}: ${shown}`);
+	}
+	return parts.join(" ");
+}
+
+/** Header plus the rich diff. Droid's badge is replaced by this after it paints the raw text. */
+export function hashlineCardLines(host: DiffHost, width: number, theme: Theme | undefined): string[] {
+	const failed = host.result?.isError === true;
+	const mark = paint(theme, failed ? "error" : "success", failed ? "✗" : "●");
+	const title = paint(theme, failed ? "error" : "toolTitle", bold(theme, formatToolName(host.toolName ?? "edit")));
+	const args = paramLine(host.args);
+	const header = truncateToWidth(`${mark} ${title}${args ? ` ${args}` : ""}`, Math.max(1, width), "…");
+	const body = renderHashlineResult(host.result ?? {}, Math.max(1, width - 5), theme, {
+		split: splitPaint ?? null,
+		unified: (gutter) => unifiedPaint(gutter),
+	}, () => resultLines(host.result));
+	const warnings = host.result?.details?.warnings?.filter((line) => line.length > 0) ?? [];
+	return [
+		header,
+		...body.map((line, index) => truncateToWidth(index === 0 ? `  └─ ${line}` : `     ${line}`, Math.max(1, width), "…")),
+		...warnings.map((line) => truncateToWidth(`     ${line}`, Math.max(1, width), "…")),
+	];
+}
+
+export function placeRichDiff(host: DiffHost): void {
+	if (!host.toolName || !DIFF_TOOLS.has(host.toolName) || !host.result || host.isPartial) return;
+	const shell = host.getRenderShell?.() === "self" ? host.selfRenderContainer : host.contentBox;
+	if (!shell || typeof shell.clear !== "function" || typeof shell.addChild !== "function") return;
+	shell.clear();
+	shell.addChild({
+		invalidate() {},
+		render(width: number) {
+			return hashlineCardLines(host, width, activeTheme);
+		},
+	});
+}
+
+function installDisplayPatch(): void {
+	const proto = ToolExecutionComponent.prototype as unknown as {
+		updateDisplay?: ((this: DiffHost, ...args: unknown[]) => unknown) & Record<PropertyKey, unknown>;
+	};
+	const current = proto.updateDisplay;
+	if (typeof current !== "function" || current[DISPLAY_PATCH] === true) return;
+	function wrapped(this: DiffHost, ...args: unknown[]) {
+		const result = current!.apply(this, args);
+		try {
+			placeRichDiff(this);
+		} catch {
+			// Droid's card stays if the diff cannot be mounted.
+		}
+		return result;
+	}
+	(wrapped as { [DISPLAY_PATCH]?: boolean })[DISPLAY_PATCH] = true;
+	proto.updateDisplay = wrapped as typeof current;
+}
+
 function findChat(tui: unknown): Chat | undefined {
 	const documentChildren = (tui as { children?: Array<{ children?: unknown[] }> }).children?.[0]?.children;
 	const chat = Array.isArray(documentChildren) ? documentChildren.at(-1) : undefined;
@@ -447,6 +623,9 @@ function findChat(tui: unknown): Chat | undefined {
 }
 
 function ensureChatHook(tui: unknown, theme: Theme | undefined): void {
+	activeTheme = theme;
+	installDiffRenderer();
+	installDisplayPatch();
 	const chat = findChat(tui) as (Chat & Record<PropertyKey, unknown>) | undefined;
 	if (!chat) return;
 	let slot = chat[HOOK_KEY] as Slot | undefined;
@@ -478,6 +657,7 @@ function ensureChatHook(tui: unknown, theme: Theme | undefined): void {
 }
 
 export default function (pi: ExtensionAPI) {
+	loadSplitPainter();
 	pi.on("session_start", (_event, ctx) => {
 		ctx.ui.setWidget(WIDGET_KEY, (tui, theme) => ({
 			render: () => {

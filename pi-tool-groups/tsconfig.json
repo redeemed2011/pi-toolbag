@@ -8,9 +8,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "Node16",
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["index.ts"]
+  "include": ["index.ts", "diff-display.ts", "diff-render.ts", "split-paint.ts", "diff-display.test.ts", "diff-render.test.ts", "split-paint.test.ts", "edit-summary.test.ts", "diff-card.test.ts"]
 }

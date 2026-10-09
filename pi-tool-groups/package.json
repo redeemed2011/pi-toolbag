@@ -3,12 +3,17 @@
   "version": "0.1.0",
   "description": "Pi extension: collapse a finished run of tool calls into one native row.",
   "type": "module",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   },
   "scripts": {
-    "typecheck": "node ../node_modules/typescript/bin/tsc --noEmit"
+    "typecheck": "node ../node_modules/typescript/bin/tsc --noEmit",
+    "test": "node --experimental-strip-types --test diff-display.test.ts diff-render.test.ts split-paint.test.ts edit-summary.test.ts diff-card.test.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
