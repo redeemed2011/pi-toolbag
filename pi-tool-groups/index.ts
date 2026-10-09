@@ -198,6 +198,14 @@ export function summarizeEdit(rows: readonly ToolView[]): { text: string; runnin
 	return { text: `${running ? "Editing" : "Edited"} ${name}`, running, failed, added, removed };
 }
 
+/** ` +N`, ` -M`, or ` +N` plus `/-M`. The slash only separates both counts. */
+export function editCountParts(added: number, removed: number): { added: string; removed: string } {
+	if (added > 0 && removed > 0) return { added: ` +${added}`, removed: `/-${removed}` };
+	if (added > 0) return { added: ` +${added}`, removed: "" };
+	if (removed > 0) return { added: "", removed: ` -${removed}` };
+	return { added: "", removed: "" };
+}
+
 function revealTools(rows: readonly ToolView[], expanded: boolean): void {
 	for (const row of rows) {
 		if (row.expanded === expanded) continue;
@@ -327,9 +335,10 @@ class SummaryGroup extends Container {
 		if (this.mode === "edit") {
 			const summary = summarizeEdit(this.rows);
 			const body = paint(this.theme, "toolTitle", bold(this.theme, summary.text));
-			const addedStat = summary.added > 0 ? paint(this.theme, "success", ` +${summary.added}`) : "";
-			const removedStat = summary.removed > 0 ? paint(this.theme, "error", `/-${summary.removed}`) : "";
-			const stat = !summary.running ? `${addedStat}${removedStat}` : "";
+			const counts = editCountParts(summary.added, summary.removed);
+			const stat = !summary.running
+				? `${counts.added ? paint(this.theme, "success", counts.added) : ""}${counts.removed ? paint(this.theme, "error", counts.removed) : ""}`
+				: "";
 			const fail = summary.failed > 0 ? paint(this.theme, "error", ` · ${summary.failed} failed`) : "";
 			return { text: `${body}${stat}${summary.running ? "…" : ""}${fail}`, running: summary.running, failed: summary.failed > 0 };
 		}

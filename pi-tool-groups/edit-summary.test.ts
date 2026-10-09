@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { summarizeEdit } from "./index.ts";
+import { editCountParts, summarizeEdit } from "./index.ts";
 
 function row(toolName: string, args: Record<string, unknown>, details?: unknown, isPartial = false) {
 	return {
@@ -35,4 +35,11 @@ test("hashline metrics still supply the counts", () => {
 	]);
 	assert.equal(summary.added, 2);
 	assert.equal(summary.removed, 1);
+});
+
+test("a removal-only count is not glued to the filename", () => {
+	assert.deepEqual(editCountParts(0, 22), { added: "", removed: " -22" });
+	assert.deepEqual(editCountParts(3, 22), { added: " +3", removed: "/-22" });
+	assert.deepEqual(editCountParts(3, 0), { added: " +3", removed: "" });
+	assert.deepEqual(editCountParts(0, 0), { added: "", removed: "" });
 });
