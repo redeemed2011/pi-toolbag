@@ -26,6 +26,11 @@ function nextRunId(): string {
 	return `obs-${stamp}-${process.pid}-${runCounter}`;
 }
 
+/** Unique across runs. Minute plus index is not: two runs in one minute both minted `HH:MM-0`. */
+export function observationRecordId(timestamp: string, runId: string, index: number): string {
+	return `${timestamp}-${runId}-${index}`;
+}
+
 function laterMarkerId(branch: Entry[], a: string | undefined, b: string | undefined): string | undefined {
 	const ia = entryIndexForId(branch, a);
 	const ib = entryIndexForId(branch, b);
@@ -111,7 +116,7 @@ async function dispatchObserver(
 
 		const result = readObserverResult(runResultPath(cwd));
 		const observations: Observation[] = result.observations.map((raw, i) => ({
-			id: `${raw.timestamp}-${i}`,
+			id: observationRecordId(raw.timestamp, runId, i),
 			headline: raw.content.replace(/[\r\n]+/g, " ").trim(),
 			body: raw.content.replace(/[\r\n]+/g, " ").trim(),
 			coversUpToId,
@@ -137,6 +142,17 @@ async function dispatchObserver(
 	} finally {
 		runtime.observersInFlight.delete(runId);
 	}
+}
+
+export function dispatchCoverageSlice(
+	pi: ExtensionAPI,
+	runtime: Runtime,
+	ctx: TriggerCtx,
+	slice: SourceSlice,
+): void {
+	if (!slice.coversUpToId) return;
+	runtime.dispatchedCoversUpToId = slice.coversUpToId;
+	runtime.trackObserverTask(dispatchObserver(pi, runtime, ctx, slice));
 }
 
 export function registerObserverTrigger(pi: ExtensionAPI, runtime: Runtime): void {

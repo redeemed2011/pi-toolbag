@@ -76,7 +76,7 @@ export function foldSession(entries: Entry[], sessionId = ""): SessionFold {
 	});
 
 	const observations: Observation[] = [];
-	const seen = new Set<string>();
+	const seenBody = new Map<string, string>();
 	for (const entry of entries) {
 		if (entry.type !== "custom" || entry.customType !== CTX_OBSERVATIONS_RECORDED) continue;
 		if (!isPlainRecord(entry.data) || !Array.isArray(entry.data.observations)) continue;
@@ -86,8 +86,14 @@ export function foldSession(entries: Entry[], sessionId = ""): SessionFold {
 			const obs = parseObservation(raw, cover, sessionId);
 			if (!obs) continue;
 			if (stamp && !obs.about_claim_id) obs.about_claim_id = stamp;
-			if (seen.has(obs.id)) continue;
-			seen.add(obs.id);
+			const prior = seenBody.get(obs.id);
+			if (prior !== undefined) {
+				if (prior === obs.body) continue;
+				let n = 2;
+				while (seenBody.has(`${obs.id}#${n}`)) n += 1;
+				obs.id = `${obs.id}#${n}`;
+			}
+			seenBody.set(obs.id, obs.body);
 			observations.push(obs);
 		}
 	}

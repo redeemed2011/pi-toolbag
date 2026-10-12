@@ -4,8 +4,11 @@ import { INJECT_CAP, injectTokens } from "../render/estimate.js";
 import { renderInject } from "../render/inject.js";
 import { recallErrorInject } from "../render/unbound.js";
 import type { Runtime } from "../runtime.js";
+import { firstUncoveredSourceId, planCoverageStep } from "../cover.js";
+import { entryIndexForId, latestCoverageMarkerId, rawTokensFrom } from "../progress.js";
 import { canSkipObserverWait, snapCutoff } from "../snap.js";
 import { CTX_FOLDED, type Entry } from "../types.js";
+import { dispatchCoverageSlice } from "./observer-trigger.js";
 
 export function registerCompactionHook(pi: ExtensionAPI, runtime: Runtime): void {
 	pi.on("session_before_compact", async (event: any, ctx: any) => {
@@ -41,6 +44,52 @@ export function registerCompactionHook(pi: ExtensionAPI, runtime: Runtime): void
 					branch = fresh ?? (event.branchEntries as Entry[]) ?? branch;
 				} catch {
 					// Stale after the wait. Keep the branch already read; do not fall through to recall_error.
+				}
+				snap = snapCutoff(branch, firstKeptEntryId, tailTokens);
+			}
+
+			const retainGap = () => {
+				const keep = firstUncoveredSourceId(branch, snap.firstKeptId);
+				if (!keep) return;
+				const idx = entryIndexForId(branch, keep);
+				if (idx < 0) return;
+				snap = { firstKeptId: keep, tail: rawTokensFrom(branch, idx) };
+			};
+			const rereadBranch = () => {
+				try {
+					const fresh = ctx.sessionManager?.getBranch?.() as Entry[] | undefined;
+					branch = fresh ?? (event.branchEntries as Entry[]) ?? branch;
+				} catch {
+					// Stale after the wait. Keep the branch already read.
+				}
+			};
+
+			for (let stepN = 0; stepN < 64; stepN++) {
+				const inFlight = [...runtime.observersInFlight.values()].map((observer) => observer.coversUpToId);
+				const step = planCoverageStep(branch, snap.firstKeptId, runtime.config.chunkTokens, inFlight);
+				if (step.action === "done") break;
+				if (step.action === "retain" || process.env.PI_CTX_NO_WORKERS === "1") {
+					retainGap();
+					break;
+				}
+				if (step.action === "wait") {
+					const pending = runtime.observersInFlight.size;
+					await runtime.whenObserversIdle();
+					rereadBranch();
+					if (runtime.observersInFlight.size >= pending && pending > 0) {
+						retainGap();
+						break;
+					}
+					snap = snapCutoff(branch, firstKeptEntryId, tailTokens);
+					continue;
+				}
+				const coveredBefore = latestCoverageMarkerId(branch);
+				dispatchCoverageSlice(pi, runtime, ctx, step.slice);
+				await runtime.whenObserversIdle();
+				rereadBranch();
+				if (latestCoverageMarkerId(branch) === coveredBefore) {
+					retainGap();
+					break;
 				}
 				snap = snapCutoff(branch, firstKeptEntryId, tailTokens);
 			}

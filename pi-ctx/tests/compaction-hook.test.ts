@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { registerCompactionHook } from "../src/hooks/compaction-hook.js";
 import { INJECT_CAP, injectTokens } from "../src/render/estimate.js";
 import { Runtime } from "../src/runtime.js";
-import { userMsg } from "./fixtures.js";
+import { recorded, userMsg } from "./fixtures.js";
 
 type HookResult = Awaited<ReturnType<ReturnType<typeof captureHook>>>;
 
@@ -125,4 +125,48 @@ describe("session_before_compact", () => {
 		expect(result).not.toEqual({ cancel: true });
 		expect(JSON.stringify(result)).toContain("recall_error");
 	});
+	it("retains a later uncovered fact instead of cutting it while workers are off", async () => {
+		const previous = process.env.PI_CTX_NO_WORKERS;
+		process.env.PI_CTX_NO_WORKERS = "1";
+		try {
+			const runtime = new Runtime();
+			const entries = [
+				userMsg("early", "earlier chunk"),
+				recorded("rec-early", "early", ["earlier"]),
+				userMsg("fact", "one-shot fact"),
+				userMsg("pad", "padding"),
+			];
+			const result = (await captureHook(runtime)(
+				{ preparation: { firstKeptEntryId: "pad", tokensBefore: 99 }, branchEntries: entries },
+				ctxOf(entries),
+			)) as { compaction: { firstKeptEntryId: string } };
+			expect(result.compaction.firstKeptEntryId).toBe("fact");
+		} finally {
+			if (previous === undefined) delete process.env.PI_CTX_NO_WORKERS;
+			else process.env.PI_CTX_NO_WORKERS = previous;
+		}
+	});
+
+	it("cuts a fact once its chunk is already covered", async () => {
+		const previous = process.env.PI_CTX_NO_WORKERS;
+		process.env.PI_CTX_NO_WORKERS = "1";
+		try {
+			const runtime = new Runtime();
+			const entries = [
+				userMsg("early", "earlier chunk"),
+				userMsg("fact", "one-shot fact"),
+				recorded("rec-fact", "fact", ["one-shot fact"]),
+				userMsg("pad", "padding"),
+			];
+			const result = (await captureHook(runtime)(
+				{ preparation: { firstKeptEntryId: "pad", tokensBefore: 99 }, branchEntries: entries },
+				ctxOf(entries),
+			)) as { compaction: { firstKeptEntryId: string } };
+			expect(result.compaction.firstKeptEntryId).toBe("pad");
+		} finally {
+			if (previous === undefined) delete process.env.PI_CTX_NO_WORKERS;
+			else process.env.PI_CTX_NO_WORKERS = previous;
+		}
+	});
+
 });
