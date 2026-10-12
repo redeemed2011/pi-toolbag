@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { registerCompactionHook } from "../src/hooks/compaction-hook.js";
 import { INJECT_CAP, injectTokens } from "../src/render/estimate.js";
 import { Runtime } from "../src/runtime.js";
-import { recorded, userMsg } from "./fixtures.js";
+import { assistantToolCall, recorded, toolResult, userMsg } from "./fixtures.js";
 
 type HookResult = Awaited<ReturnType<ReturnType<typeof captureHook>>>;
 
@@ -168,5 +168,27 @@ describe("session_before_compact", () => {
 			else process.env.PI_CTX_NO_WORKERS = previous;
 		}
 	});
+	it("retains the tool call when the uncovered fact is a tool result", async () => {
+		const previous = process.env.PI_CTX_NO_WORKERS;
+		process.env.PI_CTX_NO_WORKERS = "1";
+		try {
+			const runtime = new Runtime();
+			const entries = [
+				assistantToolCall("call"),
+				recorded("rec", "call", ["called"]),
+				toolResult("fact", "one-shot fact"),
+				userMsg("pad", "padding"),
+			];
+			const result = (await captureHook(runtime)(
+				{ preparation: { firstKeptEntryId: "pad", tokensBefore: 99 }, branchEntries: entries },
+				ctxOf(entries),
+			)) as { compaction: { firstKeptEntryId: string } };
+			expect(result.compaction.firstKeptEntryId).toBe("call");
+		} finally {
+			if (previous === undefined) delete process.env.PI_CTX_NO_WORKERS;
+			else process.env.PI_CTX_NO_WORKERS = previous;
+		}
+	});
+
 
 });

@@ -1,5 +1,5 @@
 import { entryIndexForId, latestCoverageMarkerId, selectSourceSlice, type SourceSlice } from "./progress.js";
-import { isSourceEntry } from "./tokens.js";
+import { isSourceEntry, isValidCutPoint } from "./tokens.js";
 import type { Entry } from "./types.js";
 
 /** First source entry after the coverage watermark and strictly before the cut. */
@@ -11,6 +11,18 @@ export function firstUncoveredSourceId(branch: Entry[], firstKeptId: string): st
 		if (isSourceEntry(branch[i])) return branch[i].id;
 	}
 	return undefined;
+}
+
+/** Valid cut at or before the first uncovered source, so a tool result is not left without its call. */
+export function retentionCutId(branch: Entry[], firstKeptId: string): string | undefined {
+	const uncovered = firstUncoveredSourceId(branch, firstKeptId);
+	if (!uncovered) return undefined;
+	const start = entryIndexForId(branch, uncovered);
+	if (start < 0) return undefined;
+	for (let i = start; i >= 0; i--) {
+		if (isValidCutPoint(branch[i])) return branch[i].id;
+	}
+	return uncovered;
 }
 
 export type CoverageStep =

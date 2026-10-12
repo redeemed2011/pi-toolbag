@@ -119,7 +119,9 @@ export function recencyLines(observations: Observation[], firstKeptId: string, b
 	const newestFirst = [...observations].reverse();
 	for (const obs of newestFirst) {
 		const coverIdx = idx.get(obs.coversUpToId);
-		if (cut !== undefined && coverIdx !== undefined && coverIdx >= cut) continue;
+		// Strictly inside the kept tail is verbatim. A cover on the cut still
+		// describes entries before the cut, so that observation stays.
+		if (cut !== undefined && coverIdx !== undefined && coverIdx > cut) continue;
 		lines.push(`- ${obs.headline} (${obs.id})`);
 	}
 	return lines;

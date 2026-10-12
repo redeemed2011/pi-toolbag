@@ -4,7 +4,7 @@ import { INJECT_CAP, injectTokens } from "../render/estimate.js";
 import { renderInject } from "../render/inject.js";
 import { recallErrorInject } from "../render/unbound.js";
 import type { Runtime } from "../runtime.js";
-import { firstUncoveredSourceId, planCoverageStep } from "../cover.js";
+import { planCoverageStep, retentionCutId } from "../cover.js";
 import { entryIndexForId, latestCoverageMarkerId, rawTokensFrom } from "../progress.js";
 import { canSkipObserverWait, snapCutoff } from "../snap.js";
 import { CTX_FOLDED, type Entry } from "../types.js";
@@ -49,7 +49,7 @@ export function registerCompactionHook(pi: ExtensionAPI, runtime: Runtime): void
 			}
 
 			const retainGap = () => {
-				const keep = firstUncoveredSourceId(branch, snap.firstKeptId);
+				const keep = retentionCutId(branch, snap.firstKeptId);
 				if (!keep) return;
 				const idx = entryIndexForId(branch, keep);
 				if (idx < 0) return;
@@ -93,6 +93,7 @@ export function registerCompactionHook(pi: ExtensionAPI, runtime: Runtime): void
 				}
 				snap = snapCutoff(branch, firstKeptEntryId, tailTokens);
 			}
+			retainGap();
 
 			const session = foldSession(branch, runtime.sessionId);
 			runtime.bound = session.bound;

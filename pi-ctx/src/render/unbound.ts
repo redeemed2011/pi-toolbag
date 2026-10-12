@@ -1,4 +1,4 @@
-import type { Observation, PackedInject } from "../types.js";
+import type { Entry, Observation, PackedInject } from "../types.js";
 import { INJECT_CAP, injectTokens } from "./estimate.js";
 
 const HEADER = `# ctx
@@ -6,13 +6,18 @@ bound: 0
 occupancy: none
 no project bound`;
 
-export function renderUnbound(recency: Observation[], firstKeptId?: string): PackedInject {
+function coveredInsideTail(coverId: string, firstKeptId: string, branch: Entry[]): boolean {
+	const cut = branch.findIndex((entry) => entry.id === firstKeptId);
+	if (cut < 0) return coverId === firstKeptId;
+	const cover = branch.findIndex((entry) => entry.id === coverId);
+	if (cover < 0) return false;
+	return cover > cut;
+}
+
+export function renderUnbound(recency: Observation[], firstKeptId?: string, branch: Entry[] = []): PackedInject {
 	const lines: string[] = [HEADER, "## Recency"];
 	for (const obs of recency) {
-		if (firstKeptId && obs.coversUpToId === firstKeptId) {
-			// Tail-covered rows stay out of the recency strip (verbatim suffix holds them).
-			continue;
-		}
+		if (firstKeptId && coveredInsideTail(obs.coversUpToId, firstKeptId, branch)) continue;
 		const line = `- ${obs.headline} (${obs.id})`;
 		const trial = `${lines.join("\n")}\n${line}`;
 		if (injectTokens(trial) > INJECT_CAP) break;

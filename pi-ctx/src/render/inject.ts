@@ -14,7 +14,7 @@ export function renderInject(opts: {
 }): PackedInject {
 	try {
 		if (!opts.session.bound) {
-			return renderUnbound(opts.session.recency, opts.firstKeptId);
+			return renderUnbound(opts.session.recency, opts.firstKeptId, opts.branch);
 		}
 		const live = foldLive(opts.projectRecords ?? []);
 		const occupancy = resolveOccupancy(opts.session, opts.config.occupancy);
