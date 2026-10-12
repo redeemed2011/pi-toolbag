@@ -45,6 +45,23 @@ function eventRecord(event: unknown): Record<string, unknown> {
   return event !== null && typeof event === "object" ? (event as Record<string, unknown>) : {};
 }
 
+function assistantEntryId(event: unknown): string | undefined {
+  const context = eventRecord(event).context;
+  if (context === null || typeof context !== "object") return undefined;
+  const entries = (context as { contextEntries?: unknown }).contextEntries;
+  if (!Array.isArray(entries)) return undefined;
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const row = entries[i];
+    if (row === null || typeof row !== "object") continue;
+    const source = (row as { sourceEntry?: unknown }).sourceEntry;
+    if (source === null || typeof source !== "object") continue;
+    const entry = source as { id?: unknown; type?: unknown; message?: { role?: unknown } };
+    if (entry.type !== "message" || entry.message?.role !== "assistant") continue;
+    if (typeof entry.id === "string" && entry.id) return entry.id;
+  }
+  return undefined;
+}
+
 function modelFromEvent(value: unknown): { provider: string; id: string } | undefined {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as Record<string, unknown>;
@@ -406,20 +423,36 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     }
   });
 
-  pi.on("agent_settled", async (_event, ctx) => {
+  const onFailover = async (
+    ctx: FallbackCtx,
+    event: unknown,
+    mode: "replay" | "safety",
+  ): Promise<{ continue: true; entries: [{ type: "context_edit"; targetId: string; replacement: null }] } | undefined> => {
     if (!config || !enabled) return;
     if (state.failoverInFlight) return;
-    if (!ctx.isIdle()) {
+    if (mode === "safety" && !ctx.isIdle()) {
       emit({ type: "skip", reason: "not-idle" }, ctx);
       return;
     }
 
     const error = extractLastAssistantError(ctx.sessionManager.getBranch());
     if (!error) {
-      state.toolsThisTurn = false;
+      if (mode === "safety") state.toolsThisTurn = false;
       return;
     }
     if (state.refusalCategory) error.category = state.refusalCategory;
+
+    const classification = classifyError(error);
+    if (!isFailoverWorthy(classification)) {
+      if (mode === "safety") {
+        emit({ type: "skip", reason: "not-failover-worthy", classification }, ctx);
+        state.toolsThisTurn = false;
+      }
+      return;
+    }
+    const owned =
+      mode === "replay" ? classification === "quota" || classification === "transient" : classification === "safety";
+    if (!owned) return;
 
     if (!options.retryAfterTools && state.toolsThisTurn) {
       emit({ type: "skip", reason: "tools-already-started" }, ctx);
@@ -435,11 +468,14 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     }
     if (!state.preferred) state.preferred = current;
 
-    const classification = classifyError(error);
-    if (!isFailoverWorthy(classification)) {
-      emit({ type: "skip", reason: "not-failover-worthy", classification }, ctx);
-      state.toolsThisTurn = false;
-      return;
+    let replayTarget: string | undefined;
+    if (mode === "replay") {
+      replayTarget = assistantEntryId(event);
+      if (!replayTarget) {
+        emit({ type: "skip", reason: "no-assistant-entry" }, ctx);
+        state.toolsThisTurn = false;
+        return;
+      }
     }
 
     const bound = Math.max(1, ...config.chains.map((chain) => chain.models.length));
@@ -475,6 +511,25 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
           continue;
         }
 
+        if (mode === "replay" && replayTarget) {
+          state.remainingBudget -= 1;
+          state.toolsThisTurn = false;
+          emit(
+            {
+              type: "failover",
+              from: current,
+              to: decision.next,
+              reason: decision.reason,
+              budget: state.remainingBudget,
+            },
+            ctx,
+          );
+          return {
+            continue: true,
+            entries: [{ type: "context_edit", targetId: replayTarget, replacement: null }],
+          };
+        }
+
         try {
           if (!ctx.isIdle()) {
             emit({ type: "skip", reason: "not-idle-after-setModel" }, ctx);
@@ -485,9 +540,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
           // when the host is synchronous (tests). Budget decrements after
           // a successful call from this process.
           state.deferReturn = true;
-          const sent = pi.sendUserMessage(
-            classification === "safety" ? CONTINUE_AFTER_BLOCK : CONTINUE_AFTER_STOP,
-          );
+          const sent = pi.sendUserMessage(CONTINUE_AFTER_BLOCK);
           await maybeAwait(sent);
         } catch (err) {
           state.deferReturn = false;
@@ -515,7 +568,11 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
         state.failoverInFlight = false;
       }
     }
-  });
+  };
+
+  pi.on("agent_before_settle", (event, ctx) => onFailover(ctx, event, "replay"));
+
+  pi.on("agent_settled", (event, ctx) => onFailover(ctx, event, "safety"));
 
   return {
     getDebugState() {

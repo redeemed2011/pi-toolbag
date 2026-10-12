@@ -1,5 +1,5 @@
 Feature: Attach failover to a Pi session
-  Timing A. setModel plus a class-specific continue. retryAfterTools false skips after tools. Interactive and observers pass true.
+  Quota and transient replay the failed request. Safety sends the block line. retryAfterTools false skips after tools. Interactive and observers pass true.
 
   Background:
     Given a fake host on "grok-cli/grok-4.6" with thinking "low"
@@ -12,7 +12,7 @@ Feature: Attach failover to a Pi session
     And the last assistant error is "usage balance exhausted"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And continue was sent once
+    And the failed request was replayed once
     And preferred is still "grok-cli/grok-4.6"
     And thinking was reapplied as "low"
     And the remaining failover budget is 0
@@ -33,7 +33,7 @@ Feature: Attach failover to a Pi session
     And the last assistant error is "timeout"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And continue was sent once
+    And the failed request was replayed once
 
 
   Scenario: safety after tools sends the block continue message
@@ -73,13 +73,13 @@ Feature: Attach failover to a Pi session
     Then setModel was called with "xai/grok-4.6"
     And the continue message was "The previous model was blocked. Do not repeat that approach. The tool results already in the conversation are done; do not repeat them. Finish the request a different way."
 
-  Scenario: quota wording that contains a safety phrase sends the stop continue message
+  Scenario: quota wording that contains a safety phrase replays the failed request
     Given attach with retryAfterTools true
     And a session start
     And the last assistant error is "billing guardrail_blocked"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And the continue message was "The previous model stopped. The tool results already in the conversation are done; do not repeat them. Finish the original request."
+    And the failed request was replayed once
 
   Scenario: overflow after tools does not failover
     Given attach with retryAfterTools true
@@ -124,7 +124,7 @@ Feature: Attach failover to a Pi session
     And the agent settles
     When a chapter-break compact happens with reason "threshold"
     Then setModel was called with "grok-cli/grok-4.6"
-    And continue count is 1
+    And continue was not sent
     And preferred is still "grok-cli/grok-4.6"
     And the remaining failover budget is 1
 
@@ -135,7 +135,7 @@ Feature: Attach failover to a Pi session
     And the agent settles
     When overflow compact willRetry is true
     Then the current model is "xai/grok-4.6"
-    And continue count is 1
+    And continue was not sent
     And the remaining failover budget is 0
 
   Scenario: quota after overflow still failovers
@@ -145,7 +145,7 @@ Feature: Attach failover to a Pi session
     And the last assistant error is "usage balance exhausted"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And continue was sent once
+    And the failed request was replayed once
 
   Scenario: setModel false skips candidate and tries next
     Given a three-model registry "grok-cli/grok-4.6, xai/grok-4.6, openrouter/other"
@@ -157,7 +157,7 @@ Feature: Attach failover to a Pi session
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
     And setModel was called with "openrouter/other"
-    And continue was sent once
+    And the failed request was replayed once
     And the remaining failover budget is 0
 
   Scenario: setModel throw skips candidate and tries next
@@ -169,7 +169,7 @@ Feature: Attach failover to a Pi session
     And the last assistant error is "timeout"
     When the agent settles
     Then setModel was called with "openrouter/other"
-    And continue was sent once
+    And the failed request was replayed once
     And the remaining failover budget is 0
 
   Scenario: in-flight settle does not double continue
@@ -178,17 +178,16 @@ Feature: Attach failover to a Pi session
     And setModel re-enters agent_settled
     And the last assistant error is "timeout"
     When the agent settles
-    Then continue was sent once
+    Then the failed request was replayed once
 
-  Scenario: continue throw does not decrement budget
+  Scenario: safety continue throw does not decrement budget
     Given attach with retryAfterTools false
     And a session start
     And sendUserMessage throws
-    And the last assistant error is "timeout"
+    And the last assistant error is "guardrail_blocked"
     When the agent settles
     Then the remaining failover budget is 1
     And the current model is "xai/grok-4.6"
-
   Scenario: missing config never setModels
     Given attach with a missing config file
     And a session start
@@ -219,7 +218,7 @@ Feature: Attach failover to a Pi session
     And the agent settles
     When overflow compact willRetry is false
     Then setModel was called with "grok-cli/grok-4.6"
-    And continue count is 1
+    And continue was not sent
     And preferred is still "grok-cli/grok-4.6"
     And the remaining failover budget is 1
 
@@ -230,18 +229,17 @@ Feature: Attach failover to a Pi session
     And the agent settles
     When a chapter-break compact happens with reason "manual"
     Then setModel was called with "grok-cli/grok-4.6"
-    And continue count is 1
+    And continue was not sent
     And preferred is still "grok-cli/grok-4.6"
 
-  Scenario: not idle skips failover
+  Scenario: an active run still replays
     Given attach with retryAfterTools false
     And a session start
     And the host is not idle
     And the last assistant error is "timeout"
     When the agent settles
-    Then setModel was not called
-    And continue was not sent
-
+    Then setModel was called with "xai/grok-4.6"
+    And the failed request was replayed once
   Scenario: observer model not in chain does not failover
     Given a fake host on "openrouter/z-ai/glm-5.3" with thinking "low"
     And the registry includes "openrouter/z-ai/glm-5.3" and "xai/grok-4.6"
@@ -252,14 +250,24 @@ Feature: Attach failover to a Pi session
     When the agent settles
     Then setModel was not called
 
-  Scenario: print mode waits for the continue turn to finish
+  Scenario: print mode replays quota without a user message
     Given the host is print mode
     And attach with retryAfterTools false
     And a session start
     And the last assistant error is "usage balance exhausted"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And continue was sent once
+    And the failed request was replayed once
+    And the host is idle
+
+  Scenario: print mode waits for the safety continue turn to finish
+    Given the host is print mode
+    And attach with retryAfterTools false
+    And a session start
+    And the last assistant error is "guardrail_blocked"
+    When the agent settles
+    Then setModel was called with "xai/grok-4.6"
+    And the block continue message was sent once
     And the host is idle
 
   Scenario: failover emits an event and does not notify

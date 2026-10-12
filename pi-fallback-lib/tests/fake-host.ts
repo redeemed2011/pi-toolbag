@@ -15,6 +15,7 @@ export class FakeHost implements FallbackHost {
   setModelCalls: string[] = [];
   thinkingSets: string[] = [];
   branch: Array<{
+    id?: string;
     type?: string;
     message?: { role?: string; stopReason?: string; errorMessage?: string; rawStopReason?: string };
   }> = [];
@@ -43,12 +44,17 @@ export class FakeHost implements FallbackHost {
     this.handlers.set(event, list);
   }
 
-  async emit(event: string, payload: Record<string, unknown> = {}): Promise<void> {
+  replayResults: unknown[] = [];
+
+  async emit(event: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     this.ctx = this.buildCtx();
     const handlers = this.handlers.get(event) ?? [];
+    let result: unknown;
     for (const handler of handlers) {
-      await handler({ type: event, ...payload }, this.ctx);
+      result = await handler({ type: event, ...payload }, this.ctx);
     }
+    if (event === "agent_before_settle") this.replayResults.push(result);
+    return result;
   }
 
   async setModel(model: unknown): Promise<boolean> {
@@ -70,7 +76,7 @@ export class FakeHost implements FallbackHost {
   sendUserMessage(content: string): void | Promise<void> {
     if (this.throwOnSend) throw new Error("sendUserMessage failed");
     this.sent.push(content);
-    if (this.emitBeforeAgentStartOnSend) return this.emit("before_agent_start");
+    if (this.emitBeforeAgentStartOnSend) return this.emit("before_agent_start").then(() => undefined);
     if (this.mode === "print" || this.mode === "json") {
       this.idle = false;
       setTimeout(() => {
@@ -91,6 +97,7 @@ export class FakeHost implements FallbackHost {
   setAssistantError(text: string, stopReason = "error", rawStopReason?: string): void {
     this.branch = [
       {
+        id: "asst-1",
         type: "message",
         message: {
           role: "assistant",

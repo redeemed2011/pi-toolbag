@@ -419,7 +419,18 @@ Given("sendUserMessage throws", (world) => {
 });
 
 When("the agent settles", async (world) => {
-  await hostOf(world).emit("agent_settled");
+  const host = hostOf(world);
+  await host.emit("agent_before_settle", {
+    outcome: "error",
+    context: {
+      contextEntries: host.branch.map((entry) => ({
+        sourceEntry: entry,
+        messages: entry.message ? [entry.message] : [],
+      })),
+    },
+  });
+  const replay = host.replayResults.at(-1) as { continue?: boolean } | undefined;
+  if (!replay?.continue) await host.emit("agent_settled");
 });
 
 When(/^the user selects model "(.*)" with source "(.*)"$/, async (world, key, source) => {
@@ -463,6 +474,17 @@ Then("setModel was not called", (world) => {
 Then("continue was sent once", (world) => {
   expect(hostOf(world).sent).toEqual([
     "The previous model stopped. The tool results already in the conversation are done; do not repeat them. Finish the original request.",
+  ]);
+});
+
+Then("the failed request was replayed once", (world) => {
+  const host = hostOf(world);
+  expect(host.sent).toEqual([]);
+  expect(host.replayResults).toEqual([
+    {
+      continue: true,
+      entries: [{ type: "context_edit", targetId: "asst-1", replacement: null }],
+    },
   ]);
 });
 

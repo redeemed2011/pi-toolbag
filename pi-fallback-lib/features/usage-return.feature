@@ -1,5 +1,5 @@
 Feature: Return to the preferred model
-  The continue retry stays on the fallback.
+  A replay does not send a user message. The next prompt may return.
   A later prompt returns only when percent is at least 20 points under the cap.
   A return is setModel only and resets the failover budget.
   A 402 does not return while the cap still holds.
@@ -60,22 +60,18 @@ Feature: Return to the preferred model
     And a usage-skip event has reason "unavailable"
     And setModel call count is 1
 
-  Scenario: the continue retry is not switched back
+  Scenario: the next prompt returns after a replay
     Given attach with retryAfterTools false
     And a session start
     And the last assistant error is "usage balance exhausted"
     When the agent settles
-    Then continue was sent once
+    Then the failed request was replayed once
     And the current model is "xai/grok-4.6"
     When the user prompt starts
-    Then the current model is "xai/grok-4.6"
-    And continue count is 1
-    When the user prompt starts
     Then the current model is "grok-cli/grok-4.6"
-    And continue count is 1
+    And continue was not sent
     And the remaining failover budget is 1
     And a usage-return event went to "grok-cli/grok-4.6"
-
   Scenario: a 402 does not return while the cap still holds
     Given a grok percent gate at 90 on provider "grok-cli"
     And usage reads 85
@@ -85,16 +81,16 @@ Feature: Return to the preferred model
     Then setModel was not called
     Given the last assistant error is "usage balance exhausted"
     When the agent settles
-    Then continue was sent once
+    Then the failed request was replayed once
     And the current model is "xai/grok-4.6"
     And the remaining failover budget is 0
     When the user prompt starts
     Then the current model is "xai/grok-4.6"
-    And continue count is 1
+    And continue was not sent
     When the user prompt starts
     Then the current model is "xai/grok-4.6"
     And the remaining failover budget is 0
-    And continue count is 1
+    And continue was not sent
 
   Scenario: a 402 returns once usage is 20 points under
     Given a grok percent gate at 90 on provider "grok-cli"
@@ -108,21 +104,21 @@ Feature: Return to the preferred model
     Given usage reads 70
     When the user prompt starts
     Then the current model is "grok-cli/grok-4.6"
-    And continue count is 1
+    And continue was not sent
     And the remaining failover budget is 1
     And a usage-return event went to "grok-cli/grok-4.6"
 
-  Scenario: a prompt that starts inside continue is not switched back
+  Scenario: a replay does not start a user prompt
     Given sendUserMessage starts the next prompt
     And attach with retryAfterTools false
     And a session start
     And the last assistant error is "usage balance exhausted"
     When the agent settles
     Then the current model is "xai/grok-4.6"
-    And continue was sent once
+    And the failed request was replayed once
     When the user prompt starts
     Then the current model is "grok-cli/grok-4.6"
-    And continue count is 1
+    And continue was not sent
     And a usage-return event went to "grok-cli/grok-4.6"
 
   Scenario: compact does not restore while usage is not 20 points under
@@ -135,7 +131,7 @@ Feature: Return to the preferred model
     When the agent settles
     When a chapter-break compact happens with reason "manual"
     Then the current model is "xai/grok-4.6"
-    And continue count is 1
+    And continue was not sent
     And setModel call count is 1
     And a usage-skip event has reason "usage-held"
 
@@ -150,7 +146,7 @@ Feature: Return to the preferred model
     Given usage reads 70
     When a chapter-break compact happens with reason "manual"
     Then the current model is "grok-cli/grok-4.6"
-    And continue count is 1
+    And continue was not sent
 
   Scenario: a failed return probe stays through compact
     Given a grok percent gate at 90 on provider "grok-cli"

@@ -23,7 +23,7 @@ Put `"npm:pi-auto-fallback"` back in `packages` and remove `git:github.com/redee
 
 ## Behaviour
 
-- Wait until Pi has given up (`agent_settled`), then `setModel` and send the class-specific continue message.
+- After Pi has given up its own retries, quota and timeout replay the failed request (`agent_before_settle`: `setModel`, omit the failed assistant, `continue`). Safety waits for `agent_settled`, then `setModel` and sends the block line.
 - Fail over after tools have started. Quota, timeout, and safety still hop. Auth, overflow, abort, an ordinary refusal, and `reasoning_extraction` do not.
 - Do not write to stdout/stderr. Failover reports through `ctx.ui.notify`. The library emits structured events; this extension notifies only on a successful hop.
 - After `/compact` or threshold compact, restore the preferred model unless a usage gate has not recovered by at least 20 points. A failed usage probe does not restore.
