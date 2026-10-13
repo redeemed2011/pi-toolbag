@@ -756,7 +756,7 @@ describe("promoter harvest", () => {
 				{ type: "constraint", quote: rule, headline: "Shelf as constraint" },
 			],
 		});
-		expect(parsed.shelf?.some((item) => item.type === "evidence" || (item.type as string) === "constraint")).toBe(false);
+		expect(parsed.shelf?.some((item) => (item.type as string) === "evidence" || (item.type as string) === "constraint")).toBe(false);
 		const report = applyPromoterResult({
 			projectId: "p-live-shape",
 			sessionId: "sess",
