@@ -191,6 +191,22 @@ export type AttachHandle = {
   };
 };
 
+/**
+ * Hand-copied from `$PI/dist/core/extensions/types.d.ts` for `@earendil-works/pi-coding-agent` 1.2.0.
+ * Fields stay optional so an older Pi still parses. This package does not depend on Pi.
+ */
+export type SettledEventLike = { type: "agent_settled"; aborted?: boolean };
+export type BeforeAgentStartEventLike = {
+  type: "before_agent_start";
+  messageType?: "user" | "custom";
+};
+export type SessionCompactEventLike = {
+  type: "session_compact";
+  reason?: string;
+  willRetry?: boolean;
+  compactionEntry?: { type?: string; details?: unknown };
+};
+
 export type FallbackHost = {
   on(event: string, handler: (event: unknown, ctx: FallbackCtx) => unknown): void;
   setModel(model: unknown): Promise<boolean>;
