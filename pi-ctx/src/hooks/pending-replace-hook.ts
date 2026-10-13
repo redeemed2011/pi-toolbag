@@ -21,16 +21,18 @@ const DEAD_STOP = new Set(["error", "aborted"]);
 
 /**
  * A parent turn is one settled agent run. Tool rounds are not parent turns.
- * `agent_settled` has no payload; a turn_end-shaped event counts only when it
- * will not continue into another tool call.
+ * `agent_settled.aborted` is a cancelled run. A turn_end-shaped event counts
+ * only when it will not continue into another tool call.
  */
 export function isCompletedParentTurn(event: {
+	aborted?: boolean;
 	outcome?: string;
 	continue?: boolean;
 	toolResults?: unknown[];
 	message?: { stopReason?: string };
 } | null | undefined): boolean {
 	if (!event) return true;
+	if (event.aborted === true) return false;
 	if (event.outcome === "aborted" || event.outcome === "error") return false;
 	if (event.outcome && event.outcome !== "completed") return false;
 	if (event.continue === true) return false;
@@ -53,9 +55,9 @@ export function registerPendingReplaceHook(pi: ExtensionAPI, runtime: Runtime): 
 	const gate: PendingReplaceGate = { inFlight: false };
 	// agent_settled: one event after the tool loop, retries, and follow-ups finish.
 	// turn_end fires per LLM round, so counting it reopened HITL inside one reply.
-	pi.on("agent_settled", ((event: unknown, ctx: TurnCtx) => {
-		return onPendingReplaceSettled(pi, runtime, ctx, gate, event);
-	}) as never);
+	pi.on("agent_settled", (event, ctx) =>
+		onPendingReplaceSettled(pi, runtime, ctx as unknown as TurnCtx, gate, event),
+	);
 }
 
 export async function onPendingReplaceSettled(

@@ -12,6 +12,7 @@ import { promoterKickoffPrompt } from "../src/promoter/io.js";
 import { PROMOTER_EXTENSION_PATH, receiptText } from "../src/promoter/run.js";
 import { DEFER_ONE, KEEP, SUPERSEDE, runPendingReplaceHitl } from "../src/promoter/hitl.js";
 import { isCompletedParentTurn, onPendingReplaceSettled, registerPendingReplaceHook } from "../src/hooks/pending-replace-hook.js";
+import { CTX_PENDING_TURN } from "../src/types.js";
 import { parsePromoterResult } from "../src/promoter/schema.js";
 import { renderInject } from "../src/render/inject.js";
 import { Runtime } from "../src/runtime.js";
@@ -644,6 +645,114 @@ describe("promoter harvest", () => {
 		expect(isCompletedParentTurn({ message: { stopReason: "tool_calls" } })).toBe(false);
 		expect(isCompletedParentTurn({ outcome: "error" })).toBe(false);
 		expect(isCompletedParentTurn({ continue: true })).toBe(false);
+	});
+
+	function abortedSettleFixture(projectId: string) {
+		createProject(projectId, projectId);
+		const live = constraint("c1", "never dump the buffer", "all");
+		live.headline = "never dump";
+		live.directive = live.body;
+		appendProjectRecord(projectId, "seed", live);
+		const quote = "Bind is consent to promote what should clearly be promoted";
+		applyPromoterResult({
+			projectId,
+			sessionId: "sess",
+			occupancy: "gated-edge",
+			siblingKnob: 0,
+			claimedId: null,
+			existing: [live],
+			corpus: [quote],
+			result: { promote: [], pending_replace: [{ quote, live_id: "c1" }] },
+		});
+		const runtime = new Runtime();
+		runtime.bound = true;
+		runtime.projectId = projectId;
+		runtime.sessionId = "sess";
+		const branch: { type: string; id: string; customType?: string; data?: unknown; message?: { role?: string; stopReason?: string } }[] = [
+			{ type: "custom", id: "prior", customType: CTX_PENDING_TURN, data: { n: 1 } },
+		];
+		const appended: string[] = [];
+		const pi = {
+			appendEntry: (customType: string, data?: unknown) => {
+				appended.push(customType);
+				branch.push({ type: "custom", id: `c${branch.length}`, customType, data });
+			},
+		};
+		const ctx = {
+			hasUI: true,
+			ui: {
+				select: async () => {
+					throw new Error("aborted settle must not open HITL");
+				},
+				confirm: async () => false,
+				input: async () => undefined,
+				notify: () => {},
+			},
+			sessionManager: { getBranch: () => branch, getSessionId: () => "sess" },
+		};
+		const turns = () => foldSession(branch as never, "sess").pendingReplaceTurns;
+		return { runtime, branch, pi, ctx, appended, turns };
+	}
+
+	it("does not count an aborted settle when the last assistant stopped", async () => {
+		const { runtime, branch, pi, ctx, appended, turns } = abortedSettleFixture("p-abort-stop");
+		branch.push({ type: "message", id: "a", message: { role: "assistant", stopReason: "stop" } });
+		await onPendingReplaceSettled(pi as never, runtime, ctx, { inFlight: false }, {
+			type: "agent_settled",
+			aborted: true,
+		});
+		expect(appended).toEqual([]);
+		expect(turns()).toBe(1);
+	});
+
+	it("does not count an aborted compaction settle that leaves toolUse", async () => {
+		const { runtime, branch, pi, ctx, appended, turns } = abortedSettleFixture("p-abort-compact");
+		branch.push({ type: "message", id: "a", message: { role: "assistant", stopReason: "toolUse" } });
+		branch.push({ type: "message", id: "r", message: { role: "toolResult" } });
+		await onPendingReplaceSettled(pi as never, runtime, ctx, { inFlight: false }, {
+			type: "agent_settled",
+			aborted: true,
+		});
+		expect(appended).toEqual([]);
+		expect(turns()).toBe(1);
+	});
+
+	it("counts a healthy settle when aborted is false", async () => {
+		const { runtime, branch, pi, ctx, appended, turns } = abortedSettleFixture("p-abort-false");
+		branch.push({ type: "message", id: "a", message: { role: "assistant", stopReason: "stop" } });
+		await onPendingReplaceSettled(pi as never, runtime, ctx, { inFlight: false }, {
+			type: "agent_settled",
+			aborted: false,
+		});
+		expect(appended).toEqual([CTX_PENDING_TURN]);
+		expect(turns()).toBe(2);
+	});
+
+	it("counts a healthy settle when aborted is missing", async () => {
+		const { runtime, branch, pi, ctx, appended, turns } = abortedSettleFixture("p-abort-missing");
+		branch.push({ type: "message", id: "a", message: { role: "assistant", stopReason: "stop" } });
+		await onPendingReplaceSettled(pi as never, runtime, ctx, { inFlight: false }, { type: "agent_settled" });
+		expect(appended).toEqual([CTX_PENDING_TURN]);
+		expect(turns()).toBe(2);
+	});
+
+	it("skips a non-aborted settle when the last assistant errored", async () => {
+		const { runtime, branch, pi, ctx, appended, turns } = abortedSettleFixture("p-abort-error");
+		branch.push({ type: "message", id: "a", message: { role: "assistant", stopReason: "error" } });
+		await onPendingReplaceSettled(pi as never, runtime, ctx, { inFlight: false }, {
+			type: "agent_settled",
+			aborted: false,
+		});
+		expect(appended).toEqual([]);
+		expect(turns()).toBe(1);
+	});
+
+	it("isCompletedParentTurn rejects only an aborted flag", () => {
+		expect(isCompletedParentTurn({ type: "agent_settled", aborted: true } as never)).toBe(false);
+		expect(isCompletedParentTurn({ type: "agent_settled", aborted: true, message: { stopReason: "stop" } } as never)).toBe(false);
+		expect(isCompletedParentTurn({ type: "agent_settled", aborted: false } as never)).toBe(true);
+		expect(isCompletedParentTurn({ type: "agent_settled" } as never)).toBe(true);
+		expect(isCompletedParentTurn({ type: "agent_settled", aborted: false } as never)).toBe(true);
 	});
 
 	it("registers the reopen counter on agent_settled", () => {
