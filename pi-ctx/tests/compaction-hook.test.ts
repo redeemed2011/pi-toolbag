@@ -191,4 +191,30 @@ describe("session_before_compact", () => {
 	});
 
 
+	it("writes resumeInPlace on both paths only while compactResume is set", async () => {
+		const runtime = new Runtime();
+		runtime.compactResume = true;
+		const normal = (await captureHook(runtime)(event, ctxOf(branch))) as {
+			compaction: { details: { resumeInPlace?: boolean } };
+		};
+		expect(normal.compaction.details.resumeInPlace).toBe(true);
+
+		const failed = (await captureHook(runtime)(event, ctxOf(branch, { throwOnBranch: true }))) as {
+			compaction: { details: { resumeInPlace?: boolean; recall_error?: number } };
+		};
+		expect(failed.compaction.details.recall_error).toBe(1);
+		expect(failed.compaction.details.resumeInPlace).toBe(true);
+
+		runtime.compactResume = false;
+		const plain = (await captureHook(runtime)(event, ctxOf(branch))) as {
+			compaction: { details: { resumeInPlace?: boolean } };
+		};
+		expect(plain.compaction.details.resumeInPlace).toBeUndefined();
+		const plainFailed = (await captureHook(runtime)(event, ctxOf(branch, { throwOnBranch: true }))) as {
+			compaction: { details: { resumeInPlace?: boolean; recall_error?: number } };
+		};
+		expect(plainFailed.compaction.details.recall_error).toBe(1);
+		expect(plainFailed.compaction.details.resumeInPlace).toBeUndefined();
+	});
+
 });

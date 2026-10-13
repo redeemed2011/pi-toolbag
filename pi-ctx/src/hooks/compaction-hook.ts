@@ -128,6 +128,7 @@ export function registerCompactionHook(pi: ExtensionAPI, runtime: Runtime): void
 						occupancy: session.occupancy ?? runtime.config.occupancy,
 						bound: session.bound ? 1 : 0,
 						claim: session.claimedId,
+						...(runtime.compactResume ? { resumeInPlace: true } : {}),
 					},
 				},
 			};
@@ -145,7 +146,13 @@ export function registerCompactionHook(pi: ExtensionAPI, runtime: Runtime): void
 					summary: fallback.text,
 					firstKeptEntryId: preparation.firstKeptEntryId,
 					tokensBefore: preparation.tokensBefore,
-					details: { type: CTX_FOLDED, version: 1, gate: 1, recall_error: 1 },
+					details: {
+						type: CTX_FOLDED,
+						version: 1,
+						gate: 1,
+						recall_error: 1,
+						...(runtime.compactResume ? { resumeInPlace: true } : {}),
+					},
 				},
 			};
 		} finally {

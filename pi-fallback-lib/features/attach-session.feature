@@ -308,6 +308,69 @@ Feature: Attach failover to a Pi session
     Then the settle rejected with "deferred send failed"
     And a failover event was emitted
     And no continue-threw event was emitted
+
+  Scenario: manual compact with resume in place does not restore
+    Given attach with retryAfterTools false
+    And a session start
+    And the last assistant error is "timeout"
+    And the agent settles
+    And the leaf compaction resumes in place with summary "folded"
+    When a chapter-break compact happens with reason "manual"
+    Then setModel call count is 1
+    And a stay event has reason "resume-in-place"
+    And the current model is "xai/grok-4.6"
+    And the remaining failover budget is 0
+    And attempted keys are still "grok-cli/grok-4.6"
+
+  Scenario: manual compact without the resume flag still restores
+    Given attach with retryAfterTools false
+    And a session start
+    And the last assistant error is "timeout"
+    And the agent settles
+    And the leaf compaction has summary "folded" and no resume flag
+    When a chapter-break compact happens with reason "manual"
+    Then setModel was called with "grok-cli/grok-4.6"
+    And the remaining failover budget is 1
+    And attempted keys were cleared
+
+  Scenario: the leaf compaction wins over an older event entry
+    Given attach with retryAfterTools false
+    And a session start
+    And the last assistant error is "timeout"
+    And the agent settles
+    And the leaf compaction resumes in place with summary "folded"
+    When a manual compact event carries an older compaction with summary "folded" and no resume flag
+    Then setModel call count is 1
+    And a stay event has reason "resume-in-place"
+    And the remaining failover budget is 0
+    And attempted keys are still "grok-cli/grok-4.6"
+
+  Scenario: a later message does not hide the resume flag
+    Given attach with retryAfterTools false
+    And a session start
+    And the last assistant error is "timeout"
+    And the agent settles
+    And the leaf compaction resumes in place with summary "folded"
+    And a non-compaction entry was appended
+    When a chapter-break compact happens with reason "manual"
+    Then setModel call count is 1
+    And a stay event has reason "resume-in-place"
+    And the remaining failover budget is 0
+
+  Scenario: a custom start leaves deferReturn set and the user continue consumes it
+    Given sendUserMessage starts the next prompt
+    And a custom start runs before the deferred user continue
+    And attach with retryAfterTools false
+    And a session start
+    And the last assistant error is "guardrail_blocked"
+    When the agent settles
+    Then the current model is "xai/grok-4.6"
+    And setModel call count is 1
+    And no usage-return was emitted
+    When the user prompt starts
+    Then the current model is "grok-cli/grok-4.6"
+    And a usage-return event went to "grok-cli/grok-4.6"
+
   Scenario: failover emits an event and does not notify
     Given the host has UI
     And attach with retryAfterTools false

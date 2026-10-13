@@ -78,3 +78,28 @@ Feature: Usage gate switches before the request
     Then the current model is "xai/grok-4.6"
     And setModel call count is 1
     And a usage-skip event has reason "usage-held"
+
+  Scenario: a custom prompt does not switch on a crossed gate
+    Given usage reads 92
+    And attach with retryAfterTools false
+    And a session start
+    When a custom prompt starts
+    Then setModel was not called
+    And continue was not sent
+    And no usage-switch was emitted
+
+  Scenario: a user prompt still switches on a crossed gate
+    Given usage reads 92
+    And attach with retryAfterTools false
+    And a session start
+    When a user prompt starts
+    Then setModel was called with "xai/grok-4.6"
+    And a usage-switch event went to "xai/grok-4.6"
+
+  Scenario: a prompt with no message type is treated as user
+    Given usage reads 92
+    And attach with retryAfterTools false
+    And a session start
+    When the user prompt starts
+    Then setModel was called with "xai/grok-4.6"
+    And a usage-switch event went to "xai/grok-4.6"

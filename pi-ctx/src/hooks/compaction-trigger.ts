@@ -56,9 +56,11 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 		const notify = notifyFrom(ctx);
 		runtime.compactInFlight = true;
 		notify?.("ctx: context threshold reached — compacting…", "info");
+		runtime.compactResume = shouldResume;
 
 		ctx.compact({
 			onComplete: () => {
+				runtime.compactResume = false;
 				runtime.compactInFlight = false;
 				notify?.("ctx: compaction complete", "info");
 				if (!shouldResume || !runtime.enabled || runtime.config.passive) return;
@@ -74,6 +76,7 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 				}
 			},
 			onError: (error: { message: string }) => {
+				runtime.compactResume = false;
 				runtime.compactInFlight = false;
 				if (error.message === "Compaction cancelled") return;
 				notify?.(`ctx: ${error.message}`, "error");

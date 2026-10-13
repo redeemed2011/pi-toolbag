@@ -466,6 +466,22 @@ When("overflow compact willRetry is false", async (world) => {
   await hostOf(world).emit("session_compact", { reason: "overflow", willRetry: false });
 });
 
+When(/^a manual compact event carries an older compaction with summary "(.*)" and no resume flag$/, async (world, summary) => {
+  await hostOf(world).emit("session_compact", {
+    reason: "manual",
+    willRetry: false,
+    compactionEntry: { type: "compaction", summary, details: {} },
+  });
+});
+
+When("a custom prompt starts", async (world) => {
+  await hostOf(world).emit("before_agent_start", { messageType: "custom" });
+});
+
+When("a user prompt starts", async (world) => {
+  await hostOf(world).emit("before_agent_start", { messageType: "user" });
+});
+
 Given("the host has UI", (world) => {
   hostOf(world).hasUI = true;
 });
@@ -483,6 +499,22 @@ Given("the host is json mode", (world) => {
 
 Given("the deferred continue throws", (world) => {
   hostOf(world).throwOnDeferredSend = true;
+});
+
+Given(/^the leaf compaction resumes in place with summary "(.*)"$/, (world, summary) => {
+  hostOf(world).branch.push({ type: "compaction", summary, details: { resumeInPlace: true } });
+});
+
+Given(/^the leaf compaction has summary "(.*)" and no resume flag$/, (world, summary) => {
+  hostOf(world).branch.push({ type: "compaction", summary, details: {} });
+});
+
+Given("a non-compaction entry was appended", (world) => {
+  hostOf(world).branch.push({ type: "message", id: "after-compact", message: { role: "user" } });
+});
+
+Given("a custom start runs before the deferred user continue", (world) => {
+  hostOf(world).emitCustomBeforeDeferredUser = true;
 });
 
 Then(/^setModel was called with "(.*)"$/, (world, key) => {
@@ -595,6 +627,28 @@ Then("no continue-threw event was emitted", (world) => {
   expect(events.some((event) => event.type === "skip" && event.reason === "continue-threw")).toBe(false);
 });
 
+Then(/^a stay event has reason "(.*)"$/, (world, reason) => {
+  const events = world.events as Array<{ type: string; reason?: string }>;
+  expect(events.some((event) => event.type === "stay" && event.reason === reason)).toBe(true);
+});
+
+Then(/^attempted keys are still "(.*)"$/, (world, keys) => {
+  expect(handleOf(world).getDebugState().attempted).toEqual(parseKeys(keys));
+});
+
+Then("attempted keys were cleared", (world) => {
+  expect(handleOf(world).getDebugState().attempted).toEqual([]);
+});
+
+Then("no usage-return was emitted", (world) => {
+  const events = world.events as Array<{ type: string }>;
+  expect(events.some((event) => event.type === "usage-return")).toBe(false);
+});
+
+Then("no usage-switch was emitted", (world) => {
+  const events = world.events as Array<{ type: string }>;
+  expect(events.some((event) => event.type === "usage-switch")).toBe(false);
+});
 Then("the host is idle", (world) => {
   expect(hostOf(world).idle).toBe(true);
 });

@@ -17,6 +17,8 @@ export class FakeHost implements FallbackHost {
   branch: Array<{
     id?: string;
     type?: string;
+    summary?: string;
+    details?: unknown;
     message?: { role?: string; stopReason?: string; errorMessage?: string; rawStopReason?: string };
   }> = [];
   registry = new Map<string, ModelStub>();
@@ -34,6 +36,8 @@ export class FakeHost implements FallbackHost {
   throwOnDeferredSend = false;
   /** Test opt-in: the deferred send re-emits `agent_settled`. */
   reemitSettledOnDeferredSend = false;
+  /** Test opt-in: emit a custom start before the deferred user start. */
+  emitCustomBeforeDeferredUser = false;
 
   private handlers = new Map<string, Array<(event: unknown, ctx: FallbackCtx) => unknown>>();
   constructor(model: ModelStub, thinking = "low") {
@@ -106,6 +110,12 @@ export class FakeHost implements FallbackHost {
         this.recordedAfterHandler = true;
         this.idle = false;
         this.idle = true;
+        if (this.emitCustomBeforeDeferredUser) {
+          await this.emit("before_agent_start", { messageType: "custom" });
+        }
+        if (this.emitBeforeAgentStartOnSend) {
+          await this.emit("before_agent_start", { messageType: "user" });
+        }
         if (this.reemitSettledOnDeferredSend) await this.emit("agent_settled");
       });
       return;

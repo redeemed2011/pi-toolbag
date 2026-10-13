@@ -24,6 +24,7 @@ export class Runtime {
 	readonly observerTasks = new Set<Promise<void>>();
 	dispatchedCoversUpToId: string | undefined;
 	compactInFlight = false;
+	compactResume = false;
 	compactHookInFlight = false;
 	lastWorkerError: string | undefined;
 	lastCompactionObserverWait: "skipped" | "waited" | undefined;

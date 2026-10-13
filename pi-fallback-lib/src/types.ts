@@ -124,7 +124,7 @@ export type FallbackEvent =
       budget: number;
     }
   | { type: "restore"; ok: boolean; to: ModelKey; reason?: string }
-  | { type: "stay"; reason: "overflow-will-retry" }
+  | { type: "stay"; reason: "overflow-will-retry" | "resume-in-place" }
   | { type: "config-error"; reason: ParseFailReason | "missing"; path?: string }
   | {
       type: "host-error";

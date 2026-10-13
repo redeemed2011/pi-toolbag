@@ -5,6 +5,7 @@ import { decideFailover, findChain, modelKey, splitModelKey } from "./kernel.js"
 import { loadFallbackConfigFile } from "./load.js";
 import type {
   AttachHandle,
+  BeforeAgentStartEventLike,
   AttachOptions,
   FallbackConfig,
   FallbackCtx,
@@ -88,12 +89,24 @@ function refusalCategoryFromStream(event: unknown): string | undefined {
   return typeof category === "string" && category ? category : undefined;
 }
 
-/**
- * Since Pi 0.87, `sendUserMessage` from an `agent_settled` handler is deferred
- * until all settled handlers return, and the outer `prompt()` awaits that
- * deferred run. Print/JSON therefore does not exit on the failed assistant.
- * Do not wait inside the handler: the continue cannot start until it returns.
- */
+function resumeInPlace(entry: unknown): boolean {
+  if (!entry || typeof entry !== "object") return false;
+  const details = (entry as { details?: unknown }).details;
+  if (!details || typeof details !== "object" || Array.isArray(details)) return false;
+  return (details as { resumeInPlace?: unknown }).resumeInPlace === true;
+}
+
+function newestCompaction(branch: ReadonlyArray<{ type?: string }>, fallback: unknown): unknown {
+  for (let index = branch.length - 1; index >= 0; index -= 1) {
+    if (branch[index]?.type === "compaction") return branch[index];
+  }
+  return fallback;
+}
+
+// Since Pi 0.87, `sendUserMessage` from an `agent_settled` handler is deferred
+// until all settled handlers return, and the outer `prompt()` awaits that
+// deferred run. Print/JSON therefore does not exit on the failed assistant.
+// Do not wait inside the handler: the continue cannot start until it returns.
 
 export function attachFallback(pi: FallbackHost, options: AttachOptions): AttachHandle {
   const emit = (event: FallbackEvent, ctx?: FallbackCtx): void => {
@@ -291,8 +304,9 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     if (category) state.refusalCategory = category;
   });
 
-  pi.on("before_agent_start", async (_event, ctx) => {
+  pi.on("before_agent_start", async (event, ctx) => {
     state.refusalCategory = undefined;
+    if ((event as BeforeAgentStartEventLike).messageType === "custom") return;
     if (options.checkUsage === false) return;
     if (!config?.enabled) return;
     if (state.deferReturn) {
@@ -369,6 +383,11 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       return;
     }
     if (reason === "manual" || reason === "threshold" || (reason === "overflow" && !willRetry)) {
+      const entry = newestCompaction(ctx.sessionManager.getBranch(), rec.compactionEntry);
+      if (reason === "manual" && resumeInPlace(entry)) {
+        emit({ type: "stay", reason: "resume-in-place" }, ctx);
+        return;
+      }
       const current = currentKey(ctx);
       if (state.preferred && current !== state.preferred) {
         if (options.checkUsage === false) {
