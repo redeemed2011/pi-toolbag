@@ -141,6 +141,46 @@ describe("tool results pi can replay", () => {
 		expect(text).toContain("empty tool result");
 	});
 
+	it("jsonResult sets structuredContent from the parsed text", () => {
+		const value = { bound: false, message: "no project bound", recency: [] as string[], dropped: undefined };
+		const result = jsonResult(value);
+		expect(result.structuredContent).toEqual(JSON.parse(replayedText(result)));
+		expect(result.structuredContent).toEqual({ bound: false, message: "no project bound", recency: [] });
+
+		const empty = jsonResult(undefined);
+		expect(empty.structuredContent).toEqual(JSON.parse(replayedText(empty)));
+		expect(empty.structuredContent).toEqual({ error: "empty tool result" });
+	});
+
+	it("ctx tools share one object schema and the ctx namespace", () => {
+		const tools = new Map<
+			string,
+			{
+				name: string;
+				outputSchema?: { type?: string; additionalProperties?: unknown };
+				namespace?: { name?: string; aliases?: unknown; description?: unknown };
+				annotations?: { readOnlyHint?: boolean };
+			}
+		>();
+		registerTools(
+			{
+				registerTool: (tool: { name: string }) => {
+					tools.set(tool.name, tool as never);
+				},
+				appendEntry: () => {},
+			} as never,
+			new Runtime(),
+		);
+		const readers = new Set(["ctx_get", "ctx_zoom", "ctx_frontier"]);
+		expect(tools.size).toBeGreaterThan(readers.size);
+		for (const tool of tools.values()) {
+			expect(tool.outputSchema).toMatchObject({ type: "object", additionalProperties: true });
+			expect(tool.namespace).toEqual({ name: "ctx" });
+			if (readers.has(tool.name)) expect(tool.annotations).toEqual({ readOnlyHint: true });
+			else expect(tool.annotations).toBeUndefined();
+		}
+	});
+
 	it("every ctx tool execute returns replayable text", async () => {
 		const tools = new Map<string, { execute: (...args: never[]) => Promise<{ content: Array<{ type: string; text?: unknown }> }> }>();
 		registerTools(

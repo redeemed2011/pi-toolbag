@@ -51,6 +51,9 @@ export type FailoverError = {
   rawStopReason?: string;
   /** Anthropic stop_details.category when attach saw it on the stream. Not stored on the message. */
   category?: string;
+  /** Physical model from the assistant message. Absent when either field is empty. */
+  provider?: string;
+  model?: string;
 };
 
 export type ErrorClass =

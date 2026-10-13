@@ -456,13 +456,15 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       return;
     }
 
-    const current = currentKey(ctx);
+    const virtual = currentKey(ctx);
+    const physical = error.provider && error.model ? modelKey(error.provider, error.model) : undefined;
+    const current = physical ?? virtual;
     if (!current) {
       emit({ type: "skip", reason: "no-current-model" }, ctx);
       state.toolsThisTurn = false;
       return;
     }
-    if (!state.preferred) state.preferred = current;
+    state.preferred ??= virtual ?? current;
 
     let replayTarget: string | undefined;
     if (mode === "replay") {

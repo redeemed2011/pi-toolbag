@@ -3,7 +3,7 @@ import { resolveObserverModel } from "../config.js";
 import { entryIndexForId, latestCoverageMarkerId, rawTokensAfterIndex, selectSourceSlice, type SourceSlice } from "../progress.js";
 import type { Runtime } from "../runtime.js";
 import { nowTimestamp, serializeSourceEntries } from "../serialize.js";
-import { buildWorkerArgv, prepareWorkerCwd, spawnWorker } from "../spawn/observer.js";
+import { buildWorkerArgv, isTruncatedPrintExit, prepareWorkerCwd, spawnWorker } from "../spawn/observer.js";
 import { readObserverResult, runResultPath } from "../spawn/runs.js";
 import { coverageCommit } from "../commit.js";
 import type { Entry, Observation } from "../types.js";
@@ -108,7 +108,8 @@ async function dispatchObserver(
 			CTX_RUN_ID: runId,
 		};
 		const exit = await spawnWorker({ argv, cwd, env, signal: controller.signal });
-		if (exit.code !== 0) {
+		const truncated = isTruncatedPrintExit(exit);
+		if (exit.code !== 0 && !truncated) {
 			throw new Error(
 				`observer exited with code ${exit.code}${exit.stderr ? `: ${exit.stderr.trim().slice(0, 200)}` : ""}`,
 			);
@@ -124,6 +125,11 @@ async function dispatchObserver(
 			ts: raw.timestamp,
 			session: sessionId,
 		}));
+		if (truncated && observations.length === 0) {
+			throw new Error(
+				`observer exited with code ${exit.code}${exit.stderr ? `: ${exit.stderr.trim().slice(0, 200)}` : ""}`,
+			);
+		}
 
 		const commit = coverageCommit({ ok: true, observations, coversUpToId, about_claim_id: stamp });
 		if (commit) pi.appendEntry(commit.customType, commit.data);

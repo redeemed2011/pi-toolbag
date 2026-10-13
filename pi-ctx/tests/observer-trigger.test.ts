@@ -143,4 +143,57 @@ describe("observer after the session ctx is stale", () => {
 		expect(ui.readsAfterStale()).toBe(0);
 		expect(runtime.lastWorkerError).toMatch(/stale/);
 	});
+
+	const truncated = "Response was truncated: the model reached its output token limit.";
+
+	it("commits observations when print mode exits 1 on a length stop", async () => {
+		const { runtime, appended, task, job } = start(false);
+		writeObserverResult(runResultPath(job.cwd), {
+			observations: [{ timestamp: "2026-09-14T10:00:00.000Z", content: "noted" }],
+		});
+		job.resolve({ code: 1, signal: null, stderr: truncated });
+		await expect(task).resolves.toBeUndefined();
+		expect(appended.map((entry) => entry.customType)).toEqual(["ctx.observations.recorded"]);
+		expect(runtime.lastWorkerError).toBeUndefined();
+	});
+
+	it("does not commit a length stop with no observations", async () => {
+		const { runtime, appended, task, job } = start(false);
+		writeObserverResult(runResultPath(job.cwd), { observations: [] });
+		job.resolve({ code: 1, signal: null, stderr: truncated });
+		await expect(task).resolves.toBeUndefined();
+		expect(appended).toEqual([]);
+		expect(runtime.lastWorkerError).toMatch(/exited with code 1/);
+	});
+
+	it("does not commit observations when stderr is not the truncation sentence", async () => {
+		const { runtime, appended, task, job } = start(false);
+		writeObserverResult(runResultPath(job.cwd), {
+			observations: [{ timestamp: "2026-09-14T10:00:00.000Z", content: "noted" }],
+		});
+		job.resolve({ code: 1, signal: null, stderr: "provider exploded" });
+		await expect(task).resolves.toBeUndefined();
+		expect(appended).toEqual([]);
+		expect(runtime.lastWorkerError).toMatch(/exited with code 1/);
+	});
+
+	it("does not commit observations when the worker is signalled", async () => {
+		const { runtime, appended, task, job } = start(false);
+		writeObserverResult(runResultPath(job.cwd), {
+			observations: [{ timestamp: "2026-09-14T10:00:00.000Z", content: "noted" }],
+		});
+		job.resolve({ code: null, signal: "SIGTERM", stderr: truncated });
+		await expect(task).resolves.toBeUndefined();
+		expect(appended).toEqual([]);
+		expect(runtime.lastWorkerError).toMatch(/exited with code/);
+	});
+
+	it("commits an empty cover when print mode exits 0 with no observations", async () => {
+		const { runtime, appended, task, job } = start(false);
+		writeObserverResult(runResultPath(job.cwd), { observations: [] });
+		job.resolve({ code: 0, signal: null, stderr: "" });
+		await expect(task).resolves.toBeUndefined();
+		expect(appended.map((entry) => entry.customType)).toEqual(["ctx.observations.empty_cover"]);
+		expect(runtime.lastWorkerError).toBeUndefined();
+	});
 });

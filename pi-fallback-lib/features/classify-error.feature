@@ -26,6 +26,15 @@ Feature: Classify settled assistant errors
       | context window             | overflow      | false  |
       | prompt too long            | overflow      | false  |
       | nope                       | other         | false  |
+      | server_busy                | transient     | true   |
+      | servers are currently busy | transient     | true   |
+      | currently experiencing high demand | transient | true |
+      | model is at capacity      | transient     | true   |
+      | provider returned an error | transient     | true   |
+      | Provider returned error    | transient     | true   |
+      | The provider returned an error. Please try again. | transient | true |
+      | server error               | transient     | true   |
+      | a storage error occurred   | other         | false  |
 
   Scenario: 402 status with empty text is quota in the kernel
     Given an error with empty text and status 402

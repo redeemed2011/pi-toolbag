@@ -415,3 +415,17 @@ Feature: Attach failover to a Pi session
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
     And the block continue message was sent once
+
+  Scenario: a virtual session failovers on the physical assistant and returns
+    Given a fake host on "virtual/session" with thinking "low"
+    And the registry includes "virtual/session" and "grok-cli/grok-4.6"
+    And the registry includes "xai/grok-4.6" and "grok-cli/grok-4.6"
+    And the live grok chain config with budget 1
+    And attach with retryAfterTools false
+    And the last assistant error is "timeout" from "grok-cli/grok-4.6"
+    When the agent settles
+    Then setModel was called with "xai/grok-4.6"
+    And preferred is still "virtual/session"
+    When the user prompt starts
+    Then the current model is "virtual/session"
+    And a usage-return event went to "virtual/session"

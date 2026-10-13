@@ -358,8 +358,13 @@ Given("a tool has started", async (world) => {
   await hostOf(world).emit("tool_execution_start", { toolName: "bash" });
 });
 
-Given(/^the last assistant error is "(.*)"$/, (world, text) => {
+Given(/^the last assistant error is "([^"]*)"$/, (world, text) => {
   hostOf(world).setAssistantError(text);
+});
+
+Given(/^the last assistant error is "(.*)" from "(.*)"$/, (world, text, key) => {
+  const model = parseModel(key);
+  hostOf(world).setAssistantError(text, "error", undefined, { provider: model.provider, model: model.id });
 });
 
 Given(/^the last assistant raw stop reason is "(.*)"$/, (world, raw) => {

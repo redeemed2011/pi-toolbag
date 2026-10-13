@@ -540,7 +540,7 @@ type DiffShell = { clear?: () => void; addChild?: (child: unknown) => void };
 type DiffHost = {
 	toolName?: string;
 	args?: unknown;
-	result?: { content?: unknown; details?: { diff?: unknown; diffLineNumbers?: unknown; warnings?: string[] }; isError?: boolean };
+	result?: { content?: unknown; details?: { diff?: unknown; diffLineNumbers?: unknown; warnings?: string[] }; isError?: boolean; durationMs?: number };
 	isPartial?: boolean;
 	contentBox?: DiffShell;
 	selfRenderContainer?: DiffShell;
@@ -579,7 +579,11 @@ export function hashlineCardLines(host: DiffHost, width: number, theme: Theme | 
 	const mark = paint(theme, failed ? "error" : "success", failed ? "✗" : "●");
 	const title = paint(theme, failed ? "error" : "toolTitle", bold(theme, formatToolName(host.toolName ?? "edit")));
 	const args = paramLine(host.args);
-	const header = truncateToWidth(`${mark} ${title}${args ? ` ${args}` : ""}`, Math.max(1, width), "…");
+	const elapsed =
+		typeof host.result?.durationMs === "number"
+			? ` ◷ ${paint(theme, "dim", `${(host.result.durationMs / 1000).toFixed(2)}s`)}`
+			: "";
+	const header = truncateToWidth(`${mark} ${title}${args ? ` ${args}` : ""}${elapsed}`, Math.max(1, width), "…");
 	const body = renderHashlineResult(host.result ?? {}, Math.max(1, width - 5), theme, {
 		split: splitPaint ?? null,
 		unified: (gutter) => unifiedPaint(gutter),

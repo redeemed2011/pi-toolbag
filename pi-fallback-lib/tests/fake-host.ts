@@ -19,7 +19,7 @@ export class FakeHost implements FallbackHost {
     type?: string;
     summary?: string;
     details?: unknown;
-    message?: { role?: string; stopReason?: string; errorMessage?: string; rawStopReason?: string };
+    message?: { role?: string; stopReason?: string; errorMessage?: string; rawStopReason?: string; provider?: string; model?: string };
   }> = [];
   registry = new Map<string, ModelStub>();
   setModelMode = new Map<string, SetModelMode>();
@@ -133,7 +133,12 @@ export class FakeHost implements FallbackHost {
     this.thinkingSets.push(level);
   }
 
-  setAssistantError(text: string, stopReason = "error", rawStopReason?: string): void {
+  setAssistantError(
+    text: string,
+    stopReason = "error",
+    rawStopReason?: string,
+    physical?: { provider: string; model: string },
+  ): void {
     this.branch = [
       {
         id: "asst-1",
@@ -142,6 +147,7 @@ export class FakeHost implements FallbackHost {
           role: "assistant",
           stopReason,
           errorMessage: text,
+          ...(physical ? { provider: physical.provider, model: physical.model } : {}),
           ...(rawStopReason ? { rawStopReason } : {}),
         },
       },

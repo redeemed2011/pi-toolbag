@@ -84,11 +84,15 @@ export default function ctxPromoterWorker(pi: ExtensionAPI): void {
 			_onUpdate: unknown,
 			_ctx: ExtensionContext,
 		) {
-			writePromoterResult(resultPath, {
-				promote: params.promote ?? [],
-				pending_replace: params.pending_replace ?? [],
-				shelf: params.shelf ?? [],
-			});
+			writePromoterResult(
+				resultPath,
+				{
+					promote: params.promote ?? [],
+					pending_replace: params.pending_replace ?? [],
+					shelf: params.shelf ?? [],
+				},
+				true,
+			);
 			return {
 				content: [{ type: "text" as const, text: `harvest recorded. kickoff_bytes=${kickoff.length}` }],
 				details: {},

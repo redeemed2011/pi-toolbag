@@ -56,6 +56,13 @@ export function readPromoterResult(path: string): PromoterResult {
 	return parsePromoterResult(raw);
 }
 
-export function writePromoterResult(path: string, result: PromoterResult): void {
-	writeFileSync(path, `${JSON.stringify(result)}\n`, "utf-8");
+export function writePromoterResult(path: string, result: PromoterResult, submitted = false): void {
+	const payload = submitted ? { ...result, submitted: true } : result;
+	writeFileSync(path, `${JSON.stringify(payload)}\n`, "utf-8");
+}
+
+export function readPromoterSubmission(path: string): { result: PromoterResult; submitted: boolean } {
+	const raw: unknown = JSON.parse(readFileSync(path, "utf-8"));
+	const submitted = !!raw && typeof raw === "object" && (raw as { submitted?: unknown }).submitted === true;
+	return { result: parsePromoterResult(raw), submitted };
 }

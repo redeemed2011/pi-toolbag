@@ -52,6 +52,32 @@ test("placeRichDiff replaces the badge body", () => {
 	assert.equal(text.includes("│"), false);
 });
 
+test("the card header shows elapsed seconds", () => {
+	const twelve = hashlineCardLines({
+		toolName: "replace",
+		args: { remove_from: "miCC" },
+		result: { ...result, durationMs: 12 },
+	}, 80, undefined);
+	assert.match(twelve[0]!, /◷ 0\.01s$/);
+	const slow = hashlineCardLines({
+		toolName: "replace",
+		args: { remove_from: "miCC" },
+		result: { ...result, durationMs: 1200 },
+	}, 80, undefined);
+	assert.match(slow[0]!, /◷ 1\.20s$/);
+	const missing = hashlineCardLines({
+		toolName: "replace",
+		args: { remove_from: "miCC" },
+		result,
+	}, 80, undefined);
+	assert.equal(missing[0]!.includes("◷"), false);
+	const dim = hashlineCardLines({
+		toolName: "replace",
+		result: { ...result, durationMs: 12 },
+	}, 80, { fg: (color, text) => (color === "dim" ? `[dim]${text}` : text) });
+	assert.match(dim[0]!, /\[dim\]0\.01s$/);
+});
+
 test("a running edit is left on the badge", () => {
 	let cleared = false;
 	placeRichDiff({

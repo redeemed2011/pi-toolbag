@@ -7,6 +7,8 @@ type BranchEntry = {
     stopReason?: string;
     errorMessage?: string;
     rawStopReason?: string;
+    provider?: string;
+    model?: string;
   };
 };
 
@@ -14,6 +16,13 @@ type BranchEntry = {
  * Last assistant on the branch. Never fills `status`. Copies `rawStopReason`
  * when the message has one.
  */
+function physicalModel(msg: { provider?: string; model?: string }): { provider: string; model: string } | undefined {
+  const provider = msg.provider;
+  const model = msg.model;
+  if (typeof provider !== "string" || !provider || typeof model !== "string" || !model) return undefined;
+  return { provider, model };
+}
+
 export function extractLastAssistantError(
   branch: ReadonlyArray<BranchEntry>,
 ): FailoverError | undefined {
@@ -23,7 +32,7 @@ export function extractLastAssistantError(
     const msg = entry.message;
     if (msg?.role !== "assistant") continue;
     if (msg.stopReason === "aborted") {
-      return { text: msg.errorMessage ?? "", stopReason: "aborted" };
+      return { text: msg.errorMessage ?? "", stopReason: "aborted", ...physicalModel(msg) };
     }
     if (msg.stopReason !== "error") return undefined;
     const rawStopReason = typeof msg.rawStopReason === "string" && msg.rawStopReason ? msg.rawStopReason : undefined;
@@ -31,6 +40,7 @@ export function extractLastAssistantError(
       text: msg.errorMessage ?? "",
       stopReason: "error",
       ...(rawStopReason ? { rawStopReason } : {}),
+      ...physicalModel(msg),
     };
   }
   return undefined;

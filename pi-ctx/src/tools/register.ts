@@ -45,6 +45,9 @@ function liveOf(runtime: Runtime) {
 	return runtime.projectLive ?? foldLive(runtime.projectRecords);
 }
 
+const CTX_NAMESPACE = { name: "ctx" };
+const CTX_OUTPUT_SCHEMA = Type.Object({}, { additionalProperties: true });
+
 export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 	pi.registerTool({
 		name: "ctx_get",
@@ -52,6 +55,9 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		description: "Point lookup or default retrieve. Omit id for default retrieve. Must not scan the observation corpus.",
 		promptSnippet: "Retrieve ctx default law/claim or a record by id",
 		promptGuidelines: [GET_GUIDELINE],
+		outputSchema: CTX_OUTPUT_SCHEMA,
+		namespace: CTX_NAMESPACE,
+		annotations: { readOnlyHint: true },
 		parameters: Type.Object({
 			id: Type.Optional(Type.String({ description: "Record id. Omit for default retrieve." })),
 		}),
@@ -82,6 +88,9 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		description: "Full body of a record by id. Never paraphrase.",
 		promptSnippet: "Zoom a ctx record body by id",
 		promptGuidelines: [ZOOM_GUIDELINE],
+		outputSchema: CTX_OUTPUT_SCHEMA,
+		namespace: CTX_NAMESPACE,
+		annotations: { readOnlyHint: true },
 		parameters: Type.Object({
 			id: Type.String({ description: "Record id" }),
 		}),
@@ -105,6 +114,9 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		description: "Open unblocked unclaimed questions in mint-time order. Cap 20; remainder in elided.",
 		promptSnippet: "List open unclaimed ctx questions",
 		promptGuidelines: [FRONTIER_GUIDELINE],
+		outputSchema: CTX_OUTPUT_SCHEMA,
+		namespace: CTX_NAMESPACE,
+		annotations: { readOnlyHint: true },
 		parameters: Type.Object({
 			include_blocked: Type.Optional(Type.Boolean()),
 		}),
@@ -134,6 +146,8 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		description: "Read or set the session claim. Live swap refuses; close first or user /ctx claim.",
 		promptSnippet: "Status, claim, or close the ctx claim",
 		promptGuidelines: [CLAIM_GUIDELINE],
+		outputSchema: CTX_OUTPUT_SCHEMA,
+		namespace: CTX_NAMESPACE,
 		parameters: Type.Object({
 			action: StringEnum(["status", "claim", "close"] as const),
 			question_id: Type.Optional(Type.String()),
@@ -179,6 +193,8 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		description: "Start the bind HITL flow (name, confirm). Never silent. Print mode refuses. Does not promote observations into law.",
 		promptSnippet: "Bind this session to a ctx project",
 		promptGuidelines: [BIND_GUIDELINE],
+		outputSchema: CTX_OUTPUT_SCHEMA,
+		namespace: CTX_NAMESPACE,
 		parameters: Type.Object({
 			name: Type.Optional(
 				Type.String({ description: "Suggested project name. Collision still HITL." }),
@@ -214,6 +230,8 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 			"Append a new project record to the bound project log. Never overwrite. Observers cannot call this. Evidence copies a file by hash and is not a constraint.",
 		promptSnippet: "Mint a ctx judgment record",
 		promptGuidelines: [RECORD_GUIDELINE],
+		outputSchema: CTX_OUTPUT_SCHEMA,
+		namespace: CTX_NAMESPACE,
 		parameters: Type.Object({
 			type: StringEnum([
 				"constraint",
@@ -362,6 +380,8 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		description: "Hand one live question to a new session. Returns a project id and a token. Does not start that session.",
 		promptSnippet: "Grant one live ctx question to a new session",
 		promptGuidelines: [GRANT_GUIDELINE],
+		outputSchema: CTX_OUTPUT_SCHEMA,
+		namespace: CTX_NAMESPACE,
 		parameters: Type.Object({
 			question_id: Type.String(),
 		}),
@@ -391,6 +411,8 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		description: "Bind a fresh session to a granted question. Refuses a session that has ever been bound. Does not harvest.",
 		promptSnippet: "Attach this fresh session to a granted ctx question",
 		promptGuidelines: [ATTACH_GUIDELINE],
+		outputSchema: CTX_OUTPUT_SCHEMA,
+		namespace: CTX_NAMESPACE,
 		parameters: Type.Object({
 			project_id: Type.String(),
 			token: Type.String(),
@@ -420,6 +442,8 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		description: "File a finding on the granted question. Headline and body only. The server sets the type and the parent.",
 		promptSnippet: "File a ctx finding on the granted question",
 		promptGuidelines: [FINDING_GUIDELINE],
+		outputSchema: CTX_OUTPUT_SCHEMA,
+		namespace: CTX_NAMESPACE,
 		parameters: Type.Object({
 			headline: Type.String(),
 			body: Type.String(),

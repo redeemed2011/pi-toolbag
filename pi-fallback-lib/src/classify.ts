@@ -40,6 +40,13 @@ const TRANSIENT_NEEDLES = [
   "fetch failed",
   "connection reset",
   "connection refused",
+  "server_busy",
+  "servers are currently busy",
+  "currently experiencing high demand",
+  "model is at capacity",
+  "provider returned an error",
+  "provider returned error",
+  "server error",
 ];
 
 const LABELED_STATUS = /(?:status|http|error(?:\s+code)?|code)\s*[:=]?\s*([45]\d{2})\b/gi;

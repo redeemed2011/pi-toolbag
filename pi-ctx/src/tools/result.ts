@@ -1,6 +1,8 @@
+import type { JsonValue } from "@earendil-works/pi-ai";
 export type ToolText = {
 	content: [{ type: "text"; text: string }];
 	details: unknown;
+	structuredContent: JsonValue;
 };
 
 const EMPTY_TOOL_RESULT = { error: "empty tool result" };
@@ -10,14 +12,17 @@ export function jsonResult(data: unknown): ToolText {
 	// JSON.stringify(undefined) is undefined, not a string. Pi stores that text and
 	// crashes on every later request that replays the tool result.
 	if (typeof text !== "string") {
+		const emptyText = JSON.stringify(EMPTY_TOOL_RESULT);
 		return {
-			content: [{ type: "text" as const, text: JSON.stringify(EMPTY_TOOL_RESULT) }],
+			content: [{ type: "text" as const, text: emptyText }],
 			details: EMPTY_TOOL_RESULT,
+			structuredContent: JSON.parse(emptyText) as JsonValue,
 		};
 	}
 	return {
 		content: [{ type: "text" as const, text }],
 		details: data,
+		structuredContent: JSON.parse(text) as JsonValue,
 	};
 }
 

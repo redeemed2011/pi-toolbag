@@ -135,6 +135,13 @@ export function buildWorkerArgv(opts: {
 	return [pi.command, ...args];
 }
 
+export const TRUNCATED_PRINT_STDERR = "Response was truncated: the model reached its output token limit.";
+
+/** Pi 1.2 print mode exits 1 on a length stop. Any other non-zero exit is still a failure. */
+export function isTruncatedPrintExit(exit: WorkerExit): boolean {
+	return exit.code === 1 && exit.signal === null && exit.stderr.includes(TRUNCATED_PRINT_STDERR);
+}
+
 export type WorkerExit = { code: number | null; signal: NodeJS.Signals | null; stderr: string };
 
 export function spawnWorker(opts: {

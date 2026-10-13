@@ -4,12 +4,12 @@ import { resolvePromoterModel, type SessionModelSource } from "../config.js";
 import { foldLive, foldSession, resolveOccupancy } from "../fold.js";
 import type { Hitl } from "../hitl.js";
 import type { Runtime } from "../runtime.js";
-import { buildWorkerArgv, prepareWorkerCwd, spawnWorker } from "../spawn/observer.js";
+import { buildWorkerArgv, isTruncatedPrintExit, prepareWorkerCwd, spawnWorker } from "../spawn/observer.js";
 import { runResultPath } from "../spawn/runs.js";
 import { CTX_PROMOTER_LATCH, type Entry, type JudgmentRecord } from "../types.js";
 import { applyPromoterResult } from "./apply.js";
 import { runPendingReplaceHitl } from "./hitl.js";
-import { promoterKickoffPrompt, readPromoterResult, writePromoterKickoff } from "./io.js";
+import { promoterKickoffPrompt, readPromoterSubmission, writePromoterKickoff } from "./io.js";
 import { extractAssistantQuotes, extractUserQuotes } from "./quotes.js";
 import { PROMOTER_CHARS, PROMOTER_N, PROMOTER_SHELF_N, emptyPromoterResult, parsePromoterResult } from "./schema.js";
 
@@ -226,10 +226,18 @@ async function spawnPromoter(opts: {
 	} finally {
 		opts.runtime.untrackWorkerAbort(controller);
 	}
-	if (exit.code !== 0) {
+	const truncated = isTruncatedPrintExit(exit);
+	if (exit.code !== 0 && !truncated) {
 		throw new Error(
 			`promoter exited with code ${exit.code}${exit.stderr ? `: ${exit.stderr.trim().slice(0, 200)}` : ""}`,
 		);
 	}
-	return readPromoterResult(runResultPath(cwd));
+	const path = runResultPath(cwd);
+	const submission = readPromoterSubmission(path);
+	if (truncated && !submission.submitted) {
+		throw new Error(
+			`promoter exited with code ${exit.code}${exit.stderr ? `: ${exit.stderr.trim().slice(0, 200)}` : ""}`,
+		);
+	}
+	return submission.result;
 }
