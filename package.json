@@ -15,7 +15,7 @@
     "pi-tool-groups"
   ],
   "scripts": {
-    "test": "cd pi-ctx && node ../node_modules/vitest/vitest.mjs run && cd ../pi-fallback-lib && node ../node_modules/vitest/vitest.mjs run && cd ../pi-auto-fallback && node ../node_modules/vitest/vitest.mjs run && cd ../pi-foundations && node ../node_modules/vitest/vitest.mjs run && cd ../pi-stream-stall && node ../node_modules/vitest/vitest.mjs run",
+    "test": "cd pi-ctx && node ../node_modules/vitest/vitest.mjs run && cd ../pi-fallback-lib && node ../node_modules/vitest/vitest.mjs run && cd ../pi-auto-fallback && node ../node_modules/vitest/vitest.mjs run && cd ../pi-foundations && node ../node_modules/vitest/vitest.mjs run && cd ../pi-stream-stall && node ../node_modules/vitest/vitest.mjs run && cd ../pi-tool-groups && npm test",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p pi-ctx && node node_modules/typescript/bin/tsc --noEmit -p pi-fallback-lib && node node_modules/typescript/bin/tsc --noEmit -p pi-auto-fallback && node node_modules/typescript/bin/tsc --noEmit -p pi-foundations && node node_modules/typescript/bin/tsc --noEmit -p pi-stream-stall && node node_modules/typescript/bin/tsc --noEmit -p pi-tool-groups"
   },
   "pi": {
