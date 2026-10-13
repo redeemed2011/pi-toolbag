@@ -26,8 +26,16 @@ export class FakeHost implements FallbackHost {
   emitBeforeAgentStartOnSend = false;
   ctx: FallbackCtx;
 
-  private handlers = new Map<string, Array<(event: unknown, ctx: FallbackCtx) => unknown>>();
+  private settling = false;
+  private settleDepth = 0;
+  private deferred: Array<() => Promise<void>> = [];
+  /** True once a deferred send records `sent` after the settle handler returned. */
+  recordedAfterHandler = false;
+  throwOnDeferredSend = false;
+  /** Test opt-in: the deferred send re-emits `agent_settled`. */
+  reemitSettledOnDeferredSend = false;
 
+  private handlers = new Map<string, Array<(event: unknown, ctx: FallbackCtx) => unknown>>();
   constructor(model: ModelStub, thinking = "low") {
     this.model = { ...model };
     this.thinking = thinking;
@@ -49,11 +57,27 @@ export class FakeHost implements FallbackHost {
   async emit(event: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     this.ctx = this.buildCtx();
     const handlers = this.handlers.get(event) ?? [];
+    const ownSettle = event === "agent_settled";
+    if (ownSettle) {
+      this.settleDepth += 1;
+      this.settling = true;
+    }
     let result: unknown;
-    for (const handler of handlers) {
-      result = await handler({ type: event, ...payload }, this.ctx);
+    try {
+      for (const handler of handlers) {
+        result = await handler({ type: event, ...payload }, this.ctx);
+      }
+    } finally {
+      if (ownSettle) {
+        this.settleDepth -= 1;
+        this.settling = this.settleDepth > 0;
+      }
     }
     if (event === "agent_before_settle") this.replayResults.push(result);
+    if (ownSettle && this.settleDepth === 0) {
+      const queued = this.deferred.splice(0);
+      for (const action of queued) await action();
+    }
     return result;
   }
 
@@ -75,14 +99,19 @@ export class FakeHost implements FallbackHost {
 
   sendUserMessage(content: string): void | Promise<void> {
     if (this.throwOnSend) throw new Error("sendUserMessage failed");
+    if (this.settling) {
+      this.deferred.push(async () => {
+        if (this.throwOnDeferredSend) throw new Error("deferred send failed");
+        this.sent.push(content);
+        this.recordedAfterHandler = true;
+        this.idle = false;
+        this.idle = true;
+        if (this.reemitSettledOnDeferredSend) await this.emit("agent_settled");
+      });
+      return;
+    }
     this.sent.push(content);
     if (this.emitBeforeAgentStartOnSend) return this.emit("before_agent_start").then(() => undefined);
-    if (this.mode === "print" || this.mode === "json") {
-      this.idle = false;
-      setTimeout(() => {
-        this.idle = true;
-      }, 5);
-    }
   }
 
   getThinkingLevel(): string {

@@ -260,16 +260,54 @@ Feature: Attach failover to a Pi session
     And the failed request was replayed once
     And the host is idle
 
-  Scenario: print mode waits for the safety continue turn to finish
+  Scenario: print mode safety failover returns before the continue is recorded
     Given the host is print mode
     And attach with retryAfterTools false
     And a session start
     And the last assistant error is "guardrail_blocked"
     When the agent settles
-    Then setModel was called with "xai/grok-4.6"
+    Then the settle returned within 1 second
+    And no continue-did-not-start event was emitted
     And the block continue message was sent once
+    And the continue was recorded after the handler returned
+    And the remaining failover budget is 0
+    And setModel was called with "xai/grok-4.6"
     And the host is idle
 
+  Scenario: json mode safety failover returns before the continue is recorded
+    Given the host is json mode
+    And attach with retryAfterTools false
+    And a session start
+    And the last assistant error is "guardrail_blocked"
+    When the agent settles
+    Then the settle returned within 1 second
+    And no continue-did-not-start event was emitted
+    And the block continue message was sent once
+    And the continue was recorded after the handler returned
+    And the remaining failover budget is 0
+
+  Scenario: tui mode defers the safety continue the same way
+    Given attach with retryAfterTools false
+    And a session start
+    And the last assistant error is "guardrail_blocked"
+    When the agent settles
+    Then the settle returned within 1 second
+    And no continue-did-not-start event was emitted
+    And the block continue message was sent once
+    And the continue was recorded after the handler returned
+    And the remaining failover budget is 0
+    And the host is idle
+
+  Scenario: a deferred continue throw rejects the settle
+    Given the host is print mode
+    And attach with retryAfterTools false
+    And a session start
+    And the deferred continue throws
+    And the last assistant error is "guardrail_blocked"
+    When the agent settles and the deferred send rejects
+    Then the settle rejected with "deferred send failed"
+    And a failover event was emitted
+    And no continue-threw event was emitted
   Scenario: failover emits an event and does not notify
     Given the host has UI
     And attach with retryAfterTools false

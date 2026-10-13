@@ -418,8 +418,9 @@ Given("sendUserMessage throws", (world) => {
   hostOf(world).throwOnSend = true;
 });
 
-When("the agent settles", async (world) => {
+async function settleAgent(world: World): Promise<void> {
   const host = hostOf(world);
+  const started = Date.now();
   await host.emit("agent_before_settle", {
     outcome: "error",
     context: {
@@ -431,6 +432,20 @@ When("the agent settles", async (world) => {
   });
   const replay = host.replayResults.at(-1) as { continue?: boolean } | undefined;
   if (!replay?.continue) await host.emit("agent_settled");
+  world.settleMs = Date.now() - started;
+}
+
+When("the agent settles", async (world) => {
+  await settleAgent(world);
+});
+
+When("the agent settles and the deferred send rejects", async (world) => {
+  try {
+    await settleAgent(world);
+    world.settleError = undefined;
+  } catch (err) {
+    world.settleError = err;
+  }
 });
 
 When(/^the user selects model "(.*)" with source "(.*)"$/, async (world, key, source) => {
@@ -461,6 +476,13 @@ Given("the host is not idle", (world) => {
 
 Given("the host is print mode", (world) => {
   hostOf(world).mode = "print";
+});
+Given("the host is json mode", (world) => {
+  hostOf(world).mode = "json";
+});
+
+Given("the deferred continue throws", (world) => {
+  hostOf(world).throwOnDeferredSend = true;
 });
 
 Then(/^setModel was called with "(.*)"$/, (world, key) => {
@@ -547,6 +569,30 @@ Then("a failover event was emitted", (world) => {
 });
 Then("no warning was notified", (world) => {
   expect(hostOf(world).notifies).toEqual([]);
+});
+
+Then("the settle returned within 1 second", (world) => {
+  expect(world.settleMs as number).toBeLessThan(1000);
+});
+
+Then("no continue-did-not-start event was emitted", (world) => {
+  const events = world.events as Array<{ type: string; reason?: string }>;
+  expect(events.some((event) => event.type === "skip" && event.reason === "continue-did-not-start")).toBe(false);
+});
+
+Then("the continue was recorded after the handler returned", (world) => {
+  expect(hostOf(world).recordedAfterHandler).toBe(true);
+});
+
+Then(/^the settle rejected with "(.*)"$/, (world, message) => {
+  const err = world.settleError;
+  expect(err).toBeInstanceOf(Error);
+  expect((err as Error).message).toBe(message);
+});
+
+Then("no continue-threw event was emitted", (world) => {
+  const events = world.events as Array<{ type: string; reason?: string }>;
+  expect(events.some((event) => event.type === "skip" && event.reason === "continue-threw")).toBe(false);
 });
 
 Then("the host is idle", (world) => {

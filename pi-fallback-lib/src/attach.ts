@@ -75,12 +75,6 @@ async function maybeAwait(value: unknown): Promise<void> {
   }
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 function refusalCategoryFromStream(event: unknown): string | undefined {
   const data = eventRecord(event).data;
   if (data === null || typeof data !== "object" || Array.isArray(data)) return undefined;
@@ -95,28 +89,11 @@ function refusalCategoryFromStream(event: unknown): string | undefined {
 }
 
 /**
- * ExtensionAPI.sendUserMessage is fire-and-forget. Interactive TUI can
- * keep running; print/json (`pi -p`, observer workers) return from
- * prompt() as soon as this agent_settled handler finishes, then exit 1
- * if the last assistant is still the failed turn. Wait until the
- * continue run starts and settles so the last message is the fallback.
+ * Since Pi 0.87, `sendUserMessage` from an `agent_settled` handler is deferred
+ * until all settled handlers return, and the outer `prompt()` awaits that
+ * deferred run. Print/JSON therefore does not exit on the failed assistant.
+ * Do not wait inside the handler: the continue cannot start until it returns.
  */
-async function waitForContinueTurn(
-  ctx: FallbackCtx,
-  emit: (event: FallbackEvent, ctx?: FallbackCtx) => void,
-): Promise<void> {
-  const startDeadline = Date.now() + 30_000;
-  while (ctx.isIdle() && Date.now() < startDeadline) {
-    await delay(20);
-  }
-  if (ctx.isIdle()) {
-    emit({ type: "skip", reason: "continue-did-not-start" }, ctx);
-    return;
-  }
-  while (!ctx.isIdle()) {
-    await delay(50);
-  }
-}
 
 export function attachFallback(pi: FallbackHost, options: AttachOptions): AttachHandle {
   const emit = (event: FallbackEvent, ctx?: FallbackCtx): void => {
@@ -560,9 +537,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
           },
           ctx,
         );
-        if (ctx.mode === "print" || ctx.mode === "json") {
-          await waitForContinueTurn(ctx, emit);
-        }
+        // The continue is deferred until this handler returns. Do not wait for it here.
         return;
       } finally {
         state.failoverInFlight = false;
