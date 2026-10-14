@@ -16,24 +16,25 @@ function row(toolName: string, args: Record<string, unknown>, details?: unknown,
 
 test("a finished write counts its content lines as added", () => {
 	const content = Array.from({ length: 29 }, () => "line").join("\n");
-	const summary = summarizeEdit([row("write", { path: "pi-tool-groups/split-paint.test.ts", content }, undefined)]);
-	assert.equal(summary.text, "Edited split-paint.test.ts");
+	const summary = summarizeEdit([row("write", { path: "pi-tool-groups/index.ts", content }, undefined)]);
+	assert.equal(summary.text, "Edited index.ts");
 	assert.equal(summary.added, 29);
 	assert.equal(summary.removed, 0);
 	assert.equal(summary.running, false);
 });
 
 test("a write in progress does not count lines yet", () => {
-	const summary = summarizeEdit([row("write", { path: "split-paint.test.ts", content: "a\nb\n" }, undefined, true)]);
+	const summary = summarizeEdit([row("write", { path: "index.ts", content: "a\nb\n" }, undefined, true)]);
 	assert.equal(summary.added, 0);
 	assert.equal(summary.running, true);
 });
 
-test("hashline metrics still supply the counts", () => {
+test("an edit diff supplies the counts", () => {
 	const summary = summarizeEdit([
-		row("replace", { path: "split-paint.test.ts" }, { metrics: { added_lines: 2, removed_lines: 1 } }),
+		row("edit", { path: "index.ts" }, { diff: "+12 const next = 1;\n-12 const next = 0;\n 13 return next;" }),
 	]);
-	assert.equal(summary.added, 2);
+	assert.equal(summary.text, "Edited index.ts");
+	assert.equal(summary.added, 1);
 	assert.equal(summary.removed, 1);
 });
 

@@ -13,7 +13,7 @@
   },
   "scripts": {
     "typecheck": "node ../node_modules/typescript/bin/tsc --noEmit",
-    "test": "node --experimental-strip-types --test diff-display.test.ts diff-render.test.ts split-paint.test.ts edit-summary.test.ts diff-card.test.ts spacing.test.ts"
+    "test": "node --experimental-strip-types --test edit-summary.test.ts spacing.test.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",

@@ -1,12 +1,9 @@
 import {
 	AssistantMessageComponent,
-	renderDiff,
 	ToolExecutionComponent,
 	type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
-import { renderHashlineResult, type HashlinePainters } from "./diff-render.ts";
-import { loadSplitPaint } from "./split-paint.ts";
 
 /**
  * Fold a consecutive run of read, search, and list tool calls into one row.
@@ -15,9 +12,7 @@ import { loadSplitPaint } from "./split-paint.ts";
  * While any call in the run is still going, the verbs stay progressive.
  * A shell command is its own `Ran` row and splits the run.
  * A thought is its own row, and so is any other tool. Consecutive edits of one file become `Edited <file> +N/-M`.
- * pi-droid-styling owns the working row. Its default badge then replaces any
- * non-builtin result with the raw text, so a finished hashline edit puts the
- * rich diff back. A changed diff shape keeps that raw text.
+ * pi-droid-styling owns the working row. This extension replaces finished rows.
  * Droid also replaces chat.render, so the wrap is put back on each frame.
  * Collapsed tool, thought, and status rows sit flush. An expanded row keeps one blank line above and below.
  */
@@ -94,7 +89,7 @@ function oneLine(value: unknown): string {
 
 function lookKind(name: string): Kind | undefined {
 	if (name === "read") return "read";
-	if (name === "grep" || name === "find" || name === "anchor_grep") return "search";
+	if (name === "grep" || name === "find") return "search";
 	if (name === "ls") return "list";
 	return undefined;
 }
@@ -159,7 +154,7 @@ function shellLine(row: ToolView): { verb: string; command: string; running: boo
 	return { verb: running ? "Running" : "Ran", command, running, failed: phase(row) === "error" };
 }
 
-const EDIT_NAMES = new Set(["replace", "replace_match", "insert", "write", "copy", "move", "undo_last_change"]);
+const EDIT_NAMES = new Set(["edit", "write"]);
 
 function isEdit(child: unknown): child is ToolExecutionComponent {
 	return child instanceof ToolExecutionComponent && EDIT_NAMES.has(toolView(child).toolName);
@@ -190,6 +185,20 @@ function writtenLineCount(row: ToolView): number | undefined {
 	return content.split("\n").length;
 }
 
+/** Added and removed lines in Pi's edit diff. Context lines start with a space. */
+function diffLineCounts(row: ToolView): { added: number; removed: number } | undefined {
+	if (row.toolName !== "edit" || phase(row) !== "done") return undefined;
+	const diff = (row.result?.details as { diff?: unknown } | undefined)?.diff;
+	if (typeof diff !== "string" || diff.length === 0) return undefined;
+	let added = 0;
+	let removed = 0;
+	for (const line of diff.split("\n")) {
+		if (line.startsWith("+")) added += 1;
+		else if (line.startsWith("-")) removed += 1;
+	}
+	return { added, removed };
+}
+
 /** Sum line adds and removes for one file. Past tense once every edit has finished. */
 export function summarizeEdit(rows: readonly ToolView[]): { text: string; running: boolean; failed: number; added: number; removed: number } {
 	const running = rows.some((row) => phase(row) === "running");
@@ -199,10 +208,13 @@ export function summarizeEdit(rows: readonly ToolView[]): { text: string; runnin
 	let file = "";
 	for (const row of rows) {
 		if (!file) file = editFile(row);
-		const metrics = (row.result?.details as { metrics?: { added_lines?: number; removed_lines?: number } } | undefined)?.metrics;
-		if (typeof metrics?.added_lines === "number") added += metrics.added_lines;
-		else added += writtenLineCount(row) ?? 0;
-		removed += metrics?.removed_lines ?? 0;
+		const counts = diffLineCounts(row);
+		if (counts) {
+			added += counts.added;
+			removed += counts.removed;
+		} else {
+			added += writtenLineCount(row) ?? 0;
+		}
 		if (phase(row) === "error") failed += 1;
 	}
 	const name = file ? baseName(file) : `${rows.length} ${rows.length === 1 ? "call" : "calls"}`;
@@ -536,156 +548,6 @@ export function groupChildren(children: readonly unknown[], theme: Theme | undef
 	return grouped;
 }
 
-const DIFF_PATCH = Symbol.for("pi.tool-groups.hashline-diff");
-const DIFF_TOOLS = new Set(["replace", "replace_match", "insert", "copy", "move", "undo_last_change"]);
-type ResultRenderer = (result: unknown, options: unknown, theme: unknown, context: unknown) => { render?: (width: number) => string[] } | undefined;
-
-let splitPaint: HashlinePainters["split"] | undefined;
-
-function unifiedPaint(gutter: string): string[] | null {
-	try {
-		const text = renderDiff(gutter);
-		return typeof text === "string" && text.length > 0 ? text.split("\n") : null;
-	} catch {
-		return null;
-	}
-}
-
-function loadSplitPainter(): void {
-	if (splitPaint !== undefined) return;
-	splitPaint = null;
-	void loadSplitPaint().then((paint) => {
-		splitPaint = paint;
-	}).catch(() => {
-		splitPaint = null;
-	});
-}
-
-function installDiffRenderer(): void {
-	const proto = ToolExecutionComponent.prototype as unknown as {
-		getResultRenderer?: ((this: { toolName?: string }, ...args: unknown[]) => ResultRenderer | undefined) & Record<PropertyKey, unknown>;
-	};
-	const current = proto.getResultRenderer;
-	if (typeof current !== "function" || current[DIFF_PATCH] === true) return;
-	function wrapped(this: { toolName?: string }, ...args: unknown[]) {
-		const original = current!.apply(this, args);
-		if (!DIFF_TOOLS.has(this.toolName ?? "")) return original;
-		return (result: unknown, options: unknown, theme: unknown, context: unknown) => ({
-			render(width: number) {
-				return renderHashlineResult(result as { details?: { diff?: unknown; diffLineNumbers?: unknown } }, width, theme, {
-					split: splitPaint ?? null,
-					unified: (gutter) => unifiedPaint(gutter),
-				}, () => {
-					try {
-						const lines = original?.(result, options, theme, context)?.render?.(width);
-						return Array.isArray(lines) ? lines : [];
-					} catch {
-						return [];
-					}
-				});
-			},
-			invalidate() {},
-		});
-	}
-	(wrapped as { [DIFF_PATCH]?: boolean })[DIFF_PATCH] = true;
-	proto.getResultRenderer = wrapped as typeof current;
-}
-
-const DISPLAY_PATCH = Symbol.for("pi.tool-groups.hashline-display");
-let activeTheme: Theme | undefined;
-
-type DiffShell = { clear?: () => void; addChild?: (child: unknown) => void };
-type DiffHost = {
-	toolName?: string;
-	args?: unknown;
-	result?: { content?: unknown; details?: { diff?: unknown; diffLineNumbers?: unknown; warnings?: string[] }; isError?: boolean; durationMs?: number };
-	isPartial?: boolean;
-	contentBox?: DiffShell;
-	selfRenderContainer?: DiffShell;
-	getRenderShell?: () => string;
-};
-
-function resultLines(result: DiffHost["result"]): string[] {
-	const content = result?.content;
-	if (!Array.isArray(content)) return [];
-	const text = content
-		.filter((block): block is { type: string; text?: string } => Boolean(block) && typeof block === "object" && (block as { type?: string }).type === "text")
-		.map((block) => String(block.text ?? ""))
-		.join("\n")
-		.replace(/\r/g, "")
-		.trimEnd();
-	return text.length > 0 ? text.split("\n") : [];
-}
-
-function paramLine(args: unknown): string {
-	if (!args || typeof args !== "object" || Array.isArray(args)) return "";
-	const parts: string[] = [];
-	for (const [key, value] of Object.entries(args as Record<string, unknown>)) {
-		if (typeof value !== "string" || value.length === 0) continue;
-		const flat = value.replace(/\s+/g, " ");
-		const shown = flat.length > 60 ? `${flat.slice(0, 57)}…` : flat;
-		const spaced = key.replace(/[_-]+/g, " ").trim();
-		const label = spaced.length > 0 ? spaced[0]!.toUpperCase() + spaced.slice(1) : key;
-		parts.push(`${label}: ${shown}`);
-	}
-	return parts.join(" ");
-}
-
-/** Header plus the rich diff. Droid's badge is replaced by this after it paints the raw text. */
-export function hashlineCardLines(host: DiffHost, width: number, theme: Theme | undefined): string[] {
-	const failed = host.result?.isError === true;
-	const mark = paint(theme, failed ? "error" : "success", failed ? "✗" : "●");
-	const title = paint(theme, failed ? "error" : "toolTitle", bold(theme, formatToolName(host.toolName ?? "edit")));
-	const args = paramLine(host.args);
-	const elapsed =
-		typeof host.result?.durationMs === "number"
-			? ` ◷ ${paint(theme, "dim", `${(host.result.durationMs / 1000).toFixed(2)}s`)}`
-			: "";
-	const header = truncateToWidth(`${mark} ${title}${args ? ` ${args}` : ""}${elapsed}`, Math.max(1, width), "…");
-	const body = renderHashlineResult(host.result ?? {}, Math.max(1, width - 5), theme, {
-		split: splitPaint ?? null,
-		unified: (gutter) => unifiedPaint(gutter),
-	}, () => resultLines(host.result));
-	const warnings = host.result?.details?.warnings?.filter((line) => line.length > 0) ?? [];
-	return [
-		header,
-		...body.map((line, index) => truncateToWidth(index === 0 ? `  └─ ${line}` : `     ${line}`, Math.max(1, width), "…")),
-		...warnings.map((line) => truncateToWidth(`     ${line}`, Math.max(1, width), "…")),
-	];
-}
-
-export function placeRichDiff(host: DiffHost): void {
-	if (!host.toolName || !DIFF_TOOLS.has(host.toolName) || !host.result || host.isPartial) return;
-	const shell = host.getRenderShell?.() === "self" ? host.selfRenderContainer : host.contentBox;
-	if (!shell || typeof shell.clear !== "function" || typeof shell.addChild !== "function") return;
-	shell.clear();
-	shell.addChild({
-		invalidate() {},
-		render(width: number) {
-			return hashlineCardLines(host, width, activeTheme);
-		},
-	});
-}
-
-function installDisplayPatch(): void {
-	const proto = ToolExecutionComponent.prototype as unknown as {
-		updateDisplay?: ((this: DiffHost, ...args: unknown[]) => unknown) & Record<PropertyKey, unknown>;
-	};
-	const current = proto.updateDisplay;
-	if (typeof current !== "function" || current[DISPLAY_PATCH] === true) return;
-	function wrapped(this: DiffHost, ...args: unknown[]) {
-		const result = current!.apply(this, args);
-		try {
-			placeRichDiff(this);
-		} catch {
-			// Droid's card stays if the diff cannot be mounted.
-		}
-		return result;
-	}
-	(wrapped as { [DISPLAY_PATCH]?: boolean })[DISPLAY_PATCH] = true;
-	proto.updateDisplay = wrapped as typeof current;
-}
-
 function findChat(tui: unknown): Chat | undefined {
 	const documentChildren = (tui as { children?: Array<{ children?: unknown[] }> }).children?.[0]?.children;
 	const chat = Array.isArray(documentChildren) ? documentChildren.at(-1) : undefined;
@@ -694,9 +556,6 @@ function findChat(tui: unknown): Chat | undefined {
 }
 
 function ensureChatHook(tui: unknown, theme: Theme | undefined): void {
-	activeTheme = theme;
-	installDiffRenderer();
-	installDisplayPatch();
 	const chat = findChat(tui) as (Chat & Record<PropertyKey, unknown>) | undefined;
 	if (!chat) return;
 	let slot = chat[HOOK_KEY] as Slot | undefined;
@@ -733,7 +592,6 @@ function ensureChatHook(tui: unknown, theme: Theme | undefined): void {
 }
 
 export default function (pi: ExtensionAPI) {
-	loadSplitPainter();
 	pi.on("session_start", (_event, ctx) => {
 		ctx.ui.setWidget(WIDGET_KEY, (tui, theme) => ({
 			render: () => {

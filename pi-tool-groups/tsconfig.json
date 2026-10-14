@@ -13,5 +13,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["index.ts", "diff-display.ts", "diff-render.ts", "split-paint.ts", "diff-display.test.ts", "diff-render.test.ts", "split-paint.test.ts", "edit-summary.test.ts", "diff-card.test.ts"]
+  "include": ["index.ts", "edit-summary.test.ts", "spacing.test.ts"]
 }
