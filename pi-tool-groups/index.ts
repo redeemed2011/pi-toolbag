@@ -19,6 +19,7 @@ import { loadSplitPaint } from "./split-paint.ts";
  * non-builtin result with the raw text, so a finished hashline edit puts the
  * rich diff back. A changed diff shape keeps that raw text.
  * Droid also replaces chat.render, so the wrap is put back on each frame.
+ * Collapsed tool, thought, and status rows sit flush. An expanded row keeps one blank line above and below.
  */
 
 const WIDGET_KEY = "tool-groups";
@@ -51,7 +52,11 @@ type Slot = {
 	states: WeakMap<object, GroupState>;
 	theme: Theme | undefined;
 };
-type Chat = { children: unknown[]; render: (width: number) => string[] };
+type Chat = {
+	children: unknown[];
+	render: (width: number) => string[];
+	mouseLayout?: { width: number; children: Array<{ component: unknown; height: number }> };
+};
 type Mode = "look" | "shell" | "thought" | "edit" | "tool";
 
 const KIND_WORD: Record<Kind, { going: string; done: string; one: string; many: string }> = {
@@ -116,7 +121,13 @@ function isThinkingOnly(child: unknown): child is AssistantMessageComponent {
 }
 
 function isBlank(child: unknown): boolean {
-	return child instanceof Spacer || child instanceof Text;
+	if (child instanceof Spacer) return true;
+	// A themed status line extends Text but is real output. An empty Text is just a gap.
+	if (child instanceof Text && typeof (child as { build?: unknown }).build !== "function") {
+		const text = (child as unknown as { text?: unknown }).text;
+		return typeof text !== "string" || text.trim() === "";
+	}
+	return false;
 }
 
 /** Count each kind once, in the order it first appeared. Past tense once every call has finished. */
@@ -379,18 +390,65 @@ class SummaryGroup extends Container {
 		this.syncExpanded();
 		if (this.state.expanded) {
 			const lines = this.mode === "thought" ? renderThoughtBody(this.members, this.theme, width) : this.members.flatMap((member) => renderMember(this.mode, member, width));
-			if (this.mode !== "thought" || lines.length > 0) {
-				if (lines.length === 0 || lines[lines.length - 1] !== "") lines.push("");
-				return lines;
-			}
+			const body = trimOuterBlankLines(lines);
+			if (body.length > 0) return ["", ...body, ""];
+			if (this.mode !== "thought") return [""];
 		}
 		const title = this.title();
 		const frames = ["◐", "◓", "◑", "◒"];
 		const quiet = this.mode === "thought";
 		const markChar = title.failed ? "✗" : title.running ? frames[Math.floor(Date.now() / 160) % frames.length]! : quiet ? "•" : "●";
 		const mark = paint(this.theme, title.failed ? "error" : title.running ? "accent" : quiet ? "dim" : "success", markChar);
-		return [truncateToWidth(`${mark} ${title.text}`, Math.max(1, width), "…"), ""];
+		return [truncateToWidth(`${mark} ${title.text}`, Math.max(1, width), "…")];
 	}
+}
+
+type ChatPartKind = "spacer" | "group" | "status" | "other";
+
+export type ChatPart = { kind: ChatPartKind; lines: string[] };
+
+function blankLine(line: string): boolean {
+	return line.replace(/\x1b\[[0-9;]*m/g, "").trim() === "";
+}
+
+function trimOuterBlankLines(lines: string[]): string[] {
+	let start = 0;
+	let end = lines.length;
+	while (start < end && blankLine(lines[start] ?? "")) start++;
+	while (end > start && blankLine(lines[end - 1] ?? "")) end--;
+	return lines.slice(start, end);
+}
+
+function kindOf(child: unknown): ChatPartKind {
+	if (child instanceof Spacer) return "spacer";
+	if (child instanceof SummaryGroup) return "group";
+	if (child instanceof Text && typeof (child as { build?: unknown }).build === "function") return "status";
+	return "other";
+}
+
+const TIGHT_ROW = new Set<ChatPartKind>(["group", "status"]);
+
+/** Drop a status spacer between tight rows, and don't stack a second blank at a group edge. */
+export function layoutChatParts(parts: readonly ChatPart[]): { lines: string[]; heights: number[] } {
+	const lines: string[] = [];
+	const heights: number[] = [];
+	for (let i = 0; i < parts.length; i++) {
+		const part = parts[i]!;
+		const prev = parts[i - 1]?.kind;
+		const next = parts[i + 1]?.kind;
+		if (part.kind === "spacer" && prev && next && TIGHT_ROW.has(prev) && TIGHT_ROW.has(next)) {
+			heights.push(0);
+			continue;
+		}
+		let chunk = part.lines;
+		const boundary = TIGHT_ROW.has(part.kind) || (prev !== undefined && TIGHT_ROW.has(prev));
+		if (boundary && lines.length > 0 && blankLine(lines[lines.length - 1]!) && chunk.length > 0 && blankLine(chunk[0]!)) {
+			chunk = chunk.slice(1);
+		}
+		heights.push(chunk.length);
+		lines.push(...chunk);
+	}
+	return { lines, heights };
 }
 
 function stateFor(key: object, states: WeakMap<object, GroupState>): GroupState {
@@ -652,13 +710,18 @@ function ensureChatHook(tui: unknown, theme: Theme | undefined): void {
 	}
 	slot.theme = theme;
 	slot.render = (self, width) => {
-		const previous = self.children;
-		self.children = groupChildren(previous, slot!.theme, slot!.states);
-		try {
-			return Container.prototype.render.call(self, width);
-		} finally {
-			self.children = previous;
-		}
+		const grouped = groupChildren(self.children, slot!.theme, slot!.states);
+		const rendered = grouped.map((child) => ({
+			component: child,
+			kind: kindOf(child),
+			lines: (child as Member).render(width),
+		}));
+		const layout = layoutChatParts(rendered.map(({ kind, lines }) => ({ kind, lines })));
+		self.mouseLayout = {
+			width,
+			children: rendered.map((part, index) => ({ component: part.component, height: layout.heights[index]! })),
+		};
+		return layout.lines;
 	};
 	const current = chat.render as ((width: number) => string[]) & Record<PropertyKey, unknown>;
 	if (current?.[WRAP_MARK] === slot) return;
