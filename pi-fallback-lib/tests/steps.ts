@@ -419,10 +419,6 @@ Given("setModel re-enters agent_settled", (world) => {
   hostOf(world).emitSettledDuringSetModel = true;
 });
 
-Given("sendUserMessage throws", (world) => {
-  hostOf(world).throwOnSend = true;
-});
-
 async function settleAgent(world: World): Promise<void> {
   const host = hostOf(world);
   const started = Date.now();
@@ -442,15 +438,6 @@ async function settleAgent(world: World): Promise<void> {
 
 When("the agent settles", async (world) => {
   await settleAgent(world);
-});
-
-When("the agent settles and the deferred send rejects", async (world) => {
-  try {
-    await settleAgent(world);
-    world.settleError = undefined;
-  } catch (err) {
-    world.settleError = err;
-  }
 });
 
 When(/^the user selects model "(.*)" with source "(.*)"$/, async (world, key, source) => {
@@ -502,10 +489,6 @@ Given("the host is json mode", (world) => {
   hostOf(world).mode = "json";
 });
 
-Given("the deferred continue throws", (world) => {
-  hostOf(world).throwOnDeferredSend = true;
-});
-
 Given(/^the leaf compaction resumes in place with summary "(.*)"$/, (world, summary) => {
   hostOf(world).branch.push({ type: "compaction", summary, details: { resumeInPlace: true } });
 });
@@ -518,22 +501,12 @@ Given("a non-compaction entry was appended", (world) => {
   hostOf(world).branch.push({ type: "message", id: "after-compact", message: { role: "user" } });
 });
 
-Given("a custom start runs before the deferred user continue", (world) => {
-  hostOf(world).emitCustomBeforeDeferredUser = true;
-});
-
 Then(/^setModel was called with "(.*)"$/, (world, key) => {
   expect(hostOf(world).setModelCalls).toContain(key);
 });
 
 Then("setModel was not called", (world) => {
   expect(hostOf(world).setModelCalls).toEqual([]);
-});
-
-Then("continue was sent once", (world) => {
-  expect(hostOf(world).sent).toEqual([
-    "The previous model stopped. The tool results already in the conversation are done; do not repeat them. Finish the original request.",
-  ]);
 });
 
 Then("the failed request was replayed once", (world) => {
@@ -545,16 +518,6 @@ Then("the failed request was replayed once", (world) => {
       entries: [{ type: "context_edit", targetId: "asst-1", replacement: null }],
     },
   ]);
-});
-
-Then("the block continue message was sent once", (world) => {
-  expect(hostOf(world).sent).toEqual([
-    "The previous model was blocked. Do not repeat that approach. The tool results already in the conversation are done; do not repeat them. Finish the request a different way.",
-  ]);
-});
-
-Then(/^the continue message was "(.*)"$/, (world, text) => {
-  expect(hostOf(world).sent).toEqual([text]);
 });
 
 Then("the interactive extension passes retryAfterTools true", () => {
@@ -606,30 +569,6 @@ Then("a failover event was emitted", (world) => {
 });
 Then("no warning was notified", (world) => {
   expect(hostOf(world).notifies).toEqual([]);
-});
-
-Then("the settle returned within 1 second", (world) => {
-  expect(world.settleMs as number).toBeLessThan(1000);
-});
-
-Then("no continue-did-not-start event was emitted", (world) => {
-  const events = world.events as Array<{ type: string; reason?: string }>;
-  expect(events.some((event) => event.type === "skip" && event.reason === "continue-did-not-start")).toBe(false);
-});
-
-Then("the continue was recorded after the handler returned", (world) => {
-  expect(hostOf(world).recordedAfterHandler).toBe(true);
-});
-
-Then(/^the settle rejected with "(.*)"$/, (world, message) => {
-  const err = world.settleError;
-  expect(err).toBeInstanceOf(Error);
-  expect((err as Error).message).toBe(message);
-});
-
-Then("no continue-threw event was emitted", (world) => {
-  const events = world.events as Array<{ type: string; reason?: string }>;
-  expect(events.some((event) => event.type === "skip" && event.reason === "continue-threw")).toBe(false);
 });
 
 Then(/^a stay event has reason "(.*)"$/, (world, reason) => {

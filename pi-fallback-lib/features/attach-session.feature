@@ -1,5 +1,5 @@
 Feature: Attach failover to a Pi session
-  Quota and transient replay the failed request. Safety sends the block line. retryAfterTools false skips after tools. Interactive and observers pass true.
+  Quota, transient, and safety replay the failed request. retryAfterTools false skips after tools. Interactive and observers pass true.
 
   Background:
     Given a fake host on "grok-cli/grok-4.6" with thinking "low"
@@ -36,14 +36,14 @@ Feature: Attach failover to a Pi session
     And the failed request was replayed once
 
 
-  Scenario: safety after tools sends the block continue message
+  Scenario: safety after tools replays the failed request
     Given attach with retryAfterTools true
     And a session start
     And a tool has started
     And the last assistant raw stop reason is "refusal"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And the block continue message was sent once
+    And the failed request was replayed once
     And the remaining failover budget is 0
 
   Scenario: auth after tools does not failover
@@ -65,13 +65,13 @@ Feature: Attach failover to a Pi session
     Then setModel was not called
     And continue was not sent
 
-  Scenario: a safety phrase sends the block continue message
+  Scenario: a safety phrase replays the failed request
     Given attach with retryAfterTools true
     And a session start
     And the last assistant error is "guardrail_blocked"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And the continue message was "The previous model was blocked. Do not repeat that approach. The tool results already in the conversation are done; do not repeat them. Finish the request a different way."
+    And the failed request was replayed once
 
   Scenario: quota wording that contains a safety phrase replays the failed request
     Given attach with retryAfterTools true
@@ -180,14 +180,6 @@ Feature: Attach failover to a Pi session
     When the agent settles
     Then the failed request was replayed once
 
-  Scenario: safety continue throw does not decrement budget
-    Given attach with retryAfterTools false
-    And a session start
-    And sendUserMessage throws
-    And the last assistant error is "guardrail_blocked"
-    When the agent settles
-    Then the remaining failover budget is 1
-    And the current model is "xai/grok-4.6"
   Scenario: missing config never setModels
     Given attach with a missing config file
     And a session start
@@ -260,54 +252,16 @@ Feature: Attach failover to a Pi session
     And the failed request was replayed once
     And the host is idle
 
-  Scenario: print mode safety failover returns before the continue is recorded
+  Scenario: print mode replays safety without a user message
     Given the host is print mode
     And attach with retryAfterTools false
     And a session start
     And the last assistant error is "guardrail_blocked"
     When the agent settles
-    Then the settle returned within 1 second
-    And no continue-did-not-start event was emitted
-    And the block continue message was sent once
-    And the continue was recorded after the handler returned
-    And the remaining failover budget is 0
-    And setModel was called with "xai/grok-4.6"
-    And the host is idle
-
-  Scenario: json mode safety failover returns before the continue is recorded
-    Given the host is json mode
-    And attach with retryAfterTools false
-    And a session start
-    And the last assistant error is "guardrail_blocked"
-    When the agent settles
-    Then the settle returned within 1 second
-    And no continue-did-not-start event was emitted
-    And the block continue message was sent once
-    And the continue was recorded after the handler returned
-    And the remaining failover budget is 0
-
-  Scenario: tui mode defers the safety continue the same way
-    Given attach with retryAfterTools false
-    And a session start
-    And the last assistant error is "guardrail_blocked"
-    When the agent settles
-    Then the settle returned within 1 second
-    And no continue-did-not-start event was emitted
-    And the block continue message was sent once
-    And the continue was recorded after the handler returned
+    Then setModel was called with "xai/grok-4.6"
+    And the failed request was replayed once
     And the remaining failover budget is 0
     And the host is idle
-
-  Scenario: a deferred continue throw rejects the settle
-    Given the host is print mode
-    And attach with retryAfterTools false
-    And a session start
-    And the deferred continue throws
-    And the last assistant error is "guardrail_blocked"
-    When the agent settles and the deferred send rejects
-    Then the settle rejected with "deferred send failed"
-    And a failover event was emitted
-    And no continue-threw event was emitted
 
   Scenario: manual compact with resume in place does not restore
     Given attach with retryAfterTools false
@@ -357,18 +311,17 @@ Feature: Attach failover to a Pi session
     And a stay event has reason "resume-in-place"
     And the remaining failover budget is 0
 
-  Scenario: a custom start leaves deferReturn set and the user continue consumes it
-    Given sendUserMessage starts the next prompt
-    And a custom start runs before the deferred user continue
-    And attach with retryAfterTools false
+  Scenario: a safety replay does not start a user prompt
+    Given attach with retryAfterTools false
     And a session start
     And the last assistant error is "guardrail_blocked"
     When the agent settles
     Then the current model is "xai/grok-4.6"
-    And setModel call count is 1
+    And the failed request was replayed once
     And no usage-return was emitted
     When the user prompt starts
     Then the current model is "grok-cli/grok-4.6"
+    And continue was not sent
     And a usage-return event went to "grok-cli/grok-4.6"
 
   Scenario: failover emits an event and does not notify
@@ -386,7 +339,7 @@ Feature: Attach failover to a Pi session
     And the last assistant raw stop reason is "refusal"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And the block continue message was sent once
+    And the failed request was replayed once
 
   Scenario: reasoning extraction refusal does not failover
     Given attach with retryAfterTools false
@@ -405,7 +358,7 @@ Feature: Attach failover to a Pi session
     And the last assistant raw stop reason is "refusal"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And the block continue message was sent once
+    And the failed request was replayed once
 
   Scenario: a non-delta stream event does not suppress a refusal
     Given attach with retryAfterTools false
@@ -414,7 +367,7 @@ Feature: Attach failover to a Pi session
     And the last assistant raw stop reason is "refusal"
     When the agent settles
     Then setModel was called with "xai/grok-4.6"
-    And the block continue message was sent once
+    And the failed request was replayed once
 
   Scenario: a virtual session failovers on the physical assistant and returns
     Given a fake host on "virtual/session" with thinking "low"

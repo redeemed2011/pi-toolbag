@@ -23,7 +23,7 @@ Put `"npm:pi-auto-fallback"` back in `packages` and remove `git:github.com/redee
 
 ## Behaviour
 
-- After Pi has given up its own retries, quota and timeout replay the failed request (`agent_before_settle`: `setModel`, omit the failed assistant, `continue`). Safety waits for `agent_settled`, then `setModel` and sends the block line.
+- After Pi has given up its own retries, quota, timeout, and safety replay the failed request (`agent_before_settle`: `setModel`, omit the failed assistant, `continue`). No new user message is sent.
 - Fail over after tools have started. Quota, timeout, and safety still hop. Auth, overflow, abort, an ordinary refusal, and `reasoning_extraction` do not.
 - Do not write to stdout/stderr. Failover reports through `ctx.ui.notify`. The library emits structured events; this extension notifies only on a successful hop.
 - Native Pi children load this same file, including foreground sessions and agents that set `extensions: []`. External runners are left alone and are not refused.

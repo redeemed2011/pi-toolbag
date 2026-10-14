@@ -17,12 +17,6 @@ import type {
 } from "./types.js";
 import { matchingGate, reportedUsage, thresholdCrossed, usageRecovered } from "./usage.js";
 
-export const CONTINUE_AFTER_STOP =
-  "The previous model stopped. The tool results already in the conversation are done; do not repeat them. Finish the original request.";
-
-export const CONTINUE_AFTER_BLOCK =
-  "The previous model was blocked. Do not repeat that approach. The tool results already in the conversation are done; do not repeat them. Finish the request a different way.";
-
 type EpochState = {
   preferred?: ModelKey;
   attempted: Set<ModelKey>;
@@ -31,8 +25,6 @@ type EpochState = {
   ignoreModelSelectKey?: ModelKey;
   failoverInFlight: boolean;
   usageHeld: Set<ModelKey>;
-  /** The continue retry must stay on the fallback. Cleared by the next prompt. */
-  deferReturn: boolean;
   /** Anthropic stop_details.category from this turn's stream. Cleared when the next turn starts. */
   refusalCategory?: string;
 }
@@ -70,12 +62,6 @@ function modelFromEvent(value: unknown): { provider: string; id: string } | unde
   return { provider: rec.provider, id: rec.id };
 }
 
-async function maybeAwait(value: unknown): Promise<void> {
-  if (value !== null && typeof value === "object" && "then" in value) {
-    await value;
-  }
-}
-
 function refusalCategoryFromStream(event: unknown): string | undefined {
   const data = eventRecord(event).data;
   if (data === null || typeof data !== "object" || Array.isArray(data)) return undefined;
@@ -103,10 +89,9 @@ function newestCompaction(branch: ReadonlyArray<{ type?: string }>, fallback: un
   return fallback;
 }
 
-// Since Pi 0.87, `sendUserMessage` from an `agent_settled` handler is deferred
-// until all settled handlers return, and the outer `prompt()` awaits that
-// deferred run. Print/JSON therefore does not exit on the failed assistant.
-// Do not wait inside the handler: the continue cannot start until it returns.
+// Quota, transient, and safety failover run at agent_before_settle.
+// setModel, omit the failed assistant, and continue so the request is
+// replayed with no new user message. agent_settled only clears turn state.
 
 export function attachFallback(pi: FallbackHost, options: AttachOptions): AttachHandle {
   const emit = (event: FallbackEvent, ctx?: FallbackCtx): void => {
@@ -136,7 +121,6 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     toolsThisTurn: false,
     failoverInFlight: false,
     usageHeld: new Set(),
-    deferReturn: false,
   };
 
   const resetEpoch = (): void => {
@@ -270,7 +254,6 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
   pi.on("session_start", (_event, ctx) => {
     resetEpoch();
     state.usageHeld = new Set();
-    state.deferReturn = false;
     snapshotPreferred(ctx);
   });
 
@@ -291,7 +274,6 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     }
     state.preferred = key;
     state.usageHeld = new Set();
-    state.deferReturn = false;
     resetEpoch();
   });
 
@@ -309,10 +291,6 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     if ((event as BeforeAgentStartEventLike).messageType === "custom") return;
     if (options.checkUsage === false) return;
     if (!config?.enabled) return;
-    if (state.deferReturn) {
-      state.deferReturn = false;
-      return;
-    }
     if (state.failoverInFlight) return;
     const current = currentKey(ctx);
     if (!current) return;
@@ -447,7 +425,8 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       return;
     }
     const owned =
-      mode === "replay" ? classification === "quota" || classification === "transient" : classification === "safety";
+      mode === "replay" &&
+      (classification === "quota" || classification === "transient" || classification === "safety");
     if (!owned) return;
 
     if (!options.retryAfterTools && state.toolsThisTurn) {
@@ -527,39 +506,6 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
             entries: [{ type: "context_edit", targetId: replayTarget, replacement: null }],
           };
         }
-
-        try {
-          if (!ctx.isIdle()) {
-            emit({ type: "skip", reason: "not-idle-after-setModel" }, ctx);
-            return;
-          }
-          // ExtensionAPI.sendUserMessage is void and fire-and-forget
-          // (session wrapper .catch(emitError)). A throw is only visible
-          // when the host is synchronous (tests). Budget decrements after
-          // a successful call from this process.
-          state.deferReturn = true;
-          const sent = pi.sendUserMessage(CONTINUE_AFTER_BLOCK);
-          await maybeAwait(sent);
-        } catch (err) {
-          state.deferReturn = false;
-          emit({ type: "skip", reason: "continue-threw", detail: err instanceof Error ? err.message : String(err) }, ctx);
-          return;
-        }
-
-        state.remainingBudget -= 1;
-        state.toolsThisTurn = false;
-        emit(
-          {
-            type: "failover",
-            from: current,
-            to: decision.next,
-            reason: decision.reason,
-            budget: state.remainingBudget,
-          },
-          ctx,
-        );
-        // The continue is deferred until this handler returns. Do not wait for it here.
-        return;
       } finally {
         state.failoverInFlight = false;
       }
