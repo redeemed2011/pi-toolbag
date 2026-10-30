@@ -33,7 +33,6 @@ cplt --agent pi check path ~/.pi/agent/sessions --write
 # Wrapper-equivalent flags (keep in sync with ~/.local/bin/pi)
 cplt --agent pi --yes \
   --allow-write "$HOME/.pi/grok-cli" \
-  --allow-write "$HOME/.config/pi-hashline-edit-pro" \
   --allow-write "$HOME/.pi/ctx" \
   --print-profile
 ```

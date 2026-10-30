@@ -28,7 +28,6 @@ read = ["/", "~/.pi/web-search.json"]
 write = [
   "/home/bo/.pi/grok-cli",
   "/home/bo/.pi/ctx",
-  "/home/bo/.config/pi-hashline-edit-pro",
   "/home/bo/ResilioSync/Obsidian/My Notes",
   "~/src",
 ]
