@@ -28,11 +28,9 @@ function contextPressureTokens(
 	return { tokens: raw, due: raw >= threshold };
 }
 
-function turnWillContinue(event: { toolResults?: unknown[]; message?: { stopReason?: string } }): boolean {
-	const toolResults = event?.toolResults;
-	if (Array.isArray(toolResults) && toolResults.length > 0) return true;
-	const stop = event?.message?.stopReason;
-	return stop === "tool_use" || stop === "tool_calls" || stop === "toolUse";
+/** True only when `ctx.compact()` will abort a live run. Idle settle does not. */
+function compactWillAbortRun(ctx: { isIdle?: () => boolean }): boolean {
+	return typeof ctx.isIdle === "function" && !ctx.isIdle();
 }
 
 export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): void {
@@ -52,35 +50,63 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 
 		if (!contextPressureTokens(ctx, runtime.config.compactAtContextTokens, runtime.sessionId).due) return;
 
-		const shouldResume = runtime.config.resumeAfterMidRunCompaction && turnWillContinue(event);
-		const notify = notifyFrom(ctx);
+		// Arm only. compact() aborts an active run, and that abort is recorded as a user pause.
 		runtime.compactInFlight = true;
-		notify?.("ctx: context threshold reached — compacting…", "info");
-		runtime.compactResume = shouldResume;
+	});
 
-		ctx.compact({
-			onComplete: () => {
-				runtime.compactResume = false;
-				runtime.compactInFlight = false;
-				notify?.("ctx: compaction complete", "info");
-				if (!shouldResume || !runtime.enabled || runtime.config.passive) return;
-				try {
-					pi.sendMessage(
-						{ customType: CTX_RESUME, content: RESUME_PROMPT, display: false },
-						{ triggerTurn: true },
-					);
-				} catch (error) {
-					const msg = error instanceof Error ? error.message : String(error);
-					runtime.lastWorkerError = `resume failed: ${msg}`;
-					notify?.(`ctx: resume failed — ${msg}`, "error");
-				}
-			},
-			onError: (error: { message: string }) => {
-				runtime.compactResume = false;
-				runtime.compactInFlight = false;
-				if (error.message === "Compaction cancelled") return;
-				notify?.(`ctx: ${error.message}`, "error");
-			},
-		});
+	// The run is already idle: _isAgentRunActive is cleared before this event.
+	// Await compact before returning so a later setTimeout(0) cannot start the next run first.
+	pi.on("agent_settled", async (_event: any, ctx: any) => {
+		if (!runtime.compactInFlight) return;
+		if (!runtime.enabled || runtime.config.passive) {
+			runtime.compactInFlight = false;
+			runtime.compactResume = false;
+			return;
+		}
+
+		const notify = notifyFrom(ctx);
+		const shouldResume = runtime.config.resumeAfterMidRunCompaction && compactWillAbortRun(ctx);
+		runtime.compactResume = shouldResume;
+		notify?.("ctx: context threshold reached — compacting…", "info");
+
+		try {
+			await new Promise<void>((resolve) => {
+				ctx.compact({
+					onComplete: () => {
+						runtime.compactResume = false;
+						runtime.compactInFlight = false;
+						notify?.("ctx: compaction complete", "info");
+						if (!shouldResume || !runtime.enabled || runtime.config.passive) {
+							resolve();
+							return;
+						}
+						try {
+							pi.sendMessage(
+								{ customType: CTX_RESUME, content: RESUME_PROMPT, display: false },
+								{ triggerTurn: true },
+							);
+						} catch (error) {
+							const msg = error instanceof Error ? error.message : String(error);
+							runtime.lastWorkerError = `resume failed: ${msg}`;
+							notify?.(`ctx: resume failed — ${msg}`, "error");
+						}
+						resolve();
+					},
+					onError: (error: { message: string }) => {
+						runtime.compactResume = false;
+						runtime.compactInFlight = false;
+						if (error.message !== "Compaction cancelled") {
+							notify?.(`ctx: ${error.message}`, "error");
+						}
+						resolve();
+					},
+				});
+			});
+		} catch (error) {
+			runtime.compactResume = false;
+			runtime.compactInFlight = false;
+			const msg = error instanceof Error ? error.message : String(error);
+			notify?.(`ctx: ${msg}`, "error");
+		}
 	});
 }
