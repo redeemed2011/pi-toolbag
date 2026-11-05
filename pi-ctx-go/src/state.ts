@@ -55,13 +55,7 @@ export function freshState(): GoState {
 }
 
 export function fingerprint(snap: Snap): string {
-  return [
-    snap.destinationId ?? "",
-    snap.claimedId ?? "",
-    snap.frontierIds.join(","),
-    snap.askIds.join(","),
-    snap.blocked.map((item) => item.id).join(","),
-  ].join("|");
+  return [snap.destinationId ?? "", snap.claimedId ?? "", snap.frontierIds.join(",")].join("|");
 }
 
 function prompt(state: GoState, text: string, snap: Snap): Step {
@@ -77,7 +71,14 @@ function destinationReady(state: GoState, snap: Snap): boolean {
 
 export function onStop(state: GoState): Step {
   return {
-    state: { ...freshState(), approvedDestinationId: state.approvedDestinationId },
+    state: {
+      ...freshState(),
+      approvedDestinationId: state.approvedDestinationId,
+      rejections: state.rejections,
+      lastClaim: state.lastClaim,
+      lastVerdict: state.lastVerdict,
+      phase: state.phase === "paused" ? "paused" : "idle",
+    },
     actions: [{ type: "notify", level: "info", message: "ctx-go stopped" }],
   };
 }
@@ -115,8 +116,13 @@ function pause(state: GoState, message: string, hard = false): Step {
   };
 }
 
+function claimBlocked(snap: Snap): boolean {
+  return snap.claimedId !== null && snap.blocked.some((item) => item.id === snap.claimedId);
+}
+
 function questionsOpen(snap: Snap): boolean {
-  return snap.frontierIds.length > 0 || (snap.claimedId !== null && !snap.askIds.includes(snap.claimedId));
+  if (snap.frontierIds.length > 0) return true;
+  return snap.claimedId !== null && !snap.askIds.includes(snap.claimedId) && !claimBlocked(snap);
 }
 
 function askPause(state: GoState, snap: Snap): Step {
@@ -125,9 +131,8 @@ function askPause(state: GoState, snap: Snap): Step {
 }
 
 function blockedPause(state: GoState, snap: Snap): Step | null {
-  if (snap.claimedId !== null && snap.askIds.includes(snap.claimedId)) return askPause(state, snap);
-  if (questionsOpen(snap)) return null;
   if (snap.askIds.length > 0) return askPause(state, snap);
+  if (questionsOpen(snap)) return null;
   if (snap.blocked.length > 0) {
     const lines = snap.blocked.map((item) => `${item.id} ${item.headline} blocked by ${item.blockers.join(", ")}`);
     return pause(state, `Blocked questions:\n${lines.join("\n")}`);
@@ -149,7 +154,10 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
     return step;
   };
   if (!destinationReady(state, snap)) {
-    if (state.phase !== "draft") return say({ ...state, phase: "draft", approvedDestinationId: null }, DRAFT_PROMPT);
+    if (state.phase !== "draft") {
+      if (turn.pending) return { state, actions: [] };
+      return prompt({ ...state, phase: "draft", approvedDestinationId: null }, DRAFT_PROMPT, snap);
+    }
     const draft = twoLines(turn.text);
     if (!draft) return pause(state, "ctx-go paused: draft made no progress");
     return { state: { ...state, phase: "draft" }, actions: [{ type: "approve", text: draft }] };

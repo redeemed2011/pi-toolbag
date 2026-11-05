@@ -13,21 +13,25 @@ export type PacketInput = {
 
 export type Packet = { ok: true; text: string } | { ok: false; error: string };
 
-function looksLikePath(token: string): boolean {
-  return token.includes("/") || /\.[A-Za-z0-9]{1,8}$/.test(token);
+function bareProse(token: string): boolean {
+  const parts = token.split("/");
+  return parts.length === 2 && !parts[1]?.includes(".") && !token.startsWith(".");
 }
 
 export function namedPaths(claim: string): string[] {
   const found: string[] = [];
   const seen = new Set<string>();
   const add = (token: string) => {
-    const name = token.trim();
-    if (!looksLikePath(name) || seen.has(name)) return;
+    const name = token.trim().replace(/\.+$/, "");
+    if (!name || name.includes("://") || /\s/.test(name) || seen.has(name)) return;
     seen.add(name);
     found.push(name);
   };
   for (const match of claim.matchAll(/`([^`\n]+)`/g)) add(match[1] ?? "");
-  for (const match of claim.matchAll(/(?:^|\s)((?:[\w.-]+\/)+[\w.-]+)/g)) add(match[1] ?? "");
+  for (const match of claim.matchAll(/(?:^|[\s"'`(])((?:\.{1,2}\/|(?:[\w.-]+\/)+)[\w.-]+)/g)) {
+    const token = match[1] ?? "";
+    if (!bareProse(token)) add(token);
+  }
   return found;
 }
 
@@ -42,7 +46,9 @@ function readProduct(cwd: string, token: string): { ok: true; text: string } | {
     return { ok: false, error: `missing product ${token}` };
   }
   const rel = relative(root, real);
-  if (rel.startsWith("..") || isAbsolute(rel)) return { ok: false, error: `product outside the session ${token}` };
+  if (rel === ".." || rel.startsWith("../") || rel.startsWith("..\\") || isAbsolute(rel)) {
+    return { ok: false, error: `product outside the session ${token}` };
+  }
   let size = 0;
   try {
     size = statSync(real).size;
@@ -95,11 +101,13 @@ export function buildPacket(input: PacketInput): Packet {
 
 export function parseVerdict(text: string): { ok: true; done: boolean; summary: string } | { ok: false; error: string } {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
-  const verdict = lines.find((line) => line.toLowerCase().startsWith("verdict:"));
+  const verdicts = lines.filter((line) => line.toLowerCase().startsWith("verdict:"));
+  const verdict = verdicts[verdicts.length - 1];
   if (!verdict) return { ok: false, error: "no verdict" };
   const value = verdict.slice("verdict:".length).trim().toLowerCase();
   if (value !== "done" && value !== "not-done") return { ok: false, error: "bad verdict" };
-  const summaryLine = lines.find((line) => line.toLowerCase().startsWith("summary:"));
+  const summaries = lines.filter((line) => line.toLowerCase().startsWith("summary:"));
+  const summaryLine = summaries[summaries.length - 1];
   const summary = summaryLine ? summaryLine.slice("summary:".length).trim() : "";
   return { ok: true, done: value === "done", summary };
 }

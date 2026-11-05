@@ -23,11 +23,11 @@ export function judgeArgv(model: JudgeModel, prompt: string): string[] {
     "--no-skills",
     "--no-prompt-templates",
     "--no-context-files",
-    "--no-builtin-tools",
+    "--no-tools",
     "--model",
     modelArg(model),
   ];
-  if (model.thinking && model.thinking !== "off") args.push("--thinking", model.thinking);
+  if (model.thinking) args.push("--thinking", model.thinking);
   for (const extra of extraWorkerExtensionPaths(model)) args.push("-e", extra);
   args.push("-p", withoutNullBytes(prompt));
   return [pi.command, ...args];
@@ -42,6 +42,7 @@ export function runJudge(model: JudgeModel, prompt: string, cwd: string): Promis
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let timedOut = false;
     const finish = (result: { ok: true; text: string } | { ok: false; error: string }) => {
       if (settled) return;
       settled = true;
@@ -50,6 +51,7 @@ export function runJudge(model: JudgeModel, prompt: string, cwd: string): Promis
       resolvePromise(result);
     };
     const timer = setTimeout(() => {
+      timedOut = true;
       proc.kill("SIGTERM");
     }, JUDGE_MS);
     const kill = setTimeout(() => {
@@ -64,13 +66,17 @@ export function runJudge(model: JudgeModel, prompt: string, cwd: string): Promis
     proc.on("error", () => {
       finish({ ok: false, error: "spawn failed" });
     });
-    proc.on("close", (code) => {
-      if (stdout.trim()) {
-        finish({ ok: true, text: stdout });
+    proc.on("close", (code, signal) => {
+      if (timedOut || signal || code !== 0) {
+        const detail = stderr.trim().slice(0, 200);
+        finish({ ok: false, error: detail || (timedOut ? "timed out" : `exit ${code ?? signal ?? "none"}`) });
         return;
       }
-      const detail = stderr.trim().slice(0, 200);
-      finish({ ok: false, error: detail || `exit ${code ?? "none"}` });
+      if (!stdout.trim()) {
+        finish({ ok: false, error: "no output" });
+        return;
+      }
+      finish({ ok: true, text: stdout });
     });
   });
 }

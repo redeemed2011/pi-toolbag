@@ -102,7 +102,10 @@ export default function ctxGo(pi: ExtensionAPI): void {
         if (goCtx.hasUI) goCtx.ui.notify(`ctx-judge thinking ${level}`, "info");
         return;
       }
-      const [provider, id] = (parts[0] ?? "").split("/");
+      const spec = parts[0] ?? "";
+      const slash = spec.indexOf("/");
+      const provider = slash > 0 ? spec.slice(0, slash) : "";
+      const id = slash > 0 ? spec.slice(slash + 1) : "";
       const level = parts[1] ? thinkingLevel(parts[1]) : undefined;
       if (!provider || !id || (parts[1] !== undefined && !level)) {
         if (goCtx.hasUI) goCtx.ui.notify("usage: /ctx-judge provider/id [thinking]", "warning");

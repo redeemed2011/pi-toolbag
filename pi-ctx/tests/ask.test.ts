@@ -57,6 +57,20 @@ describe("ask-operator marker", () => {
 		if (!held.ok) expect(held.error).toBe("ask_operator");
 	});
 
+	it("ignores asks on any record that is not the titled decision", () => {
+		const q = question("q1", "confirm the name");
+		const other = putJudgment({
+			...base,
+			existing: [q],
+			input: { type: "decision", headline: "Note", body: "q1", asks: ["q1"], session: "s", id: "n1" },
+		});
+		expect(other.ok).toBe(true);
+		if (!other.ok) return;
+		const live = foldLive([q, other.record]);
+		expect(live.askOperator.has("q1")).toBe(false);
+		expect(frontierItems(live, null).map((item) => item.id)).toEqual(["q1"]);
+	});
+
 	it("drops the marker when the decision is superseded", () => {
 		const q = question("q1", "confirm the name");
 		const marker = putJudgment({

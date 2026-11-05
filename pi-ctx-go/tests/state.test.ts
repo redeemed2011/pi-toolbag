@@ -106,6 +106,10 @@ describe("ctx-go loop", () => {
     expect(replaced.state.approvedDestinationId).toBeNull();
     const queued = onTurn(started.state, snap({ frontierIds: ["q2"] }), { ...doneTurn, pending: true });
     expect(queued.actions).toEqual([]);
+    const queuedDraft = onTurn(started.state, snap({ destinationId: "other" }), { ...doneTurn, pending: true });
+    expect(queuedDraft.actions).toEqual([]);
+    expect(queuedDraft.state.phase).toBe("questions");
+    expect(queuedDraft.state.approvedDestinationId).toBe("d1");
   });
 
   it("pauses a marked claim and names a blocked question", () => {
@@ -125,11 +129,26 @@ describe("ctx-go loop", () => {
       doneTurn,
     );
     expect(String((blocked.actions[0] as { message: string }).message)).toContain("r1");
+    const claimed = onTurn(
+      started.state,
+      snap({ frontierIds: [], claimedId: "q3", blocked: [{ id: "q3", headline: "wait", blockers: ["r1"] }] }),
+      doneTurn,
+    );
+    expect(String((claimed.actions[0] as { message: string }).message)).toContain("blocked by r1");
+    const markedEarly = onTurn(
+      started.state,
+      snap({ askIds: ["q9"], askHeadlines: ["confirm"] }),
+      doneTurn,
+    );
+    expect(String((markedEarly.actions[0] as { message: string }).message)).toContain("q9");
   });
 
   it("stop disarms and does not forget the approved destination", () => {
     const stopped = onStop({ ...freshState(), armed: true, approvedDestinationId: "d1", rejections: 1 });
     expect(stopped.state.armed).toBe(false);
     expect(stopped.state.approvedDestinationId).toBe("d1");
+    expect(stopped.state.rejections).toBe(1);
+    const paused = onStop({ ...freshState(), phase: "paused", rejections: 2, approvedDestinationId: "d1" });
+    expect(onGo(paused.state, snap()).state.rejections).toBe(0);
   });
 });

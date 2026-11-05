@@ -185,7 +185,9 @@ export function foldLive(records: JudgmentRecord[]): LiveSet {
 	for (const rec of byId.values()) {
 		if (!live.has(rec.id)) continue;
 		for (const id of rec.blocks ?? []) blocked.add(id);
-		for (const id of rec.asks ?? []) askOperator.add(id);
+		if (rec.type === "decision" && rec.headline === "Ask the operator") {
+			for (const id of rec.asks ?? []) askOperator.add(id);
+		}
 	}
 
 	const ofType = (type: JudgmentRecord["type"]) =>

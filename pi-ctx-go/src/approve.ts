@@ -11,6 +11,7 @@ export function approveDestination(opts: {
   draft: string;
 }): { ok: true; id: string } | { ok: false; error: string } {
   const text = twoLines(opts.draft);
+  if (!opts.sessionId) return { ok: false, error: "empty session" };
   if (!text) return { ok: false, error: "empty draft" };
   let existing = opts.existing;
   const live = () => foldLive(existing);
