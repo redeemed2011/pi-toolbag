@@ -1,5 +1,5 @@
 import { realpathSync, readFileSync, statSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import { resolve } from "node:path";
 
 const PACKET_CAP = 150_000;
 
@@ -38,23 +38,17 @@ export function namedPaths(claim: string): string[] {
     found.push(name);
   };
   for (const match of claim.matchAll(/`([^`\n]+)`/g)) add(match[1] ?? "");
-  for (const match of claim.matchAll(/(?:^|[\s"'`(])((?:\.{1,2}\/|(?:[\w.-]+\/)+)[\w.-]+)/g)) add(match[1] ?? "");
+  for (const match of claim.matchAll(/(?:^|[\s"'`(])((?:\/(?:[\w.-]+\/)+|\.{1,2}\/|(?:[\w.-]+\/)+)[\w.-]+)/g)) add(match[1] ?? "");
   return found;
 }
 
 function readProduct(cwd: string, token: string): { ok: true; text: string } | { ok: false; error: string } {
   const abs = resolve(cwd, token);
   let real: string;
-  let root: string;
   try {
-    root = realpathSync(cwd);
     real = realpathSync(abs);
   } catch {
     return { ok: false, error: `missing product ${token}` };
-  }
-  const rel = relative(root, real);
-  if (rel === ".." || rel.startsWith("../") || rel.startsWith("..\\") || isAbsolute(rel)) {
-    return { ok: false, error: `product outside the session ${token}` };
   }
   let size = 0;
   try {
@@ -102,7 +96,11 @@ export function buildPacket(input: PacketInput): Packet {
     "## Products",
     products.join("\n\n"),
   ].join("\n");
-  if (text.length > PACKET_CAP) return { ok: false, error: "judge packet does not fit" };
+  if (text.length > PACKET_CAP) {
+    const paths = namedPaths(input.claim);
+    const included = paths.length > 0 ? paths.join(", ") : "done-claim account";
+    return { ok: false, error: `judge packet does not fit: ${included}` };
+  }
   return { ok: true, text };
 }
 

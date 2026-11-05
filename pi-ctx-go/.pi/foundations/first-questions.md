@@ -174,6 +174,15 @@ The directory `pi-ctx-go` holds this contract so it does not replace the 2026-10
 - **Challenges**: The goal already says the loop runs only while CTX is bound, and only after the operator says go and approves a drafted destination. Those two gaps are the whole of "not yet functional." A discussion of what remains can become a second loop, which the contract already cut. The model cannot bind a project. The extension cannot speak if it is not loaded. Teaching the question loop, the judge, or how to write records is the loop itself, not a preface.
 - **Decision rationale**: When `/ctx-go` cannot yet work the questions, it names the one missing requirement and the one next action. If CTX is not bound, it tells the operator to bind. The model is not asked to bind. If there is no approved destination, it tells the operator that the model will draft and they will approve, and it tells the model to draft. No checklist, no tutorial, and no discussion mode.
 
+### The work is not the session directory
+
+- **Original request**: The working-directory check breaks work across repos, work that is not a repo, and work that is not files: investigations, email, blogs, clusters, cloud providers, and research. CTX is not limited to a working directory, and ctx-go must not be either. The point is that the agent keeps going until the work is done, whatever that work is. The judge should be able to use the session, the CTX records, and what the agent pointed at, and notice if a rogue agent is misleading it.
+- **Source / who / when**: User, 2026-11-05, after the judge paused on `/home/bo/src/apple-pi/.pi/foundations/first-principles.md` because the Pi session cwd was `/home/bo/src/projects`.
+- **Alignment with the goal**: Strong
+- **Outcome**: MODIFIED. Confirmed by the operator, 2026-11-05.
+- **Challenges**: The approved packet already says the work may be a report, an investigation, or a draft, not code. Nothing in that approval says the product has to sit inside the Pi process directory. The directory check was added later as a guard so a claim could not hand the judge an arbitrary file. That guard is what stopped this claim. On 2026-11-04 the operator also cut a judge that searches the session for what is relevant. "Let the judge look around" is that cut, reopened. A judge that can read any path, mailbox, or cluster on its own is a second investigation, and a claim that can point at any path can also put a secret in the judge's prompt.
+- **Decision rationale**: A product is whatever the done-claim points at. If it is a file, the judge is given that file even when it is outside the session directory. If it is not a file, the claim's account of it is the product. The packet stays the destination, the constraints, how the questions were closed, and those products. The judge does not browse the session, the disk, or remote systems for other work. Noticing a misleading claim is the judge's verdict on that packet, not a search.
+
 ## Deleted / avoided scope
 
 - Judge along the way — a second clock that can finish a slice while CTX work remains.
@@ -190,7 +199,8 @@ The directory `pi-ctx-go` holds this contract so it does not replace the 2026-10
 - A checklist or tutorial product — the extension already has an operator message and a model prompt.
 - The extension binding CTX, or guiding while it is not loaded — bind stays the operator's, and an unloaded extension cannot present anything.
 - Guiding the question loop, the judge, or record writing — that is the loop, not a requirement for starting it.
+- Products must live in the Pi session directory — the operator did not require that. The directory check is what stopped a real file in another tree.
 
 ## Open questions
 
-None. The operator confirmed the modified guide on 2026-11-05.
+None. The operator confirmed the modified product rule on 2026-11-05. The judge still does not go looking.

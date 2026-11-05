@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext, SessionBoundaryDraft } from "@earendil-works/pi-coding-agent";
 import { approveDestination } from "./src/approve.js";
 import { runJudge, thinkingLevel, type JudgeModel } from "./src/judge.js";
-import { buildPacket, namedPaths, parseVerdict } from "./src/packet.js";
+import { buildPacket, parseVerdict } from "./src/packet.js";
 import { closedQuestions, readSnap, type BoundSnap } from "./src/snap.js";
 import {
   freshState,
@@ -211,8 +211,5 @@ async function judgeNow(ctx: GoCtx, snap: BoundSnap, state: GoState, claim: stri
   if (!model) return onJudge(state, snap, { ok: false, error: "no model" });
   const ran = await runJudge(model, packet.text, ctx.cwd);
   const verdict = ran.ok ? parseVerdict(ran.text) : ran;
-  if (namedPaths(claim).length === 0 && verdict.ok && verdict.done) {
-    return onJudge(state, snap, { ok: true, done: false, summary: "claim names no product" });
-  }
   return onJudge(state, snap, verdict);
 }

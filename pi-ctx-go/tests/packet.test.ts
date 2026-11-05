@@ -70,6 +70,24 @@ describe("judge packet", () => {
     expect(dotted.ok).toBe(true);
   });
 
+  it("reads a file outside the session directory", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "ctx-go-cwd-"));
+    const other = mkdtempSync(join(tmpdir(), "ctx-go-other-"));
+    const file = join(other, "first-principles.md");
+    writeFileSync(file, "outside");
+    const claim = `The products are ${file} and \`${file}\`.`;
+    expect(namedPaths(claim)).toEqual([file]);
+    const packet = buildPacket({
+      cwd,
+      destination: "Ship it",
+      constraints: [],
+      closed: [],
+      claim,
+    });
+    expect(packet.ok).toBe(true);
+    if (packet.ok) expect(packet.text).toContain("outside");
+  });
+
   it("follows a superseded closer to the live record", () => {
     const base = { occupancy: "gated-edge" as const, siblingKnob: 0 as const, claimedId: null };
     const q = putJudgment({
@@ -95,6 +113,38 @@ describe("judge packet", () => {
     if (!later.ok) return;
     const closed = closedQuestions(foldLive([q.record, closer.record, later.record]));
     expect(closed).toEqual([{ id: "b", headline: "B", body: "replaced", superseded: "q1" }]);
+  });
+
+  it("names what did not fit and refuses a file over the cap", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "ctx-go-cap-"));
+    const file = join(cwd, "big.md");
+    writeFileSync(file, "x".repeat(150_001));
+    const tooBig = buildPacket({
+      cwd,
+      destination: "Ship it",
+      constraints: [],
+      closed: [],
+      claim: `Product is ${file}`,
+    });
+    expect(tooBig).toEqual({ ok: false, error: `product too large ${file}` });
+    writeFileSync(file, "ok");
+    const shared = buildPacket({
+      cwd,
+      destination: "d".repeat(150_000),
+      constraints: [],
+      closed: [],
+      claim: `Product is ${file}`,
+    });
+    expect(shared.ok).toBe(false);
+    if (!shared.ok) expect(shared.error).toBe(`judge packet does not fit: ${file}`);
+    const account = buildPacket({
+      cwd,
+      destination: "d".repeat(150_000),
+      constraints: [],
+      closed: [],
+      claim: "The cluster report is the product.",
+    });
+    expect(account).toEqual({ ok: false, error: "judge packet does not fit: done-claim account" });
   });
 
   it("gives the judge no tools and the session thinking level", () => {
