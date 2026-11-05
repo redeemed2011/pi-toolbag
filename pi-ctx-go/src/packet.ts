@@ -18,20 +18,27 @@ function bareProse(token: string): boolean {
   return parts.length === 2 && !parts[1]?.includes(".") && !token.startsWith(".");
 }
 
+function isSlashCommand(token: string): boolean {
+  return /^\/[^/\s.]+$/.test(token);
+}
+
+function isFilePath(token: string): boolean {
+  if (!token || token.includes("://") || /\s/.test(token) || isSlashCommand(token)) return false;
+  if (token.includes("/")) return !bareProse(token);
+  return /\.[A-Za-z0-9]{1,8}$/.test(token);
+}
+
 export function namedPaths(claim: string): string[] {
   const found: string[] = [];
   const seen = new Set<string>();
   const add = (token: string) => {
     const name = token.trim().replace(/\.+$/, "");
-    if (!name || name.includes("://") || /\s/.test(name) || seen.has(name)) return;
+    if (!isFilePath(name) || seen.has(name)) return;
     seen.add(name);
     found.push(name);
   };
   for (const match of claim.matchAll(/`([^`\n]+)`/g)) add(match[1] ?? "");
-  for (const match of claim.matchAll(/(?:^|[\s"'`(])((?:\.{1,2}\/|(?:[\w.-]+\/)+)[\w.-]+)/g)) {
-    const token = match[1] ?? "";
-    if (!bareProse(token)) add(token);
-  }
+  for (const match of claim.matchAll(/(?:^|[\s"'`(])((?:\.{1,2}\/|(?:[\w.-]+\/)+)[\w.-]+)/g)) add(match[1] ?? "");
   return found;
 }
 

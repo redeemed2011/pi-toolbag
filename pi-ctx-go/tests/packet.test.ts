@@ -19,8 +19,11 @@ describe("judge packet", () => {
     expect(parseVerdict("looks good")).toEqual({ ok: false, error: "no verdict" });
   });
 
-  it("names file products and skips prose", () => {
-    expect(namedPaths("and/or read/write src/out.md. `Makefile` `https://x/y`")).toEqual(["Makefile", "src/out.md"]);
+  it("names file products and skips prose and slash commands", () => {
+    expect(namedPaths("and/or read/write src/out.md. `Makefile` `https://x/y` `/ctx-go` `/ctx-stop`")).toEqual([
+      "src/out.md",
+    ]);
+    expect(namedPaths("wrote `out.md` and `the report`")).toEqual(["out.md"]);
   });
 
   it("includes a named file and refuses one it cannot read", () => {
@@ -44,6 +47,18 @@ describe("judge packet", () => {
       claim: "Product is `missing.md`",
     });
     expect(missing.ok).toBe(false);
+    const mentioned = buildPacket({
+      cwd,
+      destination: "Ship it",
+      constraints: [],
+      closed: [],
+      claim: "Started with `/ctx-go`. Product is `out.md`.",
+    });
+    expect(mentioned.ok).toBe(true);
+    if (mentioned.ok) {
+      expect(mentioned.text).toContain("hello");
+      expect(mentioned.text).not.toContain("missing product");
+    }
     writeFileSync(join(cwd, "..notes.md"), "kept");
     const dotted = buildPacket({
       cwd,

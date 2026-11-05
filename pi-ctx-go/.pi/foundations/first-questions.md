@@ -1,7 +1,8 @@
 # First Questions
 
 **Session date**: 2026-11-04
-**Status**: ACTIVE
+**Revisited**: 2026-11-05
+**Status**: REVISITED
 
 ## The one-sentence goal
 
@@ -164,6 +165,15 @@ The directory `pi-ctx-go` holds this contract so it does not replace the 2026-10
 - **Challenges**: The injected destination is the first live destination record, and only its first two lines. Bind-time harvest will mint a destination only from the operator's verbatim words, and only when the project has none. A worker calling `ctx_record` can store a sentence the operator never approved. An approval that is only the word "yes" is not the sentence, so harvest will not store the draft.
 - **Decision rationale**: The destination the judge checks is a sentence the worker drafted and the operator approved. The operator does not have to compose it. An unapproved draft is not the destination. Approval happens at the start of `/ctx-go`, before the unfinished questions are worked. The operator confirmed that timing.
 
+### Guide until `/ctx-go` can work
+
+- **Original request**: "the extension should present a way to guide the user or AI or both to the point of making /ctx-go functional (achieve the requirements for /ctx-go). it may mean a discussion on what remains."
+- **Source / who / when**: User, 2026-11-05, after a live `/ctx-go` stopped at the destination draft.
+- **Alignment with the goal**: Strong
+- **Outcome**: MODIFIED to one next action for whoever can take it. Confirmed by the operator, 2026-11-05.
+- **Challenges**: The goal already says the loop runs only while CTX is bound, and only after the operator says go and approves a drafted destination. Those two gaps are the whole of "not yet functional." A discussion of what remains can become a second loop, which the contract already cut. The model cannot bind a project. The extension cannot speak if it is not loaded. Teaching the question loop, the judge, or how to write records is the loop itself, not a preface.
+- **Decision rationale**: When `/ctx-go` cannot yet work the questions, it names the one missing requirement and the one next action. If CTX is not bound, it tells the operator to bind. The model is not asked to bind. If there is no approved destination, it tells the operator that the model will draft and they will approve, and it tells the model to draft. No checklist, no tutorial, and no discussion mode.
+
 ## Deleted / avoided scope
 
 - Judge along the way — a second clock that can finish a slice while CTX work remains.
@@ -176,7 +186,11 @@ The directory `pi-ctx-go` holds this contract so it does not replace the 2026-10
 - The operator must write the destination — the worker drafts it, and the operator approves it.
 - An unapproved destination — a worker-recorded sentence the operator has not approved is not the one the judge checks.
 - A judge that searches for relevant work — the packet is fixed. A second pass that builds a reading list is a second judge.
+- A discussion until `/ctx-go` feels ready — the missing requirements are already two, and a second conversation does not make the loop finite.
+- A checklist or tutorial product — the extension already has an operator message and a model prompt.
+- The extension binding CTX, or guiding while it is not loaded — bind stays the operator's, and an unloaded extension cannot present anything.
+- Guiding the question loop, the judge, or record writing — that is the loop, not a requirement for starting it.
 
 ## Open questions
 
-None. Ask-the-operator is a CTX marker set from the operator's explicit "ask me," recorded 2026-11-04.
+None. The operator confirmed the modified guide on 2026-11-05.

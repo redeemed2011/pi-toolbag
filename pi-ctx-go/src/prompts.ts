@@ -1,5 +1,5 @@
 export const DRAFT_PROMPT = [
-  "Draft the CTX destination in at most two lines.",
+  "Reply with only the CTX destination, at most two lines.",
   "Do not record it. The operator approves it through the extension.",
 ].join("\n");
 
@@ -12,6 +12,6 @@ export const QUESTION_PROMPT = [
 
 export const CLAIM_PROMPT = [
   "The open questions are settled. Claim the destination is met.",
-  "Name the products. If a product is a file, name its path.",
+  "Name the products. If a product is a file, name its path. A slash command is not a path.",
   "Do not record a destination.",
 ].join("\n");

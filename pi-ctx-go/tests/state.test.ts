@@ -21,15 +21,29 @@ describe("ctx-go loop", () => {
   it("does nothing until CTX is bound", () => {
     const step = onGo(freshState(), snap({ bound: false }));
     expect(step.state.armed).toBe(false);
-    expect(step.actions[0]).toMatchObject({ type: "notify" });
+    expect(step.actions).toEqual([
+      { type: "notify", level: "warning", message: "CTX is not bound. Bind a CTX project, then run /ctx-go again." },
+    ]);
   });
 
   it("starts by asking for a draft, then for approval", () => {
     const started = onGo(freshState(), snap({ destinationId: null }));
     expect(started.state.phase).toBe("draft");
-    expect(started.actions[0]).toMatchObject({ type: "prompt", text: DRAFT_PROMPT });
+    expect(started.actions[0]).toMatchObject({
+      type: "notify",
+      message: "No destination is approved. The model will draft one, and you will approve it.",
+    });
+    expect(started.actions[1]).toMatchObject({ type: "prompt", text: DRAFT_PROMPT });
     const drafted = onTurn(started.state, snap({ destinationId: null }), { ...doneTurn, text: "Ship the marker.\nKeep it short.\nIgnore." });
     expect(drafted.actions[0]).toMatchObject({ type: "approve", text: "Ship the marker.\nKeep it short." });
+    const wrapped = onTurn(started.state, snap({ destinationId: null }), {
+      ...doneTurn,
+      text: "The CTX destination draft is one line and has not been recorded:\n\nFrom a local web app, the operator directs the work.",
+    });
+    expect(wrapped.actions[0]).toMatchObject({
+      type: "approve",
+      text: "From a local web app, the operator directs the work.",
+    });
   });
 
   it("works questions only after the approved destination is the injected one", () => {
@@ -102,7 +116,8 @@ describe("ctx-go loop", () => {
   it("does not treat question work as a destination draft, and does not follow a queued message", () => {
     const started = onApproved({ ...freshState(), armed: true }, snap(), "d1");
     const replaced = onTurn(started.state, snap({ destinationId: "other" }), doneTurn);
-    expect(replaced.actions[0]).toMatchObject({ type: "prompt", text: DRAFT_PROMPT });
+    expect(replaced.actions[0]).toMatchObject({ type: "notify" });
+    expect(replaced.actions[1]).toMatchObject({ type: "prompt", text: DRAFT_PROMPT });
     expect(replaced.state.approvedDestinationId).toBeNull();
     const queued = onTurn(started.state, snap({ frontierIds: ["q2"] }), { ...doneTurn, pending: true });
     expect(queued.actions).toEqual([]);

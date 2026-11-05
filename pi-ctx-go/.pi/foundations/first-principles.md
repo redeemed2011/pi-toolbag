@@ -1,6 +1,7 @@
 # First Principles
 
 **Session date**: 2026-11-04
+**Revisited**: 2026-11-05
 **Scope**: A new Pi extension that runs only while CTX is bound keeps that session working through the open CTX work until a separate model judge, asked only at the claim of done, agrees it is done, for the operator who said go.
 
 ## Bedrock facts
@@ -103,6 +104,13 @@
 **Source / evidence**: `pi-ctx/src/promoter/hitl.ts`, `runPendingReplaceHitl`, 2026-11-04.
 **Status**: Verified
 
+### Fact 15 — One missing requirement, one next action
+
+**Statement**: `/ctx-go` is not yet working the questions in exactly two cases. CTX is not bound, or no destination has been approved. It names that one gap and one next action. If CTX is not bound, the next action is the operator binding it. The model is not asked to bind. If no destination is approved, the next action is the model drafting and the operator approving. There is no discussion, checklist, or tutorial.
+**Why it is load-bearing**: Without this, the operator reaches `/ctx-go` and gets either a warning that does not say what to do, or a model turn whose purpose they have not been told. A discussion of what remains would be a second loop. Fact 2 forbids a checklist the extension keeps.
+**Source / evidence**: Operator, 2026-11-05, confirmed in `.pi/foundations/first-questions.md` under "Guide until `/ctx-go` can work." Current code, read 2026-11-05: `onGo` in `pi-ctx-go/src/state.ts` notifies "ctx-go needs a bound CTX project" and does not arm or prompt. When bound and the destination is not approved, it sends `DRAFT_PROMPT` to the model and does not tell the operator that approval is the remaining step. `pi-ctx-go/index.ts` `ctx-go` handler.
+**Status**: Verified
+
 ## Hypotheses requiring fresh verification
 
 None. The queued-message flag is Fact 14. The remaining operator-prose case is a decision, not a missing measurement.
@@ -113,7 +121,7 @@ None. The queued-message flag is Fact 14. The remaining operator-prose case is a
 
 One extension, listed in `pi.extensions`, idle until CTX is bound. `/ctx-go` arms it. `/ctx-stop` disarms it. While armed, it does three phases and then stops. A pause that is not `/ctx-stop` stays armed: the operator's next message is an ordinary turn, and the loop continues after that turn if the phase rules still say so. The armed flag and the rejection count live in the extension's memory. Compaction does not restart the process, so that memory survives it. The model transcript does not.
 
-1. Destination. If the injected destination is not already a sentence this extension stored after an operator approval, it asks the worker for a draft and holds the first two lines of that reply. Those are the only lines the session will see. It shows those lines to the operator and asks for a yes or a no through the extension, the same kind of operator pick pi-ctx already uses. Yes writes one destination with that text, superseding every other live destination, so the new record is the one `destinationMd` injects. An older destination is replaced. No asks for another draft. The worker's `ctx_record`, and a chat reply of "yes", do not approve. Phase 2 does not start until the write succeeds.
+1. Destination. If CTX is not bound, `/ctx-go` tells the operator to bind and stops. It does not arm, and it does not ask the model to bind. If the injected destination is not already a sentence this extension stored after an operator approval, it tells the operator that the model will draft the destination and they will approve it, then asks the worker for that draft and holds the first two lines of that reply. Those are the only lines the session will see. It shows those lines to the operator and asks for a yes or a no through the extension, the same kind of operator pick pi-ctx already uses. Yes writes one destination with that text, superseding every other live destination, so the new record is the one `destinationMd` injects. An older destination is replaced. No asks for another draft. The worker's `ctx_record`, and a chat reply of "yes", do not approve. Phase 2 does not start until the write succeeds.
 
 2. Questions. The list is every unblocked, unmarked, unclaimed, live question in the bound project, oldest first. Not a subset, and not a copy. The worker settles those by superseding them. No notice is required. A question with the ask-operator marker is not claimed and not superseded by the worker. The loop surfaces that question and pauses. The marker is not `blocks`, and the worker does not set it because a model disagreed. It is set because the operator said to ask. When the only remaining questions are blocked, it pauses and names those questions and the live records that block them. A question is settled when a later record supersedes it. Closing the claim, filing a finding, or the worker saying it is done does not settle it. When a turn ends and the workable list still has a question, the extension starts one more turn, unless that turn made no progress: no tool results, and the frontier, the claim, and the destination are unchanged. It does not start that extra turn when a message is already queued; Pi will deliver the queue. It does not abort the turn that is already running. A no-progress end stays armed and does not spend another model call until the operator sends a message.
 
@@ -121,7 +129,8 @@ One extension, listed in `pi.extensions`, idle until CTX is bound. `/ctx-go` arm
 
 ### Justified components
 
-- A `pi.extensions` entry and a bound-CTX check. Facts 1 and 8.
+- A `pi.extensions` entry and a bound-CTX check. Facts 1 and 8. When not bound, the operator is told to bind. Fact 15. Nothing is asked of the model.
+- One operator notice before the draft, saying the model will draft and the operator will approve, then the existing draft prompt. Fact 15. The notice is not a list and not a second turn.
 - `/ctx-go` and `/ctx-stop` as commands, not tools. Fact 8.
 - A held two-line draft plus an operator pick that writes one superseding destination. Facts 5, 6, 7, and 12. Nothing smaller works: harvest cannot store the draft, and a second live destination is not the one injected.
 - A continuation from the end of a turn, skipped when the turn made no progress or a message is already queued. Facts 9, 11, and 14. Pi already continues tool use inside the run.
@@ -141,6 +150,9 @@ One extension, listed in `pi.extensions`, idle until CTX is bound. `/ctx-go` arm
 - An agent-callable stop, including a worker message that means "I am done" or "I am asking the operator" before the extension's own phase rules say so. Facts 8 and 11.
 - Remembering "go" or the rejection count only in the model transcript. Fact 9.
 - Treating "Grok at medium thinking" as the judge's thinking level. Fact 10.
+- A discussion, checklist, or tutorial until `/ctx-go` can work. Facts 2 and 15. The missing cases are two, and each has one next action.
+- The extension binding CTX, or prompting the model to bind. Fact 15.
+- Guiding the question loop, the judge, or record writing before the questions start. Fact 15. That guidance is the loop.
 
 ## Open questions on foundations
 

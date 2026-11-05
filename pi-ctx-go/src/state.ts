@@ -58,10 +58,21 @@ export function fingerprint(snap: Snap): string {
   return [snap.destinationId ?? "", snap.claimedId ?? "", snap.frontierIds.join(",")].join("|");
 }
 
+const BIND_NEXT = "CTX is not bound. Bind a CTX project, then run /ctx-go again.";
+const DRAFT_NEXT = "No destination is approved. The model will draft one, and you will approve it.";
+
 function prompt(state: GoState, text: string, snap: Snap): Step {
   return {
     state: { ...state, lastFingerprint: fingerprint(snap) },
     actions: [{ type: "prompt", text }],
+  };
+}
+
+function draftAsk(state: GoState, snap: Snap): Step {
+  const step = prompt(state, DRAFT_PROMPT, snap);
+  return {
+    state: step.state,
+    actions: [{ type: "notify", level: "info", message: DRAFT_NEXT }, ...step.actions],
   };
 }
 
@@ -85,7 +96,7 @@ export function onStop(state: GoState): Step {
 
 export function onGo(state: GoState, snap: Snap): Step {
   if (!snap.bound) {
-    return { state, actions: [{ type: "notify", level: "warning", message: "ctx-go needs a bound CTX project" }] };
+    return { state, actions: [{ type: "notify", level: "warning", message: BIND_NEXT }] };
   }
   const next: GoState = {
     ...state,
@@ -96,8 +107,8 @@ export function onGo(state: GoState, snap: Snap): Step {
     lastVerdict: state.phase === "paused" ? "" : state.lastVerdict,
     phase: destinationReady(state, snap) ? "questions" : "draft",
   };
-  const text = next.phase === "questions" ? QUESTION_PROMPT : DRAFT_PROMPT;
-  return prompt(next, text, snap);
+  if (next.phase === "questions") return prompt(next, QUESTION_PROMPT, snap);
+  return draftAsk(next, snap);
 }
 
 export function onApproved(state: GoState, snap: Snap, destinationId: string): Step {
@@ -106,7 +117,7 @@ export function onApproved(state: GoState, snap: Snap, destinationId: string): S
 }
 
 export function onDraftRejected(state: GoState, snap: Snap): Step {
-  return prompt({ ...state, phase: "draft" }, DRAFT_PROMPT, snap);
+  return draftAsk({ ...state, phase: "draft" }, snap);
 }
 
 function pause(state: GoState, message: string, hard = false): Step {
@@ -156,7 +167,7 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
   if (!destinationReady(state, snap)) {
     if (state.phase !== "draft") {
       if (turn.pending) return { state, actions: [] };
-      return prompt({ ...state, phase: "draft", approvedDestinationId: null }, DRAFT_PROMPT, snap);
+      return draftAsk({ ...state, phase: "draft", approvedDestinationId: null }, snap);
     }
     const draft = twoLines(turn.text);
     if (!draft) return pause(state, "ctx-go paused: draft made no progress");

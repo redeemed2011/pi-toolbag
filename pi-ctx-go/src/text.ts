@@ -1,5 +1,7 @@
 export function twoLines(text: string): string {
-  return text.split("\n").slice(0, 2).join("\n").trim();
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  const body = lines[0]?.endsWith(":") ? lines.slice(1) : lines;
+  return body.slice(0, 2).join("\n");
 }
 
 export function messageText(message: unknown): string {
