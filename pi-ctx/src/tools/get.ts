@@ -56,6 +56,7 @@ export function lookupRecord(
 			blocked: live.blocked.has(rec.id),
 			body: rec.body,
 		};
+		if (rec.type === "question") view.ask_operator = live.askOperator.has(rec.id);
 		if (rec.type === "question") {
 			view.findings = records
 				.filter((item) => item.type === "finding" && item.parent === rec.id)

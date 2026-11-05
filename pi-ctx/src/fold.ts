@@ -181,9 +181,11 @@ export function foldLive(records: JudgmentRecord[]): LiveSet {
 	}
 
 	const blocked = new Set<string>();
+	const askOperator = new Set<string>();
 	for (const rec of byId.values()) {
 		if (!live.has(rec.id)) continue;
 		for (const id of rec.blocks ?? []) blocked.add(id);
+		for (const id of rec.asks ?? []) askOperator.add(id);
 	}
 
 	const ofType = (type: JudgmentRecord["type"]) =>
@@ -199,6 +201,7 @@ export function foldLive(records: JudgmentRecord[]): LiveSet {
 		fog: ofType("fog"),
 		pendingReplaces: ofType("pending_replace"),
 		blocked,
+		askOperator,
 		liveConflict,
 	};
 }
@@ -217,14 +220,14 @@ export function bodySetCS(live: LiveSet, claimedId: string | null): JudgmentReco
 	});
 }
 
-/** Open ∧ unblocked ∧ unclaimed questions, mint-time order (`ts`, then `id`). */
+/** Open ∧ unblocked ∧ not ask-operator ∧ unclaimed questions, mint-time order (`ts`, then `id`). */
 export function frontierItems(
 	live: LiveSet,
 	claimedId: string | null,
 	includeBlocked = false,
 ): JudgmentRecord[] {
 	return live.questions
-		.filter((q) => q.id !== claimedId && (includeBlocked || !live.blocked.has(q.id)))
+		.filter((q) => q.id !== claimedId && !live.askOperator.has(q.id) && (includeBlocked || !live.blocked.has(q.id)))
 		.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.id.localeCompare(b.id)));
 }
 

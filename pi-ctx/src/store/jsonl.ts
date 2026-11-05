@@ -133,6 +133,7 @@ export function lineToJudgment(line: JsonlLine): JudgmentRecord | undefined {
 		supersedes: parseIdList(line.supersedes),
 		parent: typeof line.parent === "string" ? line.parent : undefined,
 		blocks: parseIdList(line.blocks),
+		asks: parseIdList(line.asks),
 		conflicts_with: parseIdList(line.conflicts_with),
 		reason_class,
 		citation_target: typeof line.citation_target === "string" ? line.citation_target : undefined,

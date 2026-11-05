@@ -7,11 +7,35 @@ import { gateCheck } from "../render/occupancy.js";
 import type { Runtime } from "../runtime.js";
 import { CTX_ENABLED, type Entry } from "../types.js";
 import { publishRuntimeBoundStatus, statusSink } from "../render/bound-status.js";
+import { runAskFlow } from "./ask.js";
 import { runBindFlow, runUnbind } from "./bind.js";
 import { runClaimFlow } from "./claim.js";
 import { occupancyStatusLine, runOccupancyFlow } from "./occupancy.js";
 
 export function registerCtxCommand(pi: ExtensionAPI, runtime: Runtime): void {
+	pi.registerCommand("ctx-ask", {
+		description: "Mark a question for the operator: /ctx-ask <question-id>, or /ctx-ask clear <question-id>",
+		handler: async (args: string, ctx: any) => {
+			const parts = (args ?? "").trim().split(/\s+/).filter(Boolean);
+			const branch = (ctx.sessionManager?.getBranch?.() as Entry[]) ?? [];
+			if (ctx.sessionManager?.getSessionId) {
+				runtime.restoreFromBranch(branch, ctx.sessionManager.getSessionId());
+				publishRuntimeBoundStatus(statusSink(ctx), runtime);
+			}
+			const clear = (parts[0] || "").toLowerCase() === "clear";
+			const questionId = clear ? parts[1] : parts[0];
+			if (!questionId) {
+				if (ctx.hasUI) ctx.ui.notify("usage: /ctx-ask [clear] <question-id>", "warning");
+				return;
+			}
+			const result = runAskFlow({ pi, runtime, questionId, clear });
+			if (ctx.hasUI) {
+				if (!result.ok) ctx.ui.notify(result.error, "warning");
+				else ctx.ui.notify(clear ? `ask cleared=${result.cleared}` : `ask ${questionId}`, "info");
+			}
+		},
+	});
+
 	pi.registerCommand("ctx", {
 		description:
 			"ctx memory: on | off | status | compact | occupancy [gated-edge|claim-strip] | bind | unbind | claim",

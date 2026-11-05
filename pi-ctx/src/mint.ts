@@ -30,6 +30,7 @@ export type PutInput = {
 	reason_class?: ReasonClass;
 	parent?: string;
 	blocks?: string[];
+	asks?: string[];
 	conflicts_with?: string[];
 	citation_target?: string;
 	blob_hash?: string;
@@ -71,6 +72,9 @@ export function putJudgment(opts: {
 	if (input.type === "evidence" && (input.blocks?.length ?? 0) > 0) {
 		return { ok: false, error: "evidence cannot block" };
 	}
+	if (input.type === "evidence" && (input.asks?.length ?? 0) > 0) {
+		return { ok: false, error: "evidence cannot ask" };
+	}
 
 	const liveBefore = foldLive(existing);
 
@@ -81,6 +85,15 @@ export function putJudgment(opts: {
 		const target = liveBefore.byId.get(input.supersedes);
 		if (!target) return { ok: false, error: "not_found" };
 		if (!liveBefore.live.has(input.supersedes)) return { ok: false, error: "already_superseded" };
+	}
+
+	if (input.asks) {
+		for (const id of input.asks) {
+			const rec = liveBefore.byId.get(id);
+			if (!rec || rec.type !== "question" || !liveBefore.live.has(id)) {
+				return { ok: false, error: "asks not_found" };
+			}
+		}
 	}
 
 	if (input.conflicts_with) {
@@ -136,6 +149,7 @@ export function putJudgment(opts: {
 		supersedes: input.supersedes ? [input.supersedes] : undefined,
 		parent: input.parent,
 		blocks: input.blocks,
+		asks: input.asks,
 		conflicts_with: input.conflicts_with,
 		reason_class: input.reason_class,
 		citation_target: input.citation_target,

@@ -41,21 +41,21 @@ export function applyClaim(opts: {
 	if (opts.claimedId && opts.claimedId !== opts.question_id) {
 		return { ok: false, error: "close first or user /ctx claim" };
 	}
-	if (opts.claimedId === opts.question_id) {
-		const q = opts.live.byId.get(opts.question_id);
-		return {
-			ok: true,
-			claimed_id: opts.claimedId,
-			claim_empty: 0,
-			headline: q?.headline,
-			noop: true,
-		};
-	}
 	const q = opts.live.byId.get(opts.question_id);
 	if (!q || q.type !== "question" || !opts.live.live.has(q.id)) {
 		return { ok: false, error: "not_found" };
 	}
 	if (opts.live.blocked.has(q.id)) return { ok: false, error: "blocked" };
+	if (opts.live.askOperator.has(q.id)) return { ok: false, error: "ask_operator" };
+	if (opts.claimedId === opts.question_id) {
+		return {
+			ok: true,
+			claimed_id: opts.claimedId,
+			claim_empty: 0,
+			headline: q.headline,
+			noop: true,
+		};
+	}
 	if (!claimSlotFits(q, opts.occupancy, opts.siblingKnob)) {
 		return { ok: false, error: "question_too_large" };
 	}

@@ -94,6 +94,7 @@ export type JudgmentRecord = {
 	supersedes?: string[];
 	parent?: string;
 	blocks?: string[];
+	asks?: string[];
 	conflicts_with?: string[];
 	about_claim_id?: string;
 	reason_class?: ReasonClass;
@@ -114,6 +115,7 @@ export type LiveSet = {
 	fog: JudgmentRecord[];
 	pendingReplaces: JudgmentRecord[];
 	blocked: Set<string>;
+	askOperator: Set<string>;
 	liveConflict: string[];
 };
 
