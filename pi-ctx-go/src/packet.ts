@@ -1,7 +1,8 @@
 import { realpathSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
-const PACKET_CAP = 150_000;
+const PRODUCT_CAP = 150_000;
+const CALL_CAP = 1_000_000;
 
 export type PacketInput = {
   cwd: string;
@@ -56,7 +57,7 @@ function readProduct(cwd: string, token: string): { ok: true; text: string } | {
   } catch {
     return { ok: false, error: `missing product ${token}` };
   }
-  if (size > PACKET_CAP) return { ok: false, error: `product too large ${token}` };
+  if (size > PRODUCT_CAP) return { ok: false, error: `product too large ${token}` };
   try {
     return { ok: true, text: readFileSync(real, "utf8") };
   } catch {
@@ -96,10 +97,10 @@ export function buildPacket(input: PacketInput): Packet {
     "## Products",
     products.join("\n\n"),
   ].join("\n");
-  if (text.length > PACKET_CAP) {
+  if (text.length > CALL_CAP) {
     const paths = namedPaths(input.claim);
     const included = paths.length > 0 ? paths.join(", ") : "done-claim account";
-    return { ok: false, error: `judge packet does not fit: ${included}` };
+    return { ok: false, error: `packet does not fit: ${included}` };
   }
   return { ok: true, text };
 }

@@ -11,7 +11,28 @@ export const QUESTION_PROMPT = [
 ].join("\n");
 
 export const CLAIM_PROMPT = [
-  "The open questions are settled. Claim the destination is met.",
-  "Name the products. If a product is a file, name its path. A slash command is not a path.",
+  "Name the result of the destination.",
+  "If that result is a file, name its path. A slash command is not a path.",
+  "A file that only describes the destination is not the result.",
   "Do not record a destination.",
 ].join("\n");
+
+export function workPrompt(destination: string): string {
+  return [
+    "The open questions are settled. Do the destination's work.",
+    "The destination is not met until its result exists.",
+    "Destination:",
+    destination,
+    "Do not claim it is met. A file that only describes the destination is not the result.",
+  ].join("\n");
+}
+
+export function rejectionPrompt(destination: string, summary: string): string {
+  return [
+    "The judge said the destination is not met.",
+    `Judge: ${summary}`,
+    "Destination:",
+    destination,
+    "Do the missing work. Do not claim it is met yet. A file that only describes the destination is not the result.",
+  ].join("\n");
+}

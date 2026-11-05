@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLAIM_PROMPT, DRAFT_PROMPT, QUESTION_PROMPT } from "../src/prompts.js";
+import { CLAIM_PROMPT, DRAFT_PROMPT, QUESTION_PROMPT, rejectionPrompt, workPrompt } from "../src/prompts.js";
 import { freshState, onApproved, onGo, onJudge, onStop, onTurn, type Snap } from "../src/state.js";
 
 function snap(partial: Partial<Snap> = {}): Snap {
@@ -64,22 +64,36 @@ describe("ctx-go loop", () => {
 
   it("continues when the frontier changes, and pauses on an operator mark", () => {
     const started = onApproved({ ...freshState(), armed: true }, snap(), "d1");
-    const moved = onTurn(started.state, snap({ frontierIds: [] }), doneTurn);
-    expect(moved.actions[0]).toMatchObject({ type: "prompt", text: CLAIM_PROMPT });
+    const moved = onTurn(started.state, snap({ frontierIds: [], destinationText: "Build the app." }), doneTurn);
+    expect(moved.state.phase).toBe("work");
+    expect(moved.actions[0]).toMatchObject({ type: "prompt", text: workPrompt("Build the app.") });
+    expect(workPrompt("Build the app.")).not.toContain("Claim the destination is met");
     const marked = onTurn(started.state, snap({ frontierIds: [], askIds: ["q9"], askHeadlines: ["confirm"] }), doneTurn);
     expect(marked.actions[0]).toMatchObject({ type: "notify" });
     expect(String((marked.actions[0] as { message: string }).message)).toContain("q9");
   });
 
   it("judges only from the claim phase, and the second rejection pauses", () => {
-    let state = onApproved({ ...freshState(), armed: true }, snap({ frontierIds: [] }), "d1").state;
-    state = onTurn(state, snap({ frontierIds: [] }), doneTurn).state;
+    const empty = snap({ frontierIds: [], destinationText: "Build the app." });
+    let state = onApproved({ ...freshState(), armed: true }, empty, "d1").state;
+    state = onTurn(state, empty, doneTurn).state;
+    expect(state.phase).toBe("work");
+    const asked = onTurn(state, empty, { ...doneTurn, text: "Built the local web app." });
+    expect(asked.actions[0]).toMatchObject({ type: "prompt", text: CLAIM_PROMPT });
+    state = asked.state;
     expect(state.phase).toBe("claim");
-    const claim = onTurn(state, snap({ frontierIds: [] }), doneTurn);
+    const claim = onTurn(state, empty, doneTurn);
     expect(claim.actions[0]).toMatchObject({ type: "judge" });
-    const once = onJudge(claim.state, snap({ frontierIds: [] }), { ok: true, done: false, summary: "missing product" });
+    const once = onJudge(claim.state, empty, { ok: true, done: false, summary: "missing product" });
     expect(once.state.rejections).toBe(1);
-    expect(once.actions[0]).toMatchObject({ type: "prompt" });
+    expect(once.state.phase).toBe("work");
+    expect(once.actions[0]).toMatchObject({ type: "prompt", text: rejectionPrompt("Build the app.", "missing product") });
+    const listed = onTurn(once.state, empty, {
+      ...doneTurn,
+      text: "The CTX frontier is empty. There are no open questions. There is no question to settle.",
+    });
+    expect(listed.actions).toEqual([{ type: "notify", level: "warning", message: "ctx-go paused: no progress" }]);
+    expect(listed.actions.some((action) => action.type === "judge")).toBe(false);
     const again = onJudge(
       { ...once.state, phase: "claim", lastClaim: "did the thing" },
       snap({ frontierIds: [] }),

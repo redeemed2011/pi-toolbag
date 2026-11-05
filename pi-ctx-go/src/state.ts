@@ -1,7 +1,7 @@
-import { CLAIM_PROMPT, DRAFT_PROMPT, QUESTION_PROMPT } from "./prompts.js";
+import { CLAIM_PROMPT, DRAFT_PROMPT, QUESTION_PROMPT, rejectionPrompt, workPrompt } from "./prompts.js";
 import { twoLines } from "./text.js";
 
-export type GoPhase = "idle" | "draft" | "questions" | "claim" | "paused";
+export type GoPhase = "idle" | "draft" | "questions" | "work" | "claim" | "paused";
 
 export type GoState = {
   armed: boolean;
@@ -24,6 +24,7 @@ export type Snap = {
   askIds: string[];
   askHeadlines: string[];
   blocked: BlockedQuestion[];
+  destinationText?: string;
 };
 
 export type TurnView = {
@@ -107,7 +108,10 @@ export function onGo(state: GoState, snap: Snap): Step {
     lastVerdict: state.phase === "paused" ? "" : state.lastVerdict,
     phase: destinationReady(state, snap) ? "questions" : "draft",
   };
-  if (next.phase === "questions") return prompt(next, QUESTION_PROMPT, snap);
+  if (next.phase === "questions") {
+    if (!questionsOpen(snap)) return prompt({ ...next, phase: "work" }, workPrompt(snap.destinationText ?? ""), snap);
+    return prompt(next, QUESTION_PROMPT, snap);
+  }
   return draftAsk(next, snap);
 }
 
@@ -180,8 +184,13 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
     if (!changed) return pause(state, "ctx-go paused: no progress");
     return say({ ...state, phase: "questions" }, QUESTION_PROMPT);
   }
-  if (state.phase !== "claim") {
+  if (state.phase !== "work" && state.phase !== "claim") {
     if (turn.pending) return { state, actions: [] };
+    return prompt({ ...state, phase: "work" }, workPrompt(snap.destinationText ?? ""), snap);
+  }
+  if (state.phase === "work") {
+    if (turn.pending) return { state, actions: [] };
+    if (reportsNoQuestions(turn.text)) return pause(state, "ctx-go paused: no progress");
     return prompt({ ...state, phase: "claim" }, CLAIM_PROMPT, snap);
   }
   const claim = turn.text.trim();
@@ -213,5 +222,19 @@ export function onJudge(
       true,
     );
   }
-  return prompt({ ...state, phase: "questions", rejections, lastVerdict: summary }, QUESTION_PROMPT, snap);
+  return prompt(
+    { ...state, phase: "work", rejections, lastVerdict: summary },
+    rejectionPrompt(snap.destinationText ?? "", summary),
+    snap,
+  );
+}
+
+function reportsNoQuestions(text: string): boolean {
+  const lower = text.toLowerCase();
+  const saysEmpty =
+    lower.includes("no open question") ||
+    lower.includes("frontier is empty") ||
+    lower.includes("no question to settle") ||
+    lower.includes("nothing is claimed");
+  return saysEmpty && !lower.includes("destination is met");
 }

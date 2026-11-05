@@ -130,27 +130,40 @@ describe("judge packet", () => {
     writeFileSync(file, "ok");
     const shared = buildPacket({
       cwd,
-      destination: "d".repeat(150_000),
+      destination: "d".repeat(1_000_000),
       constraints: [],
       closed: [],
       claim: `Product is ${file}`,
     });
     expect(shared.ok).toBe(false);
-    if (!shared.ok) expect(shared.error).toBe(`judge packet does not fit: ${file}`);
+    if (!shared.ok) expect(shared.error).toBe(`packet does not fit: ${file}`);
     const account = buildPacket({
       cwd,
-      destination: "d".repeat(150_000),
+      destination: "d".repeat(1_000_000),
       constraints: [],
       closed: [],
       claim: "The cluster report is the product.",
     });
-    expect(account).toEqual({ ok: false, error: "judge packet does not fit: done-claim account" });
+    expect(account).toEqual({ ok: false, error: "packet does not fit: done-claim account" });
+    const parts = ["a.ts", "b.ts", "c.ts"].map((name) => join(cwd, name));
+    for (const part of parts) writeFileSync(part, "y".repeat(60_000));
+    const several = buildPacket({
+      cwd,
+      destination: "Ship it",
+      constraints: [],
+      closed: [],
+      claim: parts.join("\n"),
+    });
+    expect(several.ok).toBe(true);
   });
 
   it("gives the judge no tools and the session thinking level", () => {
-    const argv = judgeArgv({ provider: "openai", id: "gpt", thinking: "off" }, "packet");
+    const argv = judgeArgv({ provider: "openai", id: "gpt", thinking: "off" });
     expect(argv).toContain("--no-tools");
     expect(argv).not.toContain("--no-builtin-tools");
     expect(argv[argv.indexOf("--thinking") + 1]).toBe("off");
+    const ask = argv[argv.indexOf("-p") + 1] ?? "";
+    expect(ask.length).toBeLessThan(200);
+    expect(ask).not.toContain("verdict:");
   });
 });

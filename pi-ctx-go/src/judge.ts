@@ -15,7 +15,9 @@ export function thinkingLevel(value: string): ModelThinkingLevel | null {
   return null;
 }
 
-export function judgeArgv(model: JudgeModel, prompt: string): string[] {
+const JUDGE_ASK = "The completion packet is above. Answer it with the two lines it requests.";
+
+export function judgeArgv(model: JudgeModel): string[] {
   const pi = resolvePiBinary();
   const args = [
     ...pi.baseArgs,
@@ -29,16 +31,18 @@ export function judgeArgv(model: JudgeModel, prompt: string): string[] {
   ];
   if (model.thinking) args.push("--thinking", model.thinking);
   for (const extra of extraWorkerExtensionPaths(model)) args.push("-e", extra);
-  args.push("-p", withoutNullBytes(prompt));
+  args.push("-p", JUDGE_ASK);
   return [pi.command, ...args];
 }
 
 export function runJudge(model: JudgeModel, prompt: string, cwd: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
-  const argv = judgeArgv(model, prompt).map(withoutNullBytes);
+  const argv = judgeArgv(model).map(withoutNullBytes);
   const [command, ...rest] = argv;
   if (!command) return Promise.resolve({ ok: false, error: "no pi binary" });
   return new Promise((resolvePromise) => {
-    const proc = spawn(command, rest, { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+    const proc = spawn(command, rest, { cwd, env: process.env, stdio: ["pipe", "pipe", "pipe"] });
+    proc.stdin?.on("error", () => {});
+    proc.stdin?.end(withoutNullBytes(prompt));
     let stdout = "";
     let stderr = "";
     let settled = false;
