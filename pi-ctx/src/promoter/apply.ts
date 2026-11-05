@@ -3,7 +3,7 @@ import { normalizeHeadline, putJudgment } from "../mint.js";
 import { appendProjectRecord } from "../store/project.js";
 import { executeRecord } from "../tools/record.js";
 import type { JudgmentRecord, Occupancy } from "../types.js";
-import { quoteInCorpus } from "./quotes.js";
+import { normalizeWs, quoteInCorpus } from "./quotes.js";
 import {
 	PENDING_REPLACE_CAP,
 	PROMOTER_CHARS,
@@ -149,7 +149,16 @@ export function applyPromoterResult(opts: ApplyOpts): ApplyReport {
 	}
 
 	const assistant = opts.assistant ?? [];
-	const shelfItems = (opts.result.shelf ?? []).slice(0, PROMOTER_SHELF_N);
+	const shelfAll = (opts.result.shelf ?? []).slice(0, PROMOTER_SHELF_N);
+	const shelfItems = shelfAll.filter((item) => !(item.type === "decision" && item.answers));
+	const answering = shelfAll.filter((item) => item.type === "decision" && item.answers);
+	const questionByQuote = new Map<string, string>();
+	const seed = foldLive(existing);
+	for (const rec of seed.questions) {
+		if (!seed.live.has(rec.id)) continue;
+		questionByQuote.set(normalizeWs(rec.body), rec.id);
+		questionByQuote.set(normalizeWs(rec.headline), rec.id);
+	}
 	for (const item of shelfItems) {
 		const quote = item.quote.trim();
 		if (quote.length > PROMOTER_CHARS) {
@@ -194,6 +203,62 @@ export function applyPromoterResult(opts: ApplyOpts): ApplyReport {
 				headline: head,
 				body: quote,
 				rationale: `source: ${source}`,
+				session: opts.sessionId,
+			},
+		});
+		if (!minted.ok) {
+			skipped.push(`shelf ${minted.error}`);
+			continue;
+		}
+		appendProjectRecord(opts.projectId, opts.sessionId, minted.line);
+		existing = [...existing, minted.record];
+		shelf.push(minted.record);
+		if (minted.record.type === "question") questionByQuote.set(normalizeWs(quote), minted.record.id);
+	}
+
+	for (const item of answering) {
+		const quote = item.quote.trim();
+		const answered = normalizeWs(item.answers ?? "");
+		const target = questionByQuote.get(answered);
+		if (!target) {
+			skipped.push("decision answers no question");
+			continue;
+		}
+		if (quote.length > PROMOTER_CHARS) {
+			skipped.push("shelf over 280");
+			continue;
+		}
+		const fromUser = quoteInCorpus(quote, opts.corpus);
+		const fromAssistant = quoteInCorpus(quote, assistant);
+		if (!fromUser && !fromAssistant) {
+			skipped.push("shelf not verbatim");
+			continue;
+		}
+		const source = fromUser ? "user" : "assistant";
+		const live = foldLive(existing);
+		const head = headlineOf(quote, item.headline);
+		const norm = normalizeHeadline(head);
+		const duplicate = [...live.byId.values()].some(
+			(r) => live.live.has(r.id) && normalizeHeadline(r.headline) === norm,
+		);
+		if (duplicate) {
+			skipped.push("shelf duplicate headline");
+			continue;
+		}
+		const minted = executeRecord({
+			enabled: true,
+			bound: true,
+			occupancy: opts.occupancy,
+			siblingKnob: opts.siblingKnob,
+			claimedId: opts.claimedId,
+			existing,
+			input: {
+				type: "decision",
+				headline: head,
+				body: quote,
+				rationale: `source: ${source}`,
+				supersedes: target,
+				reason_class: "decision_change",
 				session: opts.sessionId,
 			},
 		});

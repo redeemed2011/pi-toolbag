@@ -32,6 +32,7 @@ export type PromoterShelf = {
 	type: ShelfType;
 	quote: string;
 	headline?: string;
+	answers?: string;
 };
 
 export type PromoterResult = {
@@ -77,12 +78,18 @@ export function parsePromoterResult(raw: unknown): PromoterResult {
 	if (Array.isArray(obj.shelf)) {
 		for (const item of obj.shelf) {
 			if (!item || typeof item !== "object") continue;
-			const rec = item as { type?: unknown; quote?: unknown; headline?: unknown };
+			const rec = item as { type?: unknown; quote?: unknown; headline?: unknown; answers?: unknown };
 			const type = asString(rec.type);
 			const quote = asString(rec.quote);
 			if (!type || !isShelfType(type) || !quote) continue;
 			const headline = asString(rec.headline);
-			shelf.push(headline ? { type, quote, headline } : { type, quote });
+			const answers = type === "decision" ? asString(rec.answers) : undefined;
+			shelf.push({
+				type,
+				quote,
+				...(headline ? { headline } : {}),
+				...(answers ? { answers } : {}),
+			});
 		}
 	}
 	return { promote, pending_replace, shelf };

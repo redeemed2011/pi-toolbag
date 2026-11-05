@@ -56,8 +56,7 @@ export function receiptText(opts: {
 	const parts = [`bound to ${opts.projectName}.`];
 	const nothing = opts.promoted.length === 0 && opts.pending.length === 0 && opts.shelf.length === 0;
 	if (nothing) parts.push("Promoted none.");
-	else if (opts.promoted.length === 0) parts.push("Promoted none.");
-	else parts.push(`Promoted ${opts.promoted.length}: ${heads}`.trim());
+	else if (opts.promoted.length > 0) parts.push(`Promoted ${opts.promoted.length}: ${heads}`.trim());
 	if (opts.shelf.length) parts.push(`Recorded ${opts.shelf.length} (cap ${PROMOTER_SHELF_N}): ${shelfHeads}.`);
 	if (opts.shelf.some((r) => r.type === "fog" || r.type === "decision" || r.type === "finding")) {
 		parts.push("Fog text, decisions, and findings are not injected.");

@@ -47,6 +47,7 @@ describe("promoter harvest", () => {
 			chars: 280,
 		});
 		expect(prompt).toContain("Do not invent Spawn Envelope.");
+		expect(prompt).toContain("Goals, observations, and scope");
 		expect(prompt).toContain("BEGIN KICKOFF JSON");
 		expect(prompt).toContain("c1");
 	});
@@ -805,8 +806,38 @@ describe("promoter harvest", () => {
 		});
 		expect(text).toContain('destination "Ship the harvest"');
 		expect(text).toContain('finding "Null byte"');
+		expect(text).not.toContain("Promoted none.");
 		expect(text).toContain("cap 10");
 		expect(text).toContain("Fog text, decisions, and findings are not injected.");
+	});
+
+	it("supersedes a shelved question the decision answers", () => {
+		createProject("p-answer", "p-answer");
+		const question = "Does the receipt name the finding?";
+		const decision = "The receipt names the finding.";
+		const report = applyPromoterResult({
+			projectId: "p-answer",
+			sessionId: "sess",
+			occupancy: "gated-edge",
+			siblingKnob: 0,
+			claimedId: null,
+			existing: [],
+			corpus: [`${question} ${decision}`],
+			result: {
+				promote: [],
+				pending_replace: [],
+				shelf: [
+					{ type: "decision", quote: decision, headline: "Receipt names the finding", answers: question },
+					{ type: "question", quote: question, headline: "Receipt names the finding question" },
+				],
+			},
+		});
+		const asked = report.shelf.find((rec) => rec.type === "question");
+		const answered = report.shelf.find((rec) => rec.type === "decision");
+		expect(answered?.supersedes).toEqual([asked?.id]);
+		const live = foldLive(report.existing);
+		expect(live.live.has(asked?.id ?? "")).toBe(false);
+		expect(live.live.has(answered?.id ?? "")).toBe(true);
 	});
 
 	it("names an empty promoter result and not a filtered one", () => {
