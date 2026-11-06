@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLAIM_PROMPT, DRAFT_PROMPT, QUESTION_PROMPT, rejectionPrompt, workPrompt } from "../src/prompts.js";
+import { CLAIM_PROMPT, DRAFT_PROMPT, QUESTION_PROMPT, judgeErrorPrompt, rejectionPrompt, workPrompt } from "../src/prompts.js";
 import { freshState, onApproved, onGo, onJudge, onStop, onTurn, type Snap } from "../src/state.js";
 
 function snap(partial: Partial<Snap> = {}): Snap {
@@ -101,9 +101,37 @@ describe("ctx-go loop", () => {
     );
     expect(again.state.phase).toBe("paused");
     expect(again.state.rejections).toBe(2);
+    expect(again.state.lastVerdict).toBe("still no");
+    expect(again.state.verdictKind).toBe("rejection");
+    expect(again.actions.some((action) => action.type === "record" && action.text.includes("Worker: did the thing") && action.text.includes("Judge: still no"))).toBe(true);
     const resumed = onGo(again.state, snap());
     expect(resumed.state.rejections).toBe(0);
+    expect(resumed.state.lastVerdict).toBe("still no");
     expect(resumed.state.armed).toBe(true);
+    const open = snap({ frontierIds: [], destinationText: "Build the app." });
+    const againOpen = onGo(again.state, open);
+    expect(againOpen.state.rejections).toBe(0);
+    expect(againOpen.state.lastVerdict).toBe("still no");
+    expect(againOpen.actions[0]).toMatchObject({ type: "prompt", text: rejectionPrompt("Build the app.", "still no") });
+  });
+
+  it("a done judge keeps the destination and clears the verdict", () => {
+    const state = {
+      ...freshState(),
+      armed: true,
+      phase: "claim" as const,
+      approvedDestinationId: "d1",
+      lastVerdict: "old",
+      verdictKind: "rejection" as const,
+      rejections: 1,
+    };
+    const step = onJudge(state, snap({ frontierIds: [] }), { ok: true, done: true, summary: "met" });
+    expect(step.state.armed).toBe(false);
+    expect(step.state.approvedDestinationId).toBe("d1");
+    expect(step.state.lastVerdict).toBe("");
+    expect(step.state.verdictKind).toBe("none");
+    const again = onGo(step.state, snap({ frontierIds: [], destinationText: "Build the app." }));
+    expect(again.actions[0]).toMatchObject({ type: "prompt", text: workPrompt("Build the app.") });
   });
 
   it("a judge error is not a rejection", () => {
@@ -112,6 +140,14 @@ describe("ctx-go loop", () => {
     expect(step.state.rejections).toBe(1);
     expect(step.state.phase).toBe("questions");
     expect(step.state.hold).toBe(true);
+    expect(step.state.lastVerdict).toBe("no verdict");
+    expect(step.state.verdictKind).toBe("error");
+    expect(step.state.phase).not.toBe("paused");
+    expect(step.actions.some((action) => action.type === "record" && action.text.includes("Judge: no verdict"))).toBe(true);
+    const resumed = onGo(step.state, snap({ frontierIds: [], destinationText: "Build the app." }));
+    expect(resumed.state.rejections).toBe(1);
+    expect(resumed.actions[0]).toMatchObject({ type: "prompt", text: judgeErrorPrompt("Build the app.", "no verdict") });
+    expect(String((resumed.actions[0] as { text: string }).text)).not.toContain("not met");
   });
 
   it("a second /ctx-go does not forgive the first rejection", () => {
@@ -173,10 +209,19 @@ describe("ctx-go loop", () => {
   });
 
   it("stop disarms and does not forget the approved destination", () => {
-    const stopped = onStop({ ...freshState(), armed: true, approvedDestinationId: "d1", rejections: 1 });
+    const stopped = onStop({
+      ...freshState(),
+      armed: true,
+      approvedDestinationId: "d1",
+      rejections: 1,
+      lastVerdict: "still no",
+      verdictKind: "rejection",
+    });
     expect(stopped.state.armed).toBe(false);
     expect(stopped.state.approvedDestinationId).toBe("d1");
     expect(stopped.state.rejections).toBe(1);
+    expect(stopped.state.verdictKind).toBe("rejection");
+    expect(stopped.state.lastVerdict).toBe("still no");
     const paused = onStop({ ...freshState(), phase: "paused", rejections: 2, approvedDestinationId: "d1" });
     expect(onGo(paused.state, snap()).state.rejections).toBe(0);
   });

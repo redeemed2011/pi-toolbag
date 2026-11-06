@@ -161,6 +161,7 @@ describe("judge packet", () => {
     const argv = judgeArgv({ provider: "openai", id: "gpt", thinking: "off" });
     expect(argv).toContain("--no-tools");
     expect(argv).not.toContain("--no-builtin-tools");
+    expect(argv.some((arg) => arg.endsWith("judge-fallback.ts"))).toBe(true);
     expect(argv[argv.indexOf("--thinking") + 1]).toBe("off");
     const ask = argv[argv.indexOf("-p") + 1] ?? "";
     expect(ask.length).toBeLessThan(200);

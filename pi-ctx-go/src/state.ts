@@ -1,7 +1,9 @@
-import { CLAIM_PROMPT, DRAFT_PROMPT, QUESTION_PROMPT, rejectionPrompt, workPrompt } from "./prompts.js";
+import { CLAIM_PROMPT, DRAFT_PROMPT, QUESTION_PROMPT, judgeErrorPrompt, rejectionPrompt, workPrompt } from "./prompts.js";
 import { twoLines } from "./text.js";
 
 export type GoPhase = "idle" | "draft" | "questions" | "work" | "claim" | "paused";
+
+export type VerdictKind = "none" | "rejection" | "error";
 
 export type GoState = {
   armed: boolean;
@@ -12,6 +14,7 @@ export type GoState = {
   lastFingerprint: string | null;
   lastClaim: string;
   lastVerdict: string;
+  verdictKind: VerdictKind;
 };
 
 export type BlockedQuestion = { id: string; headline: string; blockers: string[] };
@@ -38,7 +41,8 @@ export type Action =
   | { type: "notify"; level: "info" | "warning" | "error"; message: string }
   | { type: "prompt"; text: string }
   | { type: "approve"; text: string }
-  | { type: "judge"; claim: string };
+  | { type: "judge"; claim: string }
+  | { type: "record"; text: string };
 
 export type Step = { state: GoState; actions: Action[] };
 
@@ -52,6 +56,7 @@ export function freshState(): GoState {
     lastFingerprint: null,
     lastClaim: "",
     lastVerdict: "",
+    verdictKind: "none",
   };
 }
 
@@ -89,6 +94,7 @@ export function onStop(state: GoState): Step {
       rejections: state.rejections,
       lastClaim: state.lastClaim,
       lastVerdict: state.lastVerdict,
+      verdictKind: state.verdictKind,
       phase: state.phase === "paused" ? "paused" : "idle",
     },
     actions: [{ type: "notify", level: "info", message: "ctx-go stopped" }],
@@ -104,12 +110,19 @@ export function onGo(state: GoState, snap: Snap): Step {
     armed: true,
     hold: false,
     rejections: state.phase === "paused" ? 0 : state.rejections,
-    lastClaim: state.phase === "paused" ? "" : state.lastClaim,
-    lastVerdict: state.phase === "paused" ? "" : state.lastVerdict,
     phase: destinationReady(state, snap) ? "questions" : "draft",
   };
   if (next.phase === "questions") {
-    if (!questionsOpen(snap)) return prompt({ ...next, phase: "work" }, workPrompt(snap.destinationText ?? ""), snap);
+    if (!questionsOpen(snap)) {
+      const verdict = next.lastVerdict.trim();
+      const text =
+        verdict && next.verdictKind === "rejection"
+          ? rejectionPrompt(snap.destinationText ?? "", verdict)
+          : verdict && next.verdictKind === "error"
+            ? judgeErrorPrompt(snap.destinationText ?? "", verdict)
+            : workPrompt(snap.destinationText ?? "");
+      return prompt({ ...next, phase: "work" }, text, snap);
+    }
     return prompt(next, QUESTION_PROMPT, snap);
   }
   return draftAsk(next, snap);
@@ -206,27 +219,36 @@ export function onJudge(
   snap: Snap,
   result: { ok: true; done: boolean; summary: string } | { ok: false; error: string },
 ): Step {
-  if (!result.ok) return pause({ ...state, phase: "questions" }, `ctx-go paused: judge ${result.error}`);
+  if (!result.ok) {
+    return withRecord(
+      pause({ ...state, phase: "questions", lastVerdict: result.error, verdictKind: "error" }, `ctx-go paused: judge ${result.error}`),
+      `Worker: ${state.lastClaim}\nJudge: ${result.error}`,
+    );
+  }
   if (result.done) {
     return {
       state: { ...freshState(), approvedDestinationId: state.approvedDestinationId },
-      actions: [{ type: "notify", level: "info", message: `ctx-go done\n${result.summary}` }],
+      actions: [
+        { type: "notify", level: "info", message: `ctx-go done\n${result.summary}` },
+        { type: "record", text: `Worker: ${state.lastClaim}\nJudge: ${result.summary}` },
+      ],
     };
   }
   const rejections = state.rejections + 1;
   const summary = result.summary || "not done";
   if (rejections >= 2) {
-    return pause(
-      { ...state, rejections, lastVerdict: summary },
-      `ctx-go paused after two rejections\nWorker: ${state.lastClaim}\nJudge: ${summary}`,
-      true,
-    );
+    const message = `ctx-go paused after two rejections\nWorker: ${state.lastClaim}\nJudge: ${summary}`;
+    return withRecord(pause({ ...state, rejections, lastVerdict: summary, verdictKind: "rejection" }, message, true), message);
   }
   return prompt(
-    { ...state, phase: "work", rejections, lastVerdict: summary },
+    { ...state, phase: "work", rejections, lastVerdict: summary, verdictKind: "rejection" },
     rejectionPrompt(snap.destinationText ?? "", summary),
     snap,
   );
+}
+
+function withRecord(step: Step, text: string): Step {
+  return { state: step.state, actions: [...step.actions, { type: "record", text }] };
 }
 
 function reportsNoQuestions(text: string): boolean {

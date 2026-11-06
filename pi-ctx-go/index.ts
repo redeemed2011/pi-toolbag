@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionContext, SessionBoundaryDraft } from "@earendil-works/pi-coding-agent";
 import { approveDestination } from "./src/approve.js";
+import { readClock, writeClock } from "./src/clock.js";
 import { runJudge, thinkingLevel, type JudgeModel } from "./src/judge.js";
 import { buildPacket, parseVerdict } from "./src/packet.js";
 import { closedQuestions, readSnap, type BoundSnap } from "./src/snap.js";
@@ -22,6 +23,7 @@ type GoCtx = ExtensionContext & {
   sessionManager: {
     getBranch?: () => Entry[];
     getSessionId?: () => string;
+    getSessionFile?: () => string | undefined;
   };
   ui: {
     select(title: string, options: string[]): Promise<string | undefined>;
@@ -31,7 +33,7 @@ type GoCtx = ExtensionContext & {
 
 type Continue = {
   entries: SessionBoundaryDraft[];
-  continue: true;
+  continue?: true;
 };
 
 const YES = "Approve destination";
@@ -52,10 +54,16 @@ function notify(ctx: GoCtx, actions: Action[]): void {
 
 function continued(eventEntries: SessionBoundaryDraft[], actions: Action[]): Continue | undefined {
   const next = actions.find((action) => action.type === "prompt");
-  if (!next || next.type !== "prompt") return undefined;
+  if (next && next.type === "prompt") {
+    return {
+      entries: [...eventEntries, { type: "custom_message", customType: "ctx-go", content: next.text, display: true }],
+      continue: true,
+    };
+  }
+  const record = actions.find((action) => action.type === "record");
+  if (!record || record.type !== "record") return undefined;
   return {
-    entries: [...eventEntries, { type: "custom_message", customType: "ctx-go", content: next.text, display: true }],
-    continue: true,
+    entries: [...eventEntries, { type: "custom_message", customType: "ctx-go", content: record.text, display: true }],
   };
 }
 
@@ -69,16 +77,34 @@ function modelOf(ctx: GoCtx, override: JudgeOverride | null): JudgeModel | null 
   return thinking ? { provider, id, thinking } : { provider, id };
 }
 
+function remember(ctx: GoCtx, next: GoState): GoState {
+  const file = ctx.sessionManager.getSessionFile?.();
+  if (!file) return next;
+  try {
+    writeClock(file, next);
+  } catch {
+    if (ctx.hasUI) ctx.ui.notify("ctx-go could not store its clock", "warning");
+  }
+  return next;
+}
+
 export default function ctxGo(pi: ExtensionAPI): void {
   let state: GoState = freshState();
   let override: JudgeOverride | null = null;
 
+  pi.on("session_start", (_event, ctx) => {
+    const goCtx = ctx as GoCtx;
+    const file = goCtx.sessionManager.getSessionFile?.();
+    state = file ? readClock(file) : freshState();
+  });
+
   pi.registerCommand("ctx-stop", {
     description: "Stop the ctx-go loop. The agent cannot call this.",
     handler: async (_args, ctx) => {
+      const goCtx = ctx as GoCtx;
       const step = onStop(state);
-      state = step.state;
-      notify(ctx as GoCtx, step.actions);
+      state = remember(goCtx, step.state);
+      notify(goCtx, step.actions);
     },
   });
 
@@ -123,7 +149,7 @@ export default function ctxGo(pi: ExtensionAPI): void {
       if (goCtx.waitForIdle) await goCtx.waitForIdle();
       const snap = readSnap(branchOf(goCtx).branch, branchOf(goCtx).sessionId);
       const step = onGo(state, snap);
-      state = step.state;
+      state = remember(goCtx, step.state);
       notify(goCtx, step.actions);
       const next = step.actions.find((action) => action.type === "prompt");
       if (!next || next.type !== "prompt") return;
@@ -142,7 +168,7 @@ export default function ctxGo(pi: ExtensionAPI): void {
       pending: goCtx.hasPendingMessages(),
       text: messageText(event.message),
     });
-    state = step.state;
+    state = remember(goCtx, step.state);
     notify(goCtx, step.actions);
 
     const approve = step.actions.find((action) => action.type === "approve");
@@ -156,7 +182,7 @@ export default function ctxGo(pi: ExtensionAPI): void {
       const fresh = readSnap(branchOf(goCtx).branch, sessionId);
       if (picked !== YES) {
         const rejected = onDraftRejected(state, fresh);
-        state = rejected.state;
+        state = remember(goCtx, rejected.state);
         if (goCtx.hasPendingMessages()) return;
         return continued(event.entries, rejected.actions);
       }
@@ -176,7 +202,7 @@ export default function ctxGo(pi: ExtensionAPI): void {
       }
       const after = readSnap(branchOf(goCtx).branch, sessionId);
       const approved = onApproved(state, after, wrote.id);
-      state = approved.state;
+      state = remember(goCtx, approved.state);
       if (goCtx.hasPendingMessages()) return;
       return continued(event.entries, approved.actions);
     }
@@ -184,7 +210,7 @@ export default function ctxGo(pi: ExtensionAPI): void {
     const judge = step.actions.find((action) => action.type === "judge");
     if (judge && judge.type === "judge") {
       const judged = await judgeNow(goCtx, snap, state, judge.claim, override);
-      state = judged.state;
+      state = remember(goCtx, judged.state);
       notify(goCtx, judged.actions);
       if (goCtx.hasPendingMessages()) return;
       return continued(event.entries, judged.actions);

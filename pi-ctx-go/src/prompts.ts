@@ -27,6 +27,16 @@ export function workPrompt(destination: string): string {
   ].join("\n");
 }
 
+export function judgeErrorPrompt(destination: string, error: string): string {
+  return [
+    "The judge did not answer.",
+    `Judge: ${error}`,
+    "Destination:",
+    destination,
+    "Do the destination's work. Do not claim it is met yet.",
+  ].join("\n");
+}
+
 export function rejectionPrompt(destination: string, summary: string): string {
   return [
     "The judge said the destination is not met.",

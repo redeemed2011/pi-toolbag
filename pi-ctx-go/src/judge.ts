@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { extraWorkerExtensionPaths, modelArg, resolvePiBinary, withoutNullBytes } from "../../pi-ctx/src/spawn/observer.js";
 
-const JUDGE_MS = 120_000;
+const JUDGE_MS = 300_000;
+const JUDGE_FALLBACK_PATH = fileURLToPath(new URL("./judge-fallback.ts", import.meta.url));
 
 export type JudgeModel = { provider: string; id: string; thinking?: ModelThinkingLevel };
 
@@ -30,6 +32,7 @@ export function judgeArgv(model: JudgeModel): string[] {
     modelArg(model),
   ];
   if (model.thinking) args.push("--thinking", model.thinking);
+  args.push("-e", JUDGE_FALLBACK_PATH);
   for (const extra of extraWorkerExtensionPaths(model)) args.push("-e", extra);
   args.push("-p", JUDGE_ASK);
   return [pi.command, ...args];
