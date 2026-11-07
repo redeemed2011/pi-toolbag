@@ -6,7 +6,7 @@
 
 ## The one-sentence goal
 
-> "A new Pi extension that runs only while CTX is bound keeps that session working through the open CTX work until a separate model judge, asked only at the claim of done, agrees it is done, for the operator who said go."
+> "A new Pi extension that runs only while CTX is bound keeps that session working through the open CTX work until a separate model judge, asked only at the claim of done, agrees the project is done, for the operator who said go."
 
 The directory `pi-ctx-go` holds this contract so it does not replace the 2026-10-14 failover contract in `pi-toolbag/.pi/foundations/`. The extension's home is pi-toolbag. The package name is not part of the goal.
 
@@ -37,7 +37,7 @@ The directory `pi-ctx-go` holds this contract so it does not replace the 2026-10
 - **Alignment with the goal**: Strong
 - **Outcome**: KEPT
 - **Challenges**: "Unto completion" without a definition of done is how a session runs all night. The confirmed sentence stops at the judge's agreement, not at the worker's own stop. The operator says go once. Typing continue after every compaction is the behavior this exists to remove.
-- **Decision rationale**: After the operator says go, the extension keeps the bound session working through the open CTX work across turns and compactions until the judge agrees it is done.
+- **Decision rationale**: After the operator says go, the extension keeps the bound session working until the judge agrees the project is done. Agreement that the two-line destination is met is not that stop. The worker then records still-owed outcomes from the project's first-questions.md as CTX questions, and a later claim names that file.
 
 ### A separate model judge, only when done is claimed
 
@@ -102,14 +102,14 @@ The directory `pi-ctx-go` holds this contract so it does not replace the 2026-10
 - **Challenges**: Abort-and-resume did keep the apple-pi session moving across 17 compactions. It did that by cutting the run. The goal only requires that work continue after the operator says go. The run that is already going can finish first.
 - **Decision rationale**: Continuation starts another turn after the current run settles. It does not abort the live run.
 
-### The worker claims done; the judge can send it back; repeated disagreement pauses
+### The worker claims done; the judge can send it back until the claim stops moving
 
 - **Original request**: The worker reports that it thinks it is done, and the LLM judge judges that. If the worker says done and the judge says not, more than once, pause for the operator even when a little work happened between those claims. The pause includes what the worker thinks it did and what the judge said.
-- **Source / who / when**: User, 2026-11-04. "Barker" and "OLM" in the dictation are read as "worker" and "LLM."
+- **Source / who / when**: User, 2026-11-04. "Barker" and "OLM" in the dictation are read as "worker" and "LLM." Changed by the operator on 2026-11-06: keep giving the judge's feedback while the claim moves, stop when two rejections in a row show no meaningful progress, and cap judge calls at ten.
 - **Alignment with the goal**: Strong
-- **Outcome**: KEPT
-- **Challenges**: One rejection cannot pause, or the judge can never send the worker back. "Multiple" was not given as a number. The smallest reading is two rejected done-claims. A little work between them does not reset the count. The worker does not win the disagreement.
-- **Decision rationale**: The worker's done-claim is what calls the judge. One rejection continues the work. The next rejection pauses for the operator, with both summaries. The agent is not given a way to declare that pause.
+- **Outcome**: CHANGED on 2026-11-06. The 2026-11-04 rule paused on the second rejection even when the products had changed.
+- **Challenges**: One rejection cannot pause, or the judge can never send the worker back. Pausing on the second rejection also throws away feedback the worker is still acting on. Progress cannot be another model, and the CTX fingerprint stays still while the named files change. Editing only the contract, or rewording the claim, would otherwise count as movement. Ten calls is the bound for a workflow that never stalls. The worker does not win the disagreement and cannot declare the pause.
+- **Decision rationale**: The worker's done-claim is what calls the judge. A judge call is one completed verdict, done or not-done. A packet error is not a call. A not-done verdict continues, and the worker is given that summary. Two rejected claims in a row pause when no named product other than `first-questions.md` changed bytes and no new product file was named. That pause shows both summaries. The tenth not-done pauses even if the products changed, and shows the last summary and the count. A done verdict finishes, including on the tenth call. Rewording the claim, or editing only `first-questions.md`, is not progress. A new `/ctx-go` after a pause resets the count. The count does not reset because the products moved. The agent is not given a way to declare that pause.
 
 ### Judge model follows the session, with an override
 

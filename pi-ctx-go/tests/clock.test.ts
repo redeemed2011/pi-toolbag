@@ -52,4 +52,25 @@ describe("ctx-go clock", () => {
     writeFileSync(clockPath(session), JSON.stringify({ phase: "work", armed: true }));
     expect(readClock(session)).toEqual(freshState());
   });
+
+  it("keeps an accepted aim across reload without arming", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ctx-go-clock-"));
+    const session = join(dir, "session.jsonl");
+    writeFileSync(
+      clockPath(session),
+      JSON.stringify({
+        phase: "questions",
+        rejections: 0,
+        approvedDestinationId: "d1",
+        lastClaim: "aim met",
+        lastVerdict: "",
+        verdictKind: "none",
+        aimMet: true,
+      }),
+    );
+    const loaded = readClock(session);
+    expect(loaded.armed).toBe(false);
+    expect(loaded.aimMet).toBe(true);
+    expect(loaded.projectDone).toBe(false);
+  });
 });

@@ -2,7 +2,7 @@
 
 **Session date**: 2026-11-04
 **Revisited**: 2026-11-05
-**Scope**: A new Pi extension that runs only while CTX is bound keeps that session working through the open CTX work until a separate model judge, asked only at the claim of done, agrees it is done, for the operator who said go.
+**Scope**: A new Pi extension that runs only while CTX is bound keeps that session working through the open CTX work until a separate model judge, asked only at the claim of done, agrees the project is done, for the operator who said go. Acceptance of the two-line destination is not that agreement.
 
 ## Bedrock facts
 
@@ -15,8 +15,8 @@
 
 ### Fact 2 — CTX is the only work list
 
-**Statement**: The open CTX work is the list. The extension does not keep a goal, a focus, or a checklist of its own.
-**Why it is load-bearing**: A second list is how a session reported done while the CTX destination stayed open.
+**Statement**: The open CTX work is the list. The extension does not keep a goal, a focus, or a checklist of its own. When the judge accepts the two-line destination, the worker reads that project's first-questions.md and records each still-owed outcome as a CTX question. The extension does not parse that file.
+**Why it is load-bearing**: A second list is how a session reported done while the CTX destination stayed open. The opposite failure is a destination acceptance that stops the loop while owed outcomes in that file are still open. Those outcomes become CTX questions. They do not become a list the extension keeps.
 **Source / evidence**: Operator, 2026-11-04, in `.pi/foundations/first-questions.md`.
 **Status**: Verified
 
@@ -85,16 +85,16 @@
 
 ### Fact 10 — The judge is one separate call, on a fixed packet
 
-**Statement**: The worker does not grade itself. No model is asked along the way. The judge is asked only when done is claimed. It sees only the approved destination, the live CTX constraints, how the questions were closed, and the products named in that claim. If the claim names no product, the answer is not done. The judge does not go looking for other work. It uses the session's provider, model, and thinking level unless the operator overrides them. The worker does not choose the judge. "Grok at medium thinking" was an example of a weaker model, not the chosen thinking level.
-**Why it is load-bearing**: This is the whole definition of done. A search, a checklist of tests, or a second model that builds a reading list was rejected.
+**Statement**: The worker does not grade itself. No model is asked along the way. The judge is asked only when done is claimed. It sees only the approved destination, the live CTX constraints, how the questions were closed, and the products named in that claim. If the claim names no product, the answer is not done. The judge does not go looking for other work. Acceptance of the two-line destination is not done. Done is a later claim that names the project's first-questions.md, after still-owed outcomes have been CTX questions. On that claim, a KEPT decision is not unfinished by itself, and an owed outcome with no product and no explicit deferral is not done. The judge uses the session's provider, model, and thinking level unless the operator overrides them. The worker does not choose the judge. "Grok at medium thinking" was an example of a weaker model, not the chosen thinking level.
+**Why it is load-bearing**: This is the whole definition of done. A search, a checklist of tests, or a second model that builds a reading list was rejected. A destination acceptance is not a project acceptance.
 **Source / evidence**: Operator, 2026-11-04, in `.pi/foundations/first-questions.md`. pi-ctx already reads the session model and thinking level for a separate call in `pi-ctx/src/promoter/run.ts`.
 **Status**: Verified
 
 ### Fact 11 — Two rejected claims pause; the brakes do not use a model
 
-**Statement**: The worker's done-claim is what calls the judge. One rejection continues the work. The next rejection pauses for the operator and shows what the worker says it did and what the judge said. Work between the two claims does not reset the count. Apart from that, the extension stops, with no model, when the operator is waiting, the operator stopped it, or a continued turn made no progress.
-**Why it is load-bearing**: One rejection cannot end the loop, or the judge can never send the work back. A turn that never reaches a done-claim otherwise spends until the operator notices. The count has to live outside the model context, or compaction resets it.
-**Source / evidence**: Operator, 2026-11-04, in `.pi/foundations/first-questions.md`. Fact 9 for compaction.
+**Statement**: The worker's done-claim is what calls the judge. A judge call is one completed verdict, done or not-done. A packet error is not a call. A not-done verdict continues, and the worker is given that summary, until two rejected claims in a row show no product progress or the tenth call is not-done. Progress means the bytes of a named product other than `first-questions.md` changed, or the claim names a new product file. Rewording the claim, or editing only `first-questions.md`, is not progress. The no-progress pause shows the last two summaries. The tenth not-done pauses even if the products changed, and shows the last summary and the count. A done verdict finishes, including on the tenth call. A new `/ctx-go` after a pause starts the count at zero. The count does not reset because the products moved. The worker cannot declare the pause. Apart from that, the extension stops, with no model, when the operator is waiting, the operator stopped it, or a continued turn made no progress.
+**Why it is load-bearing**: One rejection cannot end the loop, or the judge can never send the work back. A second rejection also cannot end it when the named products changed, or the feedback the worker is acting on is discarded. Ten calls bounds a workflow that never stalls. The count has to live outside the model context, or compaction resets it.
+**Source / evidence**: Operator, 2026-11-06, replacing the 2026-11-04 two-rejection pause, in `.pi/foundations/first-questions.md`. Fact 9 for compaction.
 **Status**: Verified
 
 ### Fact 12 — The operator can be asked to confirm without a tool
@@ -125,7 +125,7 @@ One extension, listed in `pi.extensions`, idle until CTX is bound. `/ctx-go` arm
 
 2. Questions. The list is every unblocked, unmarked, unclaimed, live question in the bound project, oldest first. Not a subset, and not a copy. The worker settles those by superseding them. No notice is required. A question with the ask-operator marker is not claimed and not superseded by the worker. The loop surfaces that question and pauses. The marker is not `blocks`, and the worker does not set it because a model disagreed. It is set because the operator said to ask. When the only remaining questions are blocked, it pauses and names those questions and the live records that block them. A question is settled when a later record supersedes it. Closing the claim, filing a finding, or the worker saying it is done does not settle it. When a turn ends and the workable list still has a question, the extension starts one more turn, unless that turn made no progress: no tool results, and the frontier, the claim, and the destination are unchanged. It does not start that extra turn when a message is already queued; Pi will deliver the queue. It does not abort the turn that is already running. A no-progress end stays armed and does not spend another model call until the operator sends a message.
 
-3. Done. The worker saying "done" does not call the judge while any unblocked question is still live. When none are, the extension asks for the done-claim. That claim is the only judge call. The packet is the approved destination (those two lines), the live constraints, the records that superseded the questions, and the products named in the claim, including their contents. The judge is told that a claim which names no product is not done. If the extension cannot put a named product's contents into the call, it does not call the judge and pauses. One reasoned rejection returns to phase 2. The second pauses and shows both summaries. A new `/ctx-go` after that pause starts the count at zero; otherwise the judge could never send the work back once the operator had already seen the disagreement. A judge call that errors is not a rejection and is not done; it pauses and shows the error. The worker cannot set the judge's model, and it has no tool that ends the loop.
+3. Done. The worker saying "done" does not call the judge while any unblocked question is still live. When none are, the extension asks for the done-claim. That claim is the only judge call. The packet is the approved destination (those two lines), the live constraints, the records that superseded the questions, and the products named in the claim, including their contents. The judge is told that a claim which names no product is not done. If the extension cannot put a named product's contents into the call, it does not call the judge and pauses. A not-done verdict returns the worker to the missing work with that summary. Two rejected claims in a row pause when no named product other than `first-questions.md` changed bytes and no new product file was named, and that pause shows both summaries. The tenth not-done pauses even if the products changed, and shows the last summary and the count. A done verdict finishes, including on the tenth call. A new `/ctx-go` after a pause starts the count at zero. The count does not reset because the products moved. A judge call that errors is not a rejection and is not done; it pauses and shows the error. A `done` verdict on the destination does not disarm the loop. It records the verdict and asks the worker to read the project's first-questions.md and record each still-owed outcome as a CTX question. The worker does not claim the project complete on that turn. When those questions are settled, the next claim must name that file or the loop pauses without calling the judge. Only a later `done` on that claim disarms the loop. The worker cannot set the judge's model, and it has no tool that ends the loop.
 
 ### Justified components
 
@@ -136,7 +136,7 @@ One extension, listed in `pi.extensions`, idle until CTX is bound. `/ctx-go` arm
 - A continuation from the end of a turn, skipped when the turn made no progress or a message is already queued. Facts 9, 11, and 14. Pi already continues tool use inside the run.
 - The frontier as the list. A question counts as settled only once it is superseded. An ask-operator marker pauses that question. `blocks` does not. Pause when only blocked questions remain. Facts 2, 3, 4, and 13.
 - One judge call, inheriting the session model and thinking level unless the operator overrode it, with the fixed packet. Fact 10. The override is held by the extension. The worker has no tool that sets it.
-- A rejection count in extension memory, reset only by a new `/ctx-go` after the pause. Facts 9 and 11.
+- A judge-call count in extension memory, reset only by a new `/ctx-go` after a pause, not by product progress. Pause when two rejected claims show no product-byte progress, or the tenth call is not-done. Facts 9 and 11.
 
 ### Explicitly rejected approaches
 
@@ -153,6 +153,7 @@ One extension, listed in `pi.extensions`, idle until CTX is bound. `/ctx-go` arm
 - A discussion, checklist, or tutorial until `/ctx-go` can work. Facts 2 and 15. The missing cases are two, and each has one next action.
 - The extension binding CTX, or prompting the model to bind. Fact 15.
 - Guiding the question loop, the judge, or record writing before the questions start. Fact 15. That guidance is the loop.
+- Stopping when the judge accepts the two-line destination. Fact 10. That acceptance is not the project.
 
 ## Open questions on foundations
 

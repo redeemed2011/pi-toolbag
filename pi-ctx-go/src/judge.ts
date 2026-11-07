@@ -3,7 +3,8 @@ import { fileURLToPath } from "node:url";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { extraWorkerExtensionPaths, modelArg, resolvePiBinary, withoutNullBytes } from "../../pi-ctx/src/spawn/observer.js";
 
-const JUDGE_MS = 300_000;
+/** A destination packet at xhigh finished in 255s. The five-minute kill cut off the larger project packet before any verdict. */
+const JUDGE_MS = 900_000;
 const JUDGE_FALLBACK_PATH = fileURLToPath(new URL("./judge-fallback.ts", import.meta.url));
 
 export type JudgeModel = { provider: string; id: string; thinking?: ModelThinkingLevel };
@@ -27,13 +28,16 @@ export function judgeArgv(model: JudgeModel): string[] {
     "--no-skills",
     "--no-prompt-templates",
     "--no-context-files",
-    "--no-tools",
+    "--tools",
+    "read,grep,find",
+    "--exclude-tools",
+    "mcp__*",
     "--model",
     modelArg(model),
   ];
   if (model.thinking) args.push("--thinking", model.thinking);
   args.push("-e", JUDGE_FALLBACK_PATH);
-  for (const extra of extraWorkerExtensionPaths(model)) args.push("-e", extra);
+  for (const extra of extraWorkerExtensionPaths(model, { chain: false })) args.push("-e", extra);
   args.push("-p", JUDGE_ASK);
   return [pi.command, ...args];
 }

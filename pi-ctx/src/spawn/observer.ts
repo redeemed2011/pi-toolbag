@@ -77,7 +77,7 @@ export function resolvePiBinary(): { command: string; baseArgs: string[] } {
  * Worker uses --no-extensions, so grok-cli (from npm:pi-grok-cli) is otherwise
  * absent from modelRegistry — failover then logs not-in-registry.
  */
-export function extraWorkerExtensionPaths(model: ConfiguredModel): string[] {
+export function extraWorkerExtensionPaths(model: ConfiguredModel, options?: { chain?: boolean }): string[] {
 	const agentDir = getAgentDir();
 	const out: string[] = [];
 	const seen = new Set<string>();
@@ -88,6 +88,7 @@ export function extraWorkerExtensionPaths(model: ConfiguredModel): string[] {
 		out.push(dir);
 	};
 	addProvider(model.provider);
+	if (options?.chain === false) return out;
 	const loaded = loadFallbackConfigFile(join(agentDir, "auto-fallback.json"));
 	if (loaded.ok && loaded.config.enabled) {
 		const chain = findChain(loaded.config, modelKey(model.provider, model.id));

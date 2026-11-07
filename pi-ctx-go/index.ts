@@ -2,10 +2,11 @@ import type { ExtensionAPI, ExtensionContext, SessionBoundaryDraft } from "@eare
 import { approveDestination } from "./src/approve.js";
 import { readClock, writeClock } from "./src/clock.js";
 import { runJudge, thinkingLevel, type JudgeModel } from "./src/judge.js";
-import { buildPacket, parseVerdict } from "./src/packet.js";
+import { buildPacket, parseVerdict, productStamp } from "./src/packet.js";
 import { closedQuestions, readSnap, type BoundSnap } from "./src/snap.js";
 import {
   freshState,
+  namesFoundations,
   onApproved,
   onDraftRejected,
   onGo,
@@ -53,18 +54,15 @@ function notify(ctx: GoCtx, actions: Action[]): void {
 }
 
 function continued(eventEntries: SessionBoundaryDraft[], actions: Action[]): Continue | undefined {
-  const next = actions.find((action) => action.type === "prompt");
-  if (next && next.type === "prompt") {
-    return {
-      entries: [...eventEntries, { type: "custom_message", customType: "ctx-go", content: next.text, display: true }],
-      continue: true,
-    };
+  const entries = [...eventEntries];
+  let prompt = false;
+  for (const action of actions) {
+    if (action.type !== "prompt" && action.type !== "record") continue;
+    entries.push({ type: "custom_message", customType: "ctx-go", content: action.text, display: true });
+    if (action.type === "prompt") prompt = true;
   }
-  const record = actions.find((action) => action.type === "record");
-  if (!record || record.type !== "record") return undefined;
-  return {
-    entries: [...eventEntries, { type: "custom_message", customType: "ctx-go", content: record.text, display: true }],
-  };
+  if (entries.length === eventEntries.length) return undefined;
+  return prompt ? { entries, continue: true } : { entries };
 }
 
 type JudgeOverride = { provider?: string; id?: string; thinking?: JudgeModel["thinking"] };
@@ -143,7 +141,7 @@ export default function ctxGo(pi: ExtensionAPI): void {
   });
 
   pi.registerCommand("ctx-go", {
-    description: "Keep working the bound CTX project until the judge agrees it is done.",
+    description: "Keep working the bound CTX project until the project is done.",
     handler: async (_args, ctx) => {
       const goCtx = ctx as GoCtx;
       if (goCtx.waitForIdle) await goCtx.waitForIdle();
@@ -231,11 +229,12 @@ async function judgeNow(ctx: GoCtx, snap: BoundSnap, state: GoState, claim: stri
       .map((item) => ({ id: item.id, headline: item.headline, body: item.directive || item.body })),
     closed: closedQuestions(snap.live),
     claim,
+    project: state.aimMet && namesFoundations(claim),
   });
   if (!packet.ok) return onJudge(state, snap, packet);
   const model = modelOf(ctx, override);
   if (!model) return onJudge(state, snap, { ok: false, error: "no model" });
   const ran = await runJudge(model, packet.text, ctx.cwd);
   const verdict = ran.ok ? parseVerdict(ran.text) : ran;
-  return onJudge(state, snap, verdict);
+  return onJudge(state, snap, verdict, productStamp(ctx.cwd, claim));
 }

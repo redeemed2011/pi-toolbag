@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { CLAIM_PROMPT, DRAFT_PROMPT, QUESTION_PROMPT, judgeErrorPrompt, rejectionPrompt, workPrompt } from "../src/prompts.js";
+import {
+  CLAIM_PROMPT,
+  DRAFT_PROMPT,
+  PROJECT_CLAIM_PROMPT,
+  QUESTION_PROMPT,
+  REMAINDER_PROMPT,
+  judgeErrorPrompt,
+  projectErrorPrompt,
+  projectRejectionPrompt,
+  rejectionPrompt,
+  workPrompt,
+} from "../src/prompts.js";
 import { freshState, onApproved, onGo, onJudge, onStop, onTurn, type Snap } from "../src/state.js";
 
 function snap(partial: Partial<Snap> = {}): Snap {
@@ -102,6 +113,9 @@ describe("ctx-go loop", () => {
     expect(again.state.phase).toBe("paused");
     expect(again.state.rejections).toBe(2);
     expect(again.state.lastVerdict).toBe("still no");
+    expect(again.actions[0]).toMatchObject({
+      message: "ctx-go paused: no product change\nWorker: did the thing\nJudge: missing product\nJudge: still no",
+    });
     expect(again.state.verdictKind).toBe("rejection");
     expect(again.actions.some((action) => action.type === "record" && action.text.includes("Worker: did the thing") && action.text.includes("Judge: still no"))).toBe(true);
     const resumed = onGo(again.state, snap());
@@ -115,23 +129,99 @@ describe("ctx-go loop", () => {
     expect(againOpen.actions[0]).toMatchObject({ type: "prompt", text: rejectionPrompt("Build the app.", "still no") });
   });
 
-  it("a done judge keeps the destination and clears the verdict", () => {
+  it("a destination acceptance stays armed and a later project claim can finish", () => {
+    const empty = snap({ frontierIds: [], destinationText: "Build the app." });
     const state = {
       ...freshState(),
       armed: true,
       phase: "claim" as const,
       approvedDestinationId: "d1",
+      lastClaim: "the aim is met",
       lastVerdict: "old",
       verdictKind: "rejection" as const,
       rejections: 1,
     };
-    const step = onJudge(state, snap({ frontierIds: [] }), { ok: true, done: true, summary: "met" });
-    expect(step.state.armed).toBe(false);
-    expect(step.state.approvedDestinationId).toBe("d1");
-    expect(step.state.lastVerdict).toBe("");
-    expect(step.state.verdictKind).toBe("none");
-    const again = onGo(step.state, snap({ frontierIds: [], destinationText: "Build the app." }));
-    expect(again.actions[0]).toMatchObject({ type: "prompt", text: workPrompt("Build the app.") });
+    const accepted = onJudge(state, empty, { ok: true, done: true, summary: "met" });
+    expect(accepted.state.armed).toBe(true);
+    expect(accepted.state.aimMet).toBe(true);
+    expect(accepted.state.projectDone).toBe(false);
+    expect(accepted.state.rejections).toBe(1);
+    expect(accepted.actions[0]).toMatchObject({ type: "prompt", text: REMAINDER_PROMPT });
+    expect(accepted.actions.some((action) => action.type === "notify" && action.message.startsWith("ctx-go done"))).toBe(false);
+    expect(accepted.actions.some((action) => action.type === "record" && action.text.includes("Judge: met"))).toBe(true);
+    const claimAsk = onTurn(accepted.state, empty, doneTurn);
+    expect(claimAsk.state.phase).toBe("project");
+    expect(claimAsk.actions[0]).toMatchObject({ type: "prompt", text: PROJECT_CLAIM_PROMPT });
+    const unfit = onTurn(claimAsk.state, empty, { ...doneTurn, text: "The project is done." });
+    expect(unfit.actions).toEqual([
+      { type: "notify", level: "warning", message: "ctx-go paused: project claim did not name first-questions.md" },
+    ]);
+    expect(unfit.actions.some((action) => action.type === "judge")).toBe(false);
+    const claimed = onTurn(claimAsk.state, empty, { ...doneTurn, text: "Done. `proj/.pi/foundations/first-questions.md`" });
+    expect(claimed.actions[0]).toMatchObject({ type: "judge" });
+    const finished = onJudge(claimed.state, empty, { ok: true, done: true, summary: "project met" });
+    expect(finished.state.armed).toBe(false);
+    expect(finished.state.projectDone).toBe(true);
+    expect(finished.state.aimMet).toBe(true);
+    expect(finished.actions[0]).toMatchObject({ type: "notify", message: "ctx-go done\nproject met" });
+    const stopped = onGo(finished.state, empty);
+    expect(stopped.state.armed).toBe(false);
+    expect(stopped.actions).toEqual([{ type: "notify", level: "info", message: "ctx-go is already done" }]);
+    const rejected = onJudge(
+      { ...claimed.state, rejections: 0 },
+      empty,
+      { ok: true, done: false, summary: "composer still owed" },
+    );
+    expect(rejected.state.armed).toBe(true);
+    expect(rejected.state.phase).toBe("questions");
+    expect(rejected.actions[0]).toMatchObject({
+      type: "prompt",
+      text: projectRejectionPrompt("Build the app.", "composer still owed"),
+    });
+    const erred = onJudge(claimed.state, empty, { ok: false, error: "no verdict" });
+    const resumed = onGo(erred.state, empty);
+    expect(resumed.actions[0]).toMatchObject({ type: "prompt", text: projectErrorPrompt("Build the app.", "no verdict") });
+    expect(String((resumed.actions[0] as { text: string }).text)).not.toContain("not met");
+    expect(String((resumed.actions[0] as { text: string }).text)).not.toContain("destination's work");
+  });
+
+  it("keeps going when the named products change, and stops at ten", () => {
+    const empty = snap({ frontierIds: [], destinationText: "Build the app." });
+    const base = {
+      ...freshState(),
+      armed: true,
+      phase: "claim" as const,
+      approvedDestinationId: "d1",
+      lastClaim: "first",
+      rejections: 1,
+      lastVerdict: "missing",
+      priorVerdict: "missing",
+      productStamp: "a",
+      verdictKind: "rejection" as const,
+    };
+    const moved = onJudge(base, empty, { ok: true, done: false, summary: "still owed" }, "b");
+    expect(moved.state.phase).toBe("work");
+    expect(moved.state.rejections).toBe(2);
+    expect(moved.state.productStamp).toBe("b");
+    expect(moved.actions[0]).toMatchObject({ type: "prompt", text: rejectionPrompt("Build the app.", "still owed") });
+    const capped = onJudge(
+      { ...base, rejections: 9, productStamp: "a" },
+      empty,
+      { ok: true, done: false, summary: "tenth" },
+      "b",
+    );
+    expect(capped.state.phase).toBe("paused");
+    expect(capped.state.rejections).toBe(10);
+    expect(String((capped.actions[0] as { message: string }).message)).toContain("after 10 judge calls");
+    expect(String((capped.actions[0] as { message: string }).message)).toContain("Judge: tenth");
+    const finished = onJudge(
+      { ...base, aimMet: true, rejections: 9, lastClaim: "done `proj/.pi/foundations/first-questions.md`" },
+      empty,
+      { ok: true, done: true, summary: "project met" },
+      "b",
+    );
+    expect(finished.state.projectDone).toBe(true);
+    expect(finished.actions[0]).toMatchObject({ type: "notify", message: "ctx-go done\nproject met" });
   });
 
   it("a judge error is not a rejection", () => {

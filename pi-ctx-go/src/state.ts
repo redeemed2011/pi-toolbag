@@ -1,7 +1,19 @@
-import { CLAIM_PROMPT, DRAFT_PROMPT, QUESTION_PROMPT, judgeErrorPrompt, rejectionPrompt, workPrompt } from "./prompts.js";
+import { namedPaths } from "./packet.js";
+import {
+  CLAIM_PROMPT,
+  DRAFT_PROMPT,
+  PROJECT_CLAIM_PROMPT,
+  QUESTION_PROMPT,
+  REMAINDER_PROMPT,
+  judgeErrorPrompt,
+  projectErrorPrompt,
+  projectRejectionPrompt,
+  rejectionPrompt,
+  workPrompt,
+} from "./prompts.js";
 import { twoLines } from "./text.js";
 
-export type GoPhase = "idle" | "draft" | "questions" | "work" | "claim" | "paused";
+export type GoPhase = "idle" | "draft" | "questions" | "work" | "claim" | "project" | "paused";
 
 export type VerdictKind = "none" | "rejection" | "error";
 
@@ -14,7 +26,11 @@ export type GoState = {
   lastFingerprint: string | null;
   lastClaim: string;
   lastVerdict: string;
+  priorVerdict: string;
+  productStamp: string | null;
   verdictKind: VerdictKind;
+  aimMet: boolean;
+  projectDone: boolean;
 };
 
 export type BlockedQuestion = { id: string; headline: string; blockers: string[] };
@@ -56,8 +72,16 @@ export function freshState(): GoState {
     lastFingerprint: null,
     lastClaim: "",
     lastVerdict: "",
+    priorVerdict: "",
+    productStamp: null,
     verdictKind: "none",
+    aimMet: false,
+    projectDone: false,
   };
+}
+
+export function namesFoundations(claim: string): boolean {
+  return namedPaths(claim).some((path) => path.endsWith("first-questions.md"));
 }
 
 export function fingerprint(snap: Snap): string {
@@ -94,7 +118,11 @@ export function onStop(state: GoState): Step {
       rejections: state.rejections,
       lastClaim: state.lastClaim,
       lastVerdict: state.lastVerdict,
+      priorVerdict: state.priorVerdict,
+      productStamp: state.productStamp,
       verdictKind: state.verdictKind,
+      aimMet: state.aimMet,
+      projectDone: state.projectDone,
       phase: state.phase === "paused" ? "paused" : "idle",
     },
     actions: [{ type: "notify", level: "info", message: "ctx-go stopped" }],
@@ -105,16 +133,31 @@ export function onGo(state: GoState, snap: Snap): Step {
   if (!snap.bound) {
     return { state, actions: [{ type: "notify", level: "warning", message: BIND_NEXT }] };
   }
+  if (state.projectDone && destinationReady(state, snap) && !questionsOpen(snap)) {
+    return { state: { ...state, armed: false }, actions: [{ type: "notify", level: "info", message: "ctx-go is already done" }] };
+  }
   const next: GoState = {
     ...state,
     armed: true,
     hold: false,
+    projectDone: false,
     rejections: state.phase === "paused" ? 0 : state.rejections,
+    productStamp: state.phase === "paused" ? null : state.productStamp,
+    priorVerdict: state.phase === "paused" ? "" : state.priorVerdict,
     phase: destinationReady(state, snap) ? "questions" : "draft",
   };
   if (next.phase === "questions") {
     if (!questionsOpen(snap)) {
       const verdict = next.lastVerdict.trim();
+      if (next.aimMet) {
+        const text =
+          verdict && next.verdictKind === "rejection"
+            ? projectRejectionPrompt(snap.destinationText ?? "", verdict)
+            : verdict && next.verdictKind === "error"
+              ? projectErrorPrompt(snap.destinationText ?? "", verdict)
+              : PROJECT_CLAIM_PROMPT;
+        return prompt({ ...next, phase: verdict ? "questions" : "project" }, text, snap);
+      }
       const text =
         verdict && next.verdictKind === "rejection"
           ? rejectionPrompt(snap.destinationText ?? "", verdict)
@@ -129,7 +172,14 @@ export function onGo(state: GoState, snap: Snap): Step {
 }
 
 export function onApproved(state: GoState, snap: Snap, destinationId: string): Step {
-  const next: GoState = { ...state, armed: true, phase: "questions", approvedDestinationId: destinationId };
+  const next: GoState = {
+    ...state,
+    armed: true,
+    phase: "questions",
+    approvedDestinationId: destinationId,
+    aimMet: false,
+    projectDone: false,
+  };
   return prompt(next, QUESTION_PROMPT, { ...snap, destinationId });
 }
 
@@ -184,7 +234,7 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
   if (!destinationReady(state, snap)) {
     if (state.phase !== "draft") {
       if (turn.pending) return { state, actions: [] };
-      return draftAsk({ ...state, phase: "draft", approvedDestinationId: null }, snap);
+      return draftAsk({ ...state, phase: "draft", approvedDestinationId: null, aimMet: false, projectDone: false }, snap);
     }
     const draft = twoLines(turn.text);
     if (!draft) return pause(state, "ctx-go paused: draft made no progress");
@@ -196,6 +246,16 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
   if (questionsOpen(snap)) {
     if (!changed) return pause(state, "ctx-go paused: no progress");
     return say({ ...state, phase: "questions" }, QUESTION_PROMPT);
+  }
+  if (state.aimMet) {
+    if (state.phase !== "project") {
+      if (turn.pending) return { state, actions: [] };
+      return prompt({ ...state, phase: "project" }, PROJECT_CLAIM_PROMPT, snap);
+    }
+    const projectClaim = turn.text.trim();
+    if (!projectClaim) return pause(state, "ctx-go paused: done-claim was empty");
+    if (!namesFoundations(projectClaim)) return pause(state, "ctx-go paused: project claim did not name first-questions.md");
+    return { state: { ...state, lastClaim: projectClaim }, actions: [{ type: "judge", claim: projectClaim }] };
   }
   if (state.phase !== "work" && state.phase !== "claim") {
     if (turn.pending) return { state, actions: [] };
@@ -214,10 +274,13 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
   };
 }
 
+const JUDGE_CAP = 10;
+
 export function onJudge(
   state: GoState,
   snap: Snap,
   result: { ok: true; done: boolean; summary: string } | { ok: false; error: string },
+  products = "",
 ): Step {
   if (!result.ok) {
     return withRecord(
@@ -226,25 +289,56 @@ export function onJudge(
     );
   }
   if (result.done) {
-    return {
-      state: { ...freshState(), approvedDestinationId: state.approvedDestinationId },
-      actions: [
-        { type: "notify", level: "info", message: `ctx-go done\n${result.summary}` },
-        { type: "record", text: `Worker: ${state.lastClaim}\nJudge: ${result.summary}` },
-      ],
-    };
+    const record = `Worker: ${state.lastClaim}\nJudge: ${result.summary}`;
+    if (state.aimMet && namesFoundations(state.lastClaim)) {
+      return {
+        state: { ...freshState(), approvedDestinationId: state.approvedDestinationId, aimMet: true, projectDone: true },
+        actions: [
+          { type: "notify", level: "info", message: `ctx-go done\n${result.summary}` },
+          { type: "record", text: record },
+        ],
+      };
+    }
+    const step = prompt(
+      {
+        ...state,
+        armed: true,
+        aimMet: true,
+        projectDone: false,
+        phase: "questions",
+        lastVerdict: "",
+        verdictKind: "none",
+        hold: false,
+      },
+      REMAINDER_PROMPT,
+      snap,
+    );
+    return withRecord(step, record);
   }
   const rejections = state.rejections + 1;
   const summary = result.summary || "not done";
-  if (rejections >= 2) {
-    const message = `ctx-go paused after two rejections\nWorker: ${state.lastClaim}\nJudge: ${summary}`;
-    return withRecord(pause({ ...state, rejections, lastVerdict: summary, verdictKind: "rejection" }, message, true), message);
+  const moved = state.productStamp !== null && products !== state.productStamp;
+  const rejected = {
+    ...state,
+    rejections,
+    lastVerdict: summary,
+    priorVerdict: summary,
+    productStamp: products,
+    verdictKind: "rejection" as const,
+  };
+  if (rejections >= JUDGE_CAP) {
+    const message = `ctx-go paused after ${JUDGE_CAP} judge calls\nWorker: ${state.lastClaim}\nJudge: ${summary}`;
+    return withRecord(pause(rejected, message, true), message);
   }
-  return prompt(
-    { ...state, phase: "work", rejections, lastVerdict: summary, verdictKind: "rejection" },
-    rejectionPrompt(snap.destinationText ?? "", summary),
-    snap,
-  );
+  if (rejections >= 2 && !moved) {
+    const message = `ctx-go paused: no product change\nWorker: ${state.lastClaim}\nJudge: ${state.priorVerdict}\nJudge: ${summary}`;
+    return withRecord(pause(rejected, message, true), message);
+  }
+  const next = { ...rejected, phase: state.aimMet ? ("questions" as const) : ("work" as const) };
+  const text = state.aimMet
+    ? projectRejectionPrompt(snap.destinationText ?? "", summary)
+    : rejectionPrompt(snap.destinationText ?? "", summary);
+  return prompt(next, text, snap);
 }
 
 function withRecord(step: Step, text: string): Step {

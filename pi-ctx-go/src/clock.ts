@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { freshState, type GoPhase, type GoState, type VerdictKind } from "./state.js";
 
-const PHASES: readonly GoPhase[] = ["idle", "draft", "questions", "work", "claim", "paused"];
+const PHASES: readonly GoPhase[] = ["idle", "draft", "questions", "work", "claim", "project", "paused"];
 const KINDS: readonly VerdictKind[] = ["none", "rejection", "error"];
 
 export function clockPath(sessionFile: string): string {
@@ -31,6 +31,12 @@ export function readClock(sessionFile: string): GoState {
   if (typeof body.rejections !== "number" || !Number.isInteger(body.rejections) || body.rejections < 0) return freshState();
   if (body.approvedDestinationId !== null && typeof body.approvedDestinationId !== "string") return freshState();
   if (typeof body.lastClaim !== "string" || typeof body.lastVerdict !== "string") return freshState();
+  const priorVerdict = body.priorVerdict === undefined ? "" : body.priorVerdict;
+  const productStamp = body.productStamp === undefined || body.productStamp === null ? null : body.productStamp;
+  if (typeof priorVerdict !== "string" || (productStamp !== null && typeof productStamp !== "string")) return freshState();
+  const aimMet = body.aimMet === undefined ? false : body.aimMet;
+  const projectDone = body.projectDone === undefined ? false : body.projectDone;
+  if (typeof aimMet !== "boolean" || typeof projectDone !== "boolean") return freshState();
   return {
     ...freshState(),
     phase: body.phase,
@@ -38,7 +44,11 @@ export function readClock(sessionFile: string): GoState {
     approvedDestinationId: body.approvedDestinationId,
     lastClaim: body.lastClaim,
     lastVerdict: body.lastVerdict,
+    priorVerdict,
+    productStamp,
     verdictKind: body.verdictKind,
+    aimMet,
+    projectDone,
     armed: false,
     hold: false,
   };
@@ -52,7 +62,11 @@ export function writeClock(sessionFile: string, state: GoState): void {
     approvedDestinationId: state.approvedDestinationId,
     lastClaim: state.lastClaim,
     lastVerdict: state.lastVerdict,
+    priorVerdict: state.priorVerdict,
+    productStamp: state.productStamp,
     verdictKind: state.verdictKind,
+    aimMet: state.aimMet,
+    projectDone: state.projectDone,
     armed: false,
   };
   mkdirSync(dirname(path), { recursive: true });

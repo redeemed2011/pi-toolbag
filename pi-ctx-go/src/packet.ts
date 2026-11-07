@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { realpathSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -10,6 +11,7 @@ export type PacketInput = {
   constraints: { id: string; headline: string; body: string }[];
   closed: { id: string; headline: string; body: string; superseded: string }[];
   claim: string;
+  project?: boolean;
 };
 
 export type Packet = { ok: true; text: string } | { ok: false; error: string };
@@ -65,38 +67,70 @@ function readProduct(cwd: string, token: string): { ok: true; text: string } | {
   }
 }
 
+/** Bytes of named products other than the contract file. A new path or a new hash is movement. */
+export function productStamp(cwd: string, claim: string): string {
+  const rows: string[] = [];
+  for (const token of namedPaths(claim)) {
+    if (token.endsWith("first-questions.md")) continue;
+    const read = readProduct(cwd, token);
+    const hex = createHash("sha256").update(read.ok ? read.text : "").digest("hex");
+    rows.push(`${token}\n${hex}`);
+  }
+  rows.sort();
+  return rows.join("\n");
+}
+
 export function buildPacket(input: PacketInput): Packet {
-  const products: string[] = [];
+  const inlined: { token: string; text: string }[] = [];
+  const unread: string[] = [];
   for (const token of namedPaths(input.claim)) {
     const read = readProduct(input.cwd, token);
-    if (!read.ok) return read;
-    products.push(`### ${token}\n${read.text}`);
+    if (!read.ok) {
+      if (read.error.startsWith("product too large ")) {
+        unread.push(token);
+        continue;
+      }
+      return read;
+    }
+    inlined.push({ token, text: read.text });
   }
   const constraints = input.constraints.map((item) => `### ${item.headline} (${item.id})\n${item.body}`).join("\n\n");
   const closed = input.closed.map((item) => `### ${item.headline} (${item.id}) superseded ${item.superseded}\n${item.body}`).join("\n\n");
-  const text = [
-    "You are the completion judge. Reply with two lines:",
-    "verdict: done",
-    "or",
-    "verdict: not-done",
-    "summary: one short paragraph",
-    "If the claim names no product, the verdict is not-done. Do not look for other work.",
-    "",
-    "## Destination",
-    input.destination,
-    "",
-    "## Constraints",
-    constraints,
-    "",
-    "## Questions closed",
-    closed,
-    "",
-    "## Done claim",
-    input.claim,
-    "",
-    "## Products",
-    products.join("\n\n"),
-  ].join("\n");
+  const compose = (includeBodies: boolean): string => {
+    const products = [
+      ...inlined.map((item) => `### ${item.token}\n${includeBodies ? item.text : "This file is not in the packet. Read it."}`),
+      ...unread.map((token) => `### ${token}\nThis file is not in the packet. Read it.`),
+    ];
+    return [
+      "You are the completion judge. Reply with two lines:",
+      "verdict: done",
+      "or",
+      "verdict: not-done",
+      "summary: one short paragraph",
+      "If the claim names no product, the verdict is not-done.",
+      "If a product's text is not included below, read that file. You can read and search files. Do not edit them.",
+      ...(input.project
+        ? ["A KEPT decision is not unfinished by itself. An outcome still owed, with no finishing product and no explicit deferral, is not-done."]
+        : []),
+      "",
+      "## Destination",
+      input.destination,
+      "",
+      "## Constraints",
+      constraints,
+      "",
+      "## Questions closed",
+      closed,
+      "",
+      "## Done claim",
+      input.claim,
+      "",
+      "## Products",
+      products.join("\n\n"),
+    ].join("\n");
+  };
+  let text = compose(true);
+  if (text.length > CALL_CAP && inlined.length > 0) text = compose(false);
   if (text.length > CALL_CAP) {
     const paths = namedPaths(input.claim);
     const included = paths.length > 0 ? paths.join(", ") : "done-claim account";
