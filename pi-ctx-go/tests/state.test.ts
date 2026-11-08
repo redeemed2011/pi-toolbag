@@ -1,4 +1,8 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readClock, writeClock } from "../src/clock.js";
 import {
   CLAIM_PROMPT,
   DRAFT_PROMPT,
@@ -165,8 +169,10 @@ describe("ctx-go loop", () => {
     expect(finished.state.aimMet).toBe(true);
     expect(finished.actions[0]).toMatchObject({ type: "notify", message: "ctx-go done\nproject met" });
     const stopped = onGo(finished.state, empty);
-    expect(stopped.state.armed).toBe(false);
-    expect(stopped.actions).toEqual([{ type: "notify", level: "info", message: "ctx-go is already done" }]);
+    expect(stopped.state.armed).toBe(true);
+    expect(stopped.state.projectDone).toBe(false);
+    expect(stopped.actions[0]).toMatchObject({ type: "prompt", text: PROJECT_CLAIM_PROMPT });
+    expect(stopped.actions.some((action) => action.type === "notify" && action.message.includes("already done"))).toBe(false);
     const rejected = onJudge(
       { ...claimed.state, rejections: 0 },
       empty,
@@ -183,6 +189,31 @@ describe("ctx-go loop", () => {
     expect(resumed.actions[0]).toMatchObject({ type: "prompt", text: projectErrorPrompt("Build the app.", "no verdict") });
     expect(String((resumed.actions[0] as { text: string }).text)).not.toContain("not met");
     expect(String((resumed.actions[0] as { text: string }).text)).not.toContain("destination's work");
+  });
+
+  it("a saved done clock starts again when the operator runs /ctx-go", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ctx-go-done-"));
+    const session = join(dir, "session.jsonl");
+    writeClock(session, {
+      ...freshState(),
+      armed: true,
+      phase: "idle",
+      approvedDestinationId: "d1",
+      aimMet: true,
+      projectDone: true,
+    });
+    const loaded = readClock(session);
+    expect(loaded.projectDone).toBe(true);
+    expect(loaded.armed).toBe(false);
+    const again = onGo(loaded, snap({ frontierIds: [], destinationText: "Build the app." }));
+    expect(again.state.armed).toBe(true);
+    expect(again.state.projectDone).toBe(false);
+    expect(again.state.phase).toBe("project");
+    expect(again.actions).toEqual([{ type: "prompt", text: PROJECT_CLAIM_PROMPT }]);
+    const open = onGo(loaded, snap({ frontierIds: ["q9"] }));
+    expect(open.state.armed).toBe(true);
+    expect(open.state.projectDone).toBe(false);
+    expect(open.actions[0]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
   });
 
   it("keeps going when the named products change, and stops at ten", () => {

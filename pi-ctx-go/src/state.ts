@@ -133,9 +133,6 @@ export function onGo(state: GoState, snap: Snap): Step {
   if (!snap.bound) {
     return { state, actions: [{ type: "notify", level: "warning", message: BIND_NEXT }] };
   }
-  if (state.projectDone && destinationReady(state, snap) && !questionsOpen(snap)) {
-    return { state: { ...state, armed: false }, actions: [{ type: "notify", level: "info", message: "ctx-go is already done" }] };
-  }
   const next: GoState = {
     ...state,
     armed: true,
