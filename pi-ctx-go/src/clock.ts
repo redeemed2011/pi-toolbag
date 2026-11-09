@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { freshState, type GoPhase, type GoState, type VerdictKind } from "./state.js";
 
-const PHASES: readonly GoPhase[] = ["idle", "draft", "questions", "work", "claim", "project", "paused"];
+const PHASES: readonly GoPhase[] = ["idle", "draft", "reconcile", "questions", "work", "claim", "project", "paused"];
 const KINDS: readonly VerdictKind[] = ["none", "rejection", "error"];
 
 export function clockPath(sessionFile: string): string {
@@ -37,9 +37,12 @@ export function readClock(sessionFile: string): GoState {
   const aimMet = body.aimMet === undefined ? false : body.aimMet;
   const projectDone = body.projectDone === undefined ? false : body.projectDone;
   if (typeof aimMet !== "boolean" || typeof projectDone !== "boolean") return freshState();
+  const reconciledThrough = body.reconciledThrough === undefined ? null : body.reconciledThrough;
+  if (reconciledThrough !== null && typeof reconciledThrough !== "string") return freshState();
   return {
     ...freshState(),
     phase: body.phase,
+    reconciledThrough,
     rejections: body.rejections,
     approvedDestinationId: body.approvedDestinationId,
     lastClaim: body.lastClaim,
@@ -67,6 +70,7 @@ export function writeClock(sessionFile: string, state: GoState): void {
     verdictKind: state.verdictKind,
     aimMet: state.aimMet,
     projectDone: state.projectDone,
+    reconciledThrough: state.reconciledThrough,
     armed: false,
   };
   mkdirSync(dirname(path), { recursive: true });

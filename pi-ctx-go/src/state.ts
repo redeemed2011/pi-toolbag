@@ -3,6 +3,7 @@ import {
   DRAFT_PROMPT,
   PROJECT_CLAIM_PROMPT,
   QUESTION_PROMPT,
+  RECONCILE_PROMPT,
   judgeErrorPrompt,
   projectErrorPrompt,
   projectRejectionPrompt,
@@ -11,7 +12,7 @@ import {
 } from "./prompts.js";
 import { twoLines } from "./text.js";
 
-export type GoPhase = "idle" | "draft" | "questions" | "work" | "claim" | "project" | "paused";
+export type GoPhase = "idle" | "draft" | "reconcile" | "questions" | "work" | "claim" | "project" | "paused";
 
 export type VerdictKind = "none" | "rejection" | "error";
 
@@ -29,6 +30,8 @@ export type GoState = {
   verdictKind: VerdictKind;
   aimMet: boolean;
   projectDone: boolean;
+  /** Last session entry id covered by a finished reconcile. An impasse does not move it. */
+  reconciledThrough: string | null;
 };
 
 export type BlockedQuestion = { id: string; headline: string; blockers: string[] };
@@ -42,6 +45,10 @@ export type Snap = {
   askHeadlines: string[];
   blocked: BlockedQuestion[];
   destinationText?: string;
+  /** Last entry id in the session. Missing means reconcile cannot be skipped. */
+  sessionTip?: string | null;
+  /** A live decision says "not built" and no question was recorded at or after it. */
+  notBuiltOpen?: boolean;
 };
 
 export type TurnView = {
@@ -56,6 +63,7 @@ export type Action =
   | { type: "prompt"; text: string }
   | { type: "approve"; text: string }
   | { type: "judge"; claim: string }
+  | { type: "claim"; questionId: string }
   | { type: "record"; text: string };
 
 export type Step = { state: GoState; actions: Action[] };
@@ -75,6 +83,7 @@ export function freshState(): GoState {
     verdictKind: "none",
     aimMet: false,
     projectDone: false,
+    reconciledThrough: null,
   };
 }
 
@@ -117,6 +126,7 @@ export function onStop(state: GoState): Step {
       verdictKind: state.verdictKind,
       aimMet: state.aimMet,
       projectDone: state.projectDone,
+      reconciledThrough: state.reconciledThrough,
       phase: state.phase === "paused" ? "paused" : "idle",
     },
     actions: [{ type: "notify", level: "info", message: "ctx-go stopped" }],
@@ -137,29 +147,60 @@ export function onGo(state: GoState, snap: Snap): Step {
     priorVerdict: state.phase === "paused" ? "" : state.priorVerdict,
     phase: destinationReady(state, snap) ? "questions" : "draft",
   };
-  if (next.phase === "questions") {
-    if (!questionsOpen(snap)) {
-      const verdict = next.lastVerdict.trim();
-      if (next.aimMet) {
-        const text =
-          verdict && next.verdictKind === "rejection"
-            ? projectRejectionPrompt(snap.destinationText ?? "", verdict)
-            : verdict && next.verdictKind === "error"
-              ? projectErrorPrompt(snap.destinationText ?? "", verdict)
-              : PROJECT_CLAIM_PROMPT;
-        return prompt({ ...next, phase: verdict ? "questions" : "project" }, text, snap);
-      }
+  if (next.phase !== "questions") return draftAsk(next, snap);
+  if (!alreadyReconciled(state, snap)) return prompt({ ...next, phase: "reconcile" }, RECONCILE_PROMPT, snap);
+  return workFrom(next, snap);
+}
+
+function alreadyReconciled(state: GoState, snap: Snap): boolean {
+  const tip = snap.sessionTip ?? null;
+  return tip !== null && state.reconciledThrough === tip;
+}
+
+function workFrom(state: GoState, snap: Snap): Step {
+  if (!questionsOpen(snap)) {
+    const verdict = state.lastVerdict.trim();
+    if (state.aimMet) {
       const text =
-        verdict && next.verdictKind === "rejection"
-          ? rejectionPrompt(snap.destinationText ?? "", verdict)
-          : verdict && next.verdictKind === "error"
-            ? judgeErrorPrompt(snap.destinationText ?? "", verdict)
-            : workPrompt(snap.destinationText ?? "");
-      return prompt({ ...next, phase: "work" }, text, snap);
+        verdict && state.verdictKind === "rejection"
+          ? projectRejectionPrompt(snap.destinationText ?? "", verdict)
+          : verdict && state.verdictKind === "error"
+            ? projectErrorPrompt(snap.destinationText ?? "", verdict)
+            : PROJECT_CLAIM_PROMPT;
+      return prompt({ ...state, phase: verdict ? "questions" : "project" }, text, snap);
     }
-    return prompt(next, QUESTION_PROMPT, snap);
+    const text =
+      verdict && state.verdictKind === "rejection"
+        ? rejectionPrompt(snap.destinationText ?? "", verdict)
+        : verdict && state.verdictKind === "error"
+          ? judgeErrorPrompt(snap.destinationText ?? "", verdict)
+          : workPrompt(snap.destinationText ?? "");
+    return prompt({ ...state, phase: "work" }, text, snap);
   }
-  return draftAsk(next, snap);
+  return workQuestions(state, snap);
+}
+
+function workQuestions(state: GoState, snap: Snap): Step {
+  const questionId = snap.claimedId ? null : (snap.frontierIds[0] ?? null);
+  const seen = questionId
+    ? { ...snap, claimedId: questionId, frontierIds: snap.frontierIds.filter((id) => id !== questionId) }
+    : snap;
+  const step = prompt({ ...state, phase: "questions" }, QUESTION_PROMPT, seen);
+  if (!questionId) return step;
+  return { state: step.state, actions: [{ type: "claim", questionId }, ...step.actions] };
+}
+
+const NOT_BUILT = "ctx-go paused: a not-built decision has no question";
+
+function namedImpasse(text: string): string | null {
+  const line = text.split("\n").map((item) => item.trim()).find((item) => item.toLowerCase().startsWith("impasse:"));
+  if (!line) return null;
+  const reason = line.slice("impasse:".length).trim() || "unspecified";
+  return reason.length > 240 ? `${reason.slice(0, 239)}…` : reason;
+}
+
+function finishReconcile(state: GoState, snap: Snap): Step {
+  return workFrom({ ...state, reconciledThrough: snap.sessionTip ?? state.reconciledThrough }, snap);
 }
 
 export function onApproved(state: GoState, snap: Snap, destinationId: string): Step {
@@ -171,7 +212,7 @@ export function onApproved(state: GoState, snap: Snap, destinationId: string): S
     aimMet: false,
     projectDone: false,
   };
-  return prompt(next, QUESTION_PROMPT, { ...snap, destinationId });
+  return prompt({ ...next, phase: "reconcile" }, RECONCILE_PROMPT, { ...snap, destinationId });
 }
 
 export function onDraftRejected(state: GoState, snap: Snap): Step {
@@ -231,12 +272,23 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
     if (!draft) return pause(state, "ctx-go paused: draft made no progress");
     return { state: { ...state, phase: "draft" }, actions: [{ type: "approve", text: draft }] };
   }
+  if (state.phase === "reconcile") {
+    if (turn.pending) return { state, actions: [] };
+    const blocked = blockedPause(state, snap);
+    if (blocked) return blocked;
+    const impasse = namedImpasse(turn.text);
+    if (impasse) return pause(state, `ctx-go paused: ${impasse}`);
+    if (snap.notBuiltOpen && !questionsOpen(snap)) return pause(state, NOT_BUILT);
+    return finishReconcile(state, snap);
+  }
   const changed = fingerprint(snap) !== state.lastFingerprint;
   const held = blockedPause(state, snap);
   if (held) return held;
+  if (snap.notBuiltOpen && !questionsOpen(snap)) return pause(state, NOT_BUILT);
   if (questionsOpen(snap)) {
-    if (!changed) return pause(state, "ctx-go paused: no progress");
-    return say({ ...state, phase: "questions" }, QUESTION_PROMPT);
+    if (!changed && snap.claimedId) return pause(state, "ctx-go paused: no progress");
+    if (turn.pending) return { state, actions: [] };
+    return workQuestions(state, snap);
   }
   if (state.aimMet) {
     if (state.phase !== "project") {
@@ -299,7 +351,7 @@ export function onJudge(
       hold: false,
     };
     const step = questionsOpen(snap)
-      ? prompt({ ...accepted, phase: "questions" }, QUESTION_PROMPT, snap)
+      ? workQuestions(accepted, snap)
       : prompt({ ...accepted, phase: "project" }, PROJECT_CLAIM_PROMPT, snap);
     return withRecord(step, record);
   }

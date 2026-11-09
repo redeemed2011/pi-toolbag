@@ -3,7 +3,8 @@ import { approveDestination } from "./src/approve.js";
 import { readClock, writeClock } from "./src/clock.js";
 import { runJudge, thinkingLevel, type JudgeModel } from "./src/judge.js";
 import { buildPacket, parseVerdict, productStamp } from "./src/packet.js";
-import { closedQuestions, readSnap, type BoundSnap } from "./src/snap.js";
+import { closedQuestions, prepareClaim, readSnap, type BoundSnap } from "./src/snap.js";
+import { CTX_CLAIM } from "../pi-ctx/src/types.js";
 import {
   freshState,
   onApproved,
@@ -95,6 +96,20 @@ export default function ctxGo(pi: ExtensionAPI): void {
     state = file ? readClock(file) : freshState();
   });
 
+  function wroteClaim(ctx: GoCtx, actions: Action[]): boolean {
+    const claim = actions.find((action) => action.type === "claim");
+    if (!claim || claim.type !== "claim") return true;
+    const { branch, sessionId } = branchOf(ctx);
+    const wrote = prepareClaim(branch, sessionId, ctx.cwd, claim.questionId);
+    if (!wrote.ok) {
+      state = remember(ctx, { ...state, phase: "paused", hold: false });
+      if (ctx.hasUI) ctx.ui.notify(`ctx-go paused: ${wrote.error}`, "warning");
+      return false;
+    }
+    if (!wrote.noop) pi.appendEntry(CTX_CLAIM, { claimed_question_id: wrote.claimedId });
+    return true;
+  }
+
   pi.registerCommand("ctx-stop", {
     description: "Stop the ctx-go loop. The agent cannot call this.",
     handler: async (_args, ctx) => {
@@ -148,6 +163,7 @@ export default function ctxGo(pi: ExtensionAPI): void {
       const step = onGo(state, snap);
       state = remember(goCtx, step.state);
       notify(goCtx, step.actions);
+      if (!wroteClaim(goCtx, step.actions)) return;
       const next = step.actions.find((action) => action.type === "prompt");
       if (!next || next.type !== "prompt") return;
       pi.sendMessage({ customType: "ctx-go", content: next.text, display: true }, { triggerTurn: true });
@@ -167,6 +183,7 @@ export default function ctxGo(pi: ExtensionAPI): void {
     });
     state = remember(goCtx, step.state);
     notify(goCtx, step.actions);
+    if (!wroteClaim(goCtx, step.actions)) return;
 
     const approve = step.actions.find((action) => action.type === "approve");
     if (approve && approve.type === "approve") {
@@ -209,6 +226,7 @@ export default function ctxGo(pi: ExtensionAPI): void {
       const judged = await judgeNow(goCtx, snap, state, judge.claim, override);
       state = remember(goCtx, judged.state);
       notify(goCtx, judged.actions);
+      if (!wroteClaim(goCtx, judged.actions)) return;
       if (goCtx.hasPendingMessages()) return;
       return continued(event.entries, judged.actions);
     }

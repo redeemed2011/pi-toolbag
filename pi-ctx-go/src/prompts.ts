@@ -4,9 +4,11 @@ export const DRAFT_PROMPT = [
 ].join("\n");
 
 export const QUESTION_PROMPT = [
-  "Work the open CTX questions in frontier order, oldest first.",
-  "Settle a question only by recording a later CTX record that supersedes it.",
+  "The oldest open CTX question is claimed for this session.",
+  "Work that question.",
+  "Settle it only by recording a later CTX record that supersedes it.",
   "Closing the claim does not settle it. Do not supersede a question marked for the operator.",
+  "Do not stop because the question was unclaimed.",
   "Do not stop this loop.",
 ].join("\n");
 
@@ -46,6 +48,18 @@ export function rejectionPrompt(destination: string, summary: string): string {
     "Do the missing work. Do not claim it is met yet. A file that only describes the destination is not the result.",
   ].join("\n");
 }
+
+export const RECONCILE_PROMPT = [
+  "Compare this session with the live CTX project.",
+  "A decision that says an outcome is not built, and has no question for it, must be recorded as a question.",
+  "Record a decision this session already made if CTX does not have it.",
+  "Record a question this session still owes if CTX does not have it.",
+  "Do not record a decision that is already true.",
+  "Do not record an outcome this session deferred.",
+  "Do not approve a destination.",
+  "Do not claim the work is done.",
+  "If you cannot record one item, start with Impasse: and name that item.",
+].join("\n");
 
 export const PROJECT_CLAIM_PROMPT = [
   "Name the result of the project.",

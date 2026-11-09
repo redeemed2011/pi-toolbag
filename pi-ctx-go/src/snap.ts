@@ -1,5 +1,7 @@
-import { foldSession, frontierItems } from "../../pi-ctx/src/fold.js";
+import { loadConfig } from "../../pi-ctx/src/config.js";
+import { foldSession, frontierItems, resolveOccupancy } from "../../pi-ctx/src/fold.js";
 import { loadProjectLive } from "../../pi-ctx/src/store/project.js";
+import { applyClaim } from "../../pi-ctx/src/tools/claim.js";
 import type { Entry, JudgmentRecord, LiveSet } from "../../pi-ctx/src/types.js";
 import { twoLines } from "./text.js";
 import type { Snap } from "./state.js";
@@ -11,6 +13,20 @@ export type BoundSnap = Snap & {
   live: LiveSet | null;
   destinationText: string;
 };
+
+function saysNotBuilt(rec: JudgmentRecord): boolean {
+  return /\bnot built\b/i.test(`${rec.headline}\n${rec.directive ?? ""}\n${rec.body}`);
+}
+
+/** A live not-built decision stays open until some question is recorded at or after it. */
+export function unresolvedNotBuilt(live: LiveSet): boolean {
+  const questions = [...live.byId.values()].filter((rec) => rec.type === "question");
+  for (const rec of live.byId.values()) {
+    if (!live.live.has(rec.id) || rec.type !== "decision" || !saysNotBuilt(rec)) continue;
+    if (!questions.some((question) => question.ts >= rec.ts)) return true;
+  }
+  return false;
+}
 
 export function readSnap(branch: Entry[], sessionId: string): BoundSnap {
   const session = foldSession(branch, sessionId);
@@ -34,6 +50,7 @@ export function readSnap(branch: Entry[], sessionId: string): BoundSnap {
   const destination = live.destinations[0];
   const destinationText = destination ? twoLines(destination.directive || destination.body) : "";
   const frontier = frontierItems(live, session.claimedId);
+  const sessionTip = branch.length > 0 ? branch[branch.length - 1]?.id ?? null : null;
   const asks = live.questions.filter((q) => live.askOperator.has(q.id));
   const blocked = live.questions
     .filter((q) => live.blocked.has(q.id))
@@ -57,11 +74,41 @@ export function readSnap(branch: Entry[], sessionId: string): BoundSnap {
     askIds: asks.map((q) => q.id),
     askHeadlines: asks.map((q) => q.headline),
     blocked,
+    sessionTip,
+    notBuiltOpen: unresolvedNotBuilt(live),
     projectId: session.projectId,
     sessionId,
     records: [...live.byId.values()],
     live,
   };
+}
+
+/** Claim the oldest unclaimed frontier question. Does not write the session entry. */
+export function prepareClaim(
+  branch: Entry[],
+  sessionId: string,
+  cwd: string,
+  questionId: string,
+): { ok: true; claimedId: string; noop: boolean } | { ok: false; error: string } {
+  const session = foldSession(branch, sessionId);
+  if (!session.bound || !session.projectId) return { ok: false, error: "no project bound" };
+  if (session.grantId && session.grantQuestionId !== questionId) return { ok: false, error: "worker claim limited" };
+  const live = loadProjectLive(session.projectId);
+  const prior = session.claimedId ? live.byId.get(session.claimedId) : undefined;
+  const liveClaim = prior && prior.type === "question" && live.live.has(prior.id) ? prior.id : null;
+  const config = loadConfig(cwd);
+  const result = applyClaim({
+    action: "claim",
+    question_id: questionId,
+    bound: true,
+    enabled: session.enabled,
+    claimedId: liveClaim,
+    live,
+    occupancy: resolveOccupancy(session, config.occupancy),
+    siblingKnob: config.gatedEdgeSiblingHeadlines,
+  });
+  if (!result.ok || !result.claimed_id) return result.ok ? { ok: false, error: "not_found" } : result;
+  return { ok: true, claimedId: result.claimed_id, noop: result.noop === true };
 }
 
 export function closedQuestions(live: LiveSet): { id: string; headline: string; body: string; superseded: string }[] {

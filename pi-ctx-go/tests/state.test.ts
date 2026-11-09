@@ -8,6 +8,7 @@ import {
   DRAFT_PROMPT,
   PROJECT_CLAIM_PROMPT,
   QUESTION_PROMPT,
+  RECONCILE_PROMPT,
   judgeErrorPrompt,
   projectErrorPrompt,
   projectRejectionPrompt,
@@ -63,15 +64,21 @@ describe("ctx-go loop", () => {
   it("works questions only after the approved destination is the injected one", () => {
     const approved = onApproved({ ...freshState(), armed: true, phase: "draft" }, snap(), "d1");
     expect(approved.state.approvedDestinationId).toBe("d1");
-    expect(approved.actions[0]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
+    expect(approved.actions[0]).toMatchObject({ type: "prompt", text: RECONCILE_PROMPT });
+    const worked = onTurn(approved.state, snap(), doneTurn);
+    expect(worked.actions[0]).toEqual({ type: "claim", questionId: "q1" });
+    expect(worked.actions[1]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
   });
 
   it("does not continue a tool turn, and the next unchanged turn pauses", () => {
     const started = onApproved({ ...freshState(), armed: true }, snap(), "d1");
-    const tools = onTurn(started.state, snap(), { ...doneTurn, toolCount: 2, text: "" });
+    const ready = onTurn(started.state, snap(), doneTurn);
+    expect(ready.state.phase).toBe("questions");
+    const claimed = snap({ frontierIds: [], claimedId: "q1" });
+    const tools = onTurn(ready.state, claimed, { ...doneTurn, toolCount: 2, text: "" });
     expect(tools.actions).toEqual([]);
     expect(tools.state.phase).toBe("questions");
-    const stalled = onTurn(tools.state, snap(), doneTurn);
+    const stalled = onTurn(tools.state, claimed, doneTurn);
     expect(stalled.state.hold).toBe(true);
     expect(stalled.actions).toEqual([{ type: "notify", level: "warning", message: "ctx-go paused: no progress" }]);
   });
@@ -88,7 +95,7 @@ describe("ctx-go loop", () => {
   });
 
   it("judges only from the claim phase, and the second rejection pauses", () => {
-    const empty = snap({ frontierIds: [], destinationText: "Build the app." });
+    const empty = snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "tip" });
     let state = onApproved({ ...freshState(), armed: true }, empty, "d1").state;
     state = onTurn(state, empty, doneTurn).state;
     expect(state.phase).toBe("work");
@@ -121,11 +128,11 @@ describe("ctx-go loop", () => {
     });
     expect(again.state.verdictKind).toBe("rejection");
     expect(again.actions.some((action) => action.type === "record" && action.text.includes("Worker: did the thing") && action.text.includes("Judge: still no"))).toBe(true);
-    const resumed = onGo(again.state, snap());
+    const resumed = onGo(again.state, empty);
     expect(resumed.state.rejections).toBe(0);
     expect(resumed.state.lastVerdict).toBe("still no");
     expect(resumed.state.armed).toBe(true);
-    const open = snap({ frontierIds: [], destinationText: "Build the app." });
+    const open = snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "tip" });
     const againOpen = onGo(again.state, open);
     expect(againOpen.state.rejections).toBe(0);
     expect(againOpen.state.lastVerdict).toBe("still no");
@@ -156,7 +163,8 @@ describe("ctx-go loop", () => {
     const openWork = onJudge(state, snap({ frontierIds: ["fork"], destinationText: "Build the app." }), { ok: true, done: true, summary: "met" });
     expect(openWork.state.projectDone).toBe(false);
     expect(openWork.state.phase).toBe("questions");
-    expect(openWork.actions[0]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
+    expect(openWork.actions[0]).toEqual({ type: "claim", questionId: "fork" });
+    expect(openWork.actions[1]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
     const claimed = onTurn(accepted.state, empty, { ...doneTurn, text: "Done. `proj/src/app.ts`" });
     expect(claimed.actions[0]).toMatchObject({ type: "judge" });
     const finished = onJudge(claimed.state, empty, { ok: true, done: true, summary: "project met" });
@@ -168,8 +176,8 @@ describe("ctx-go loop", () => {
     const stopped = onGo(finished.state, empty);
     expect(stopped.state.armed).toBe(true);
     expect(stopped.state.projectDone).toBe(false);
-    expect(stopped.state.phase).toBe("project");
-    expect(stopped.actions[0]).toMatchObject({ type: "prompt", text: PROJECT_CLAIM_PROMPT });
+    expect(stopped.state.phase).toBe("reconcile");
+    expect(stopped.actions[0]).toMatchObject({ type: "prompt", text: RECONCILE_PROMPT });
     expect(stopped.actions.some((action) => action.type === "notify" && action.message.includes("already done"))).toBe(false);
     const rejected = onJudge(
       { ...claimed.state, rejections: 0 },
@@ -183,7 +191,7 @@ describe("ctx-go loop", () => {
       text: projectRejectionPrompt("Build the app.", "composer still owed"),
     });
     const erred = onJudge(claimed.state, empty, { ok: false, error: "no verdict" });
-    const resumed = onGo(erred.state, empty);
+    const resumed = onGo({ ...erred.state, reconciledThrough: "tip" }, { ...empty, sessionTip: "tip" });
     expect(resumed.actions[0]).toMatchObject({ type: "prompt", text: projectErrorPrompt("Build the app.", "no verdict") });
     expect(String((resumed.actions[0] as { text: string }).text)).not.toContain("not met");
     expect(String((resumed.actions[0] as { text: string }).text)).not.toContain("destination's work");
@@ -253,14 +261,23 @@ describe("ctx-go loop", () => {
     const again = onGo(loaded, snap({ frontierIds: [], destinationText: "Build the app." }));
     expect(again.state.armed).toBe(true);
     expect(again.state.projectDone).toBe(false);
-    expect(again.state.phase).toBe("project");
-    expect(again.actions).toEqual([{ type: "prompt", text: PROJECT_CLAIM_PROMPT }]);
-    const rolled = onTurn(again.state, snap({ frontierIds: ["fork"], destinationText: "Build the app." }), doneTurn);
-    expect(rolled.actions[0]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
-    const open = onGo(loaded, snap({ frontierIds: ["q9"] }));
-    expect(open.state.armed).toBe(true);
-    expect(open.state.projectDone).toBe(false);
-    expect(open.actions[0]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
+    expect(again.state.phase).toBe("reconcile");
+    expect(again.actions).toEqual([{ type: "prompt", text: RECONCILE_PROMPT }]);
+    const claimed = onTurn(again.state, snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "tip" }), doneTurn);
+    expect(claimed.state.phase).toBe("project");
+    expect(claimed.state.reconciledThrough).toBe("tip");
+    expect(claimed.actions[0]).toMatchObject({ type: "prompt", text: PROJECT_CLAIM_PROMPT });
+    const rolled = onTurn(again.state, snap({ frontierIds: ["fork"], destinationText: "Build the app.", sessionTip: "tip" }), doneTurn);
+    expect(rolled.actions[0]).toEqual({ type: "claim", questionId: "fork" });
+    expect(rolled.actions[1]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
+    const open = onGo(loaded, snap({ frontierIds: ["q9"], sessionTip: "tip" }));
+    expect(open.state.phase).toBe("reconcile");
+    const covered = onGo(
+      { ...loaded, reconciledThrough: "tip" },
+      snap({ frontierIds: ["q9"], sessionTip: "tip" }),
+    );
+    expect(covered.actions[0]).toEqual({ type: "claim", questionId: "q9" });
+    expect(covered.actions[1]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
   });
 
   it("keeps going when the named products change, and stops at ten", () => {
@@ -313,7 +330,10 @@ describe("ctx-go loop", () => {
     expect(step.state.verdictKind).toBe("error");
     expect(step.state.phase).not.toBe("paused");
     expect(step.actions.some((action) => action.type === "record" && action.text.includes("Judge: no verdict"))).toBe(true);
-    const resumed = onGo(step.state, snap({ frontierIds: [], destinationText: "Build the app." }));
+    const resumed = onGo(
+      { ...step.state, reconciledThrough: "tip" },
+      snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "tip" }),
+    );
     expect(resumed.state.rejections).toBe(1);
     expect(resumed.actions[0]).toMatchObject({ type: "prompt", text: judgeErrorPrompt("Build the app.", "no verdict") });
     expect(String((resumed.actions[0] as { text: string }).text)).not.toContain("not met");
@@ -327,7 +347,7 @@ describe("ctx-go loop", () => {
       approvedDestinationId: "d1",
       rejections: 1,
     };
-    const again = onGo(working, snap());
+    const again = onGo({ ...working, reconciledThrough: "tip" }, snap({ sessionTip: "tip" }));
     expect(again.state.rejections).toBe(1);
     expect(again.state.phase).toBe("questions");
   });
@@ -342,7 +362,7 @@ describe("ctx-go loop", () => {
     expect(queued.actions).toEqual([]);
     const queuedDraft = onTurn(started.state, snap({ destinationId: "other" }), { ...doneTurn, pending: true });
     expect(queuedDraft.actions).toEqual([]);
-    expect(queuedDraft.state.phase).toBe("questions");
+    expect(queuedDraft.state.phase).toBe("reconcile");
     expect(queuedDraft.state.approvedDestinationId).toBe("d1");
   });
 
@@ -375,6 +395,45 @@ describe("ctx-go loop", () => {
       doneTurn,
     );
     expect(String((markedEarly.actions[0] as { message: string }).message)).toContain("q9");
+  });
+
+  it("does not claim a not-built decision that has no question", () => {
+    const owed = snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "m1", notBuiltOpen: true });
+    const started = onGo({ ...freshState(), approvedDestinationId: "d1", aimMet: true }, owed);
+    expect(started.state.phase).toBe("reconcile");
+    expect(started.actions[0]).toMatchObject({ type: "prompt", text: RECONCILE_PROMPT });
+    const tools = onTurn(started.state, owed, { ...doneTurn, toolCount: 1, text: "" });
+    expect(tools.actions).toEqual([]);
+    expect(tools.state.phase).toBe("reconcile");
+    const stalled = onTurn(started.state, owed, doneTurn);
+    expect(stalled.state.reconciledThrough).toBeNull();
+    expect(stalled.actions).toEqual([{ type: "notify", level: "warning", message: "ctx-go paused: a not-built decision has no question" }]);
+    const impasse = onTurn(started.state, owed, { ...doneTurn, text: "Impasse: the annotation question is blocked" });
+    expect(impasse.state.reconciledThrough).toBeNull();
+    expect(impasse.actions[0]).toMatchObject({ type: "notify", message: "ctx-go paused: the annotation question is blocked" });
+    const covered = onTurn(
+      started.state,
+      snap({ frontierIds: ["q-annot"], destinationText: "Build the app.", sessionTip: "m2", notBuiltOpen: false }),
+      doneTurn,
+    );
+    expect(covered.state.reconciledThrough).toBe("m2");
+    expect(covered.actions[0]).toEqual({ type: "claim", questionId: "q-annot" });
+    expect(covered.actions[1]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
+  });
+
+  it("claims an unclaimed question instead of pausing", () => {
+    const open = snap({ frontierIds: ["q1"], claimedId: null, destinationText: "Build the app.", sessionTip: "tip" });
+    const started = onGo({ ...freshState(), approvedDestinationId: "d1", reconciledThrough: "tip" }, open);
+    expect(started.actions[0]).toEqual({ type: "claim", questionId: "q1" });
+    expect(started.actions[1]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
+    expect(started.state.lastFingerprint).toContain("q1|");
+    const idle = {
+      ...started.state,
+      lastFingerprint: ["d1", "", "q1"].join("|"),
+    };
+    const again = onTurn(idle, open, doneTurn);
+    expect(again.actions[0]).toEqual({ type: "claim", questionId: "q1" });
+    expect(again.actions.some((action) => action.type === "notify")).toBe(false);
   });
 
   it("stop disarms and does not forget the approved destination", () => {
