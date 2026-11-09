@@ -33,6 +33,13 @@ function snap(partial: Partial<Snap> = {}): Snap {
 const doneTurn = { outcome: "completed" as const, toolCount: 0, pending: false, text: "shipped src/out.md" };
 
 describe("ctx-go loop", () => {
+  it("asks for a full product path", () => {
+    expect(CLAIM_PROMPT).toContain("full path");
+    expect(CLAIM_PROMPT).toContain("relative to this session");
+    expect(PROJECT_CLAIM_PROMPT).toContain("full path");
+    expect(PROJECT_CLAIM_PROMPT).toContain("slash command is not a path");
+  });
+
   it("does nothing until CTX is bound", () => {
     const step = onGo(freshState(), snap({ bound: false }));
     expect(step.state.armed).toBe(false);

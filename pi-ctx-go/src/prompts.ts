@@ -14,7 +14,8 @@ export const QUESTION_PROMPT = [
 
 export const CLAIM_PROMPT = [
   "Name the result of the destination.",
-  "If that result is a file, name its path. A slash command is not a path.",
+  "If that result is a file, name its full path. A path relative to this session is not enough.",
+  "A slash command is not a path.",
   "A file that only describes the destination is not the result.",
   "Do not record a destination.",
 ].join("\n");
@@ -63,7 +64,7 @@ export const RECONCILE_PROMPT = [
 
 export const PROJECT_CLAIM_PROMPT = [
   "Name the result of the project.",
-  "Name the product files.",
+  "Name each product file by its full path. A path relative to this session is not enough.",
   "A slash command is not a path.",
   "Do not record a destination.",
 ].join("\n");
