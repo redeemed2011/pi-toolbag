@@ -6,7 +6,6 @@ import { buildPacket, parseVerdict, productStamp } from "./src/packet.js";
 import { closedQuestions, readSnap, type BoundSnap } from "./src/snap.js";
 import {
   freshState,
-  namesFoundations,
   onApproved,
   onDraftRejected,
   onGo,
@@ -229,7 +228,6 @@ async function judgeNow(ctx: GoCtx, snap: BoundSnap, state: GoState, claim: stri
       .map((item) => ({ id: item.id, headline: item.headline, body: item.directive || item.body })),
     closed: closedQuestions(snap.live),
     claim,
-    project: state.aimMet && namesFoundations(claim),
   });
   if (!packet.ok) return onJudge(state, snap, packet);
   const model = modelOf(ctx, override);

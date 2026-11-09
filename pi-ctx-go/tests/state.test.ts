@@ -8,7 +8,6 @@ import {
   DRAFT_PROMPT,
   PROJECT_CLAIM_PROMPT,
   QUESTION_PROMPT,
-  REMAINDER_PROMPT,
   judgeErrorPrompt,
   projectErrorPrompt,
   projectRejectionPrompt,
@@ -150,28 +149,26 @@ describe("ctx-go loop", () => {
     expect(accepted.state.aimMet).toBe(true);
     expect(accepted.state.projectDone).toBe(false);
     expect(accepted.state.rejections).toBe(1);
-    expect(accepted.actions[0]).toMatchObject({ type: "prompt", text: REMAINDER_PROMPT });
+    expect(accepted.state.phase).toBe("project");
+    expect(accepted.actions[0]).toMatchObject({ type: "prompt", text: PROJECT_CLAIM_PROMPT });
     expect(accepted.actions.some((action) => action.type === "notify" && action.message.startsWith("ctx-go done"))).toBe(false);
     expect(accepted.actions.some((action) => action.type === "record" && action.text.startsWith("Pass: met") && action.text.includes("Judge: met"))).toBe(true);
-    const claimAsk = onTurn(accepted.state, empty, doneTurn);
-    expect(claimAsk.state.phase).toBe("project");
-    expect(claimAsk.actions[0]).toMatchObject({ type: "prompt", text: PROJECT_CLAIM_PROMPT });
-    const unfit = onTurn(claimAsk.state, empty, { ...doneTurn, text: "The project is done." });
-    expect(unfit.actions).toEqual([
-      { type: "notify", level: "warning", message: "ctx-go paused: project claim did not name first-questions.md" },
-    ]);
-    expect(unfit.actions.some((action) => action.type === "judge")).toBe(false);
-    const claimed = onTurn(claimAsk.state, empty, { ...doneTurn, text: "Done. `proj/.pi/foundations/first-questions.md`" });
+    const openWork = onJudge(state, snap({ frontierIds: ["fork"], destinationText: "Build the app." }), { ok: true, done: true, summary: "met" });
+    expect(openWork.state.projectDone).toBe(false);
+    expect(openWork.state.phase).toBe("questions");
+    expect(openWork.actions[0]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
+    const claimed = onTurn(accepted.state, empty, { ...doneTurn, text: "Done. `proj/src/app.ts`" });
     expect(claimed.actions[0]).toMatchObject({ type: "judge" });
     const finished = onJudge(claimed.state, empty, { ok: true, done: true, summary: "project met" });
     expect(finished.state.armed).toBe(false);
     expect(finished.state.projectDone).toBe(true);
     expect(finished.state.aimMet).toBe(true);
     expect(finished.actions[0]).toMatchObject({ type: "notify", message: "ctx-go done\nproject met" });
-    expect(finished.actions[1]).toMatchObject({ type: "record", text: "Pass: project met\nWorker: Done. `proj/.pi/foundations/first-questions.md`\nJudge: project met" });
+    expect(finished.actions[1]).toMatchObject({ type: "record", text: "Pass: project met\nWorker: Done. `proj/src/app.ts`\nJudge: project met" });
     const stopped = onGo(finished.state, empty);
     expect(stopped.state.armed).toBe(true);
     expect(stopped.state.projectDone).toBe(false);
+    expect(stopped.state.phase).toBe("project");
     expect(stopped.actions[0]).toMatchObject({ type: "prompt", text: PROJECT_CLAIM_PROMPT });
     expect(stopped.actions.some((action) => action.type === "notify" && action.message.includes("already done"))).toBe(false);
     const rejected = onJudge(
@@ -190,6 +187,29 @@ describe("ctx-go loop", () => {
     expect(resumed.actions[0]).toMatchObject({ type: "prompt", text: projectErrorPrompt("Build the app.", "no verdict") });
     expect(String((resumed.actions[0] as { text: string }).text)).not.toContain("not met");
     expect(String((resumed.actions[0] as { text: string }).text)).not.toContain("destination's work");
+  });
+
+  it("does not reset the rejection count when the destination is accepted", () => {
+    const empty = snap({ frontierIds: [], destinationText: "Build the app." });
+    const accepted = onJudge(
+      {
+        ...freshState(),
+        armed: true,
+        phase: "claim",
+        approvedDestinationId: "d1",
+        rejections: 1,
+        productStamp: "same",
+        lastClaim: "aim",
+      },
+      empty,
+      { ok: true, done: true, summary: "met" },
+    );
+    expect(accepted.state.rejections).toBe(1);
+    const project = onTurn(accepted.state, empty, { ...doneTurn, text: "Done. `proj/src/app.ts`" });
+    const rejected = onJudge(project.state, empty, { ok: true, done: false, summary: "still open" }, "same");
+    expect(rejected.state.rejections).toBe(2);
+    expect(rejected.state.phase).toBe("paused");
+    expect(rejected.actions.some((action) => action.type === "notify" && action.message.includes("no product change"))).toBe(true);
   });
 
   it("states a pass or fail in one sentence and keeps the report", () => {
@@ -235,6 +255,8 @@ describe("ctx-go loop", () => {
     expect(again.state.projectDone).toBe(false);
     expect(again.state.phase).toBe("project");
     expect(again.actions).toEqual([{ type: "prompt", text: PROJECT_CLAIM_PROMPT }]);
+    const rolled = onTurn(again.state, snap({ frontierIds: ["fork"], destinationText: "Build the app." }), doneTurn);
+    expect(rolled.actions[0]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
     const open = onGo(loaded, snap({ frontierIds: ["q9"] }));
     expect(open.state.armed).toBe(true);
     expect(open.state.projectDone).toBe(false);

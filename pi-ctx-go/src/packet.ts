@@ -11,7 +11,6 @@ export type PacketInput = {
   constraints: { id: string; headline: string; body: string }[];
   closed: { id: string; headline: string; body: string; superseded: string }[];
   claim: string;
-  project?: boolean;
 };
 
 export type Packet = { ok: true; text: string } | { ok: false; error: string };
@@ -67,7 +66,7 @@ function readProduct(cwd: string, token: string): { ok: true; text: string } | {
   }
 }
 
-/** Bytes of named products other than the contract file. A new path or a new hash is movement. */
+/** Bytes of named products. A new path or a new hash is movement. first-questions.md never counts. */
 export function productStamp(cwd: string, claim: string): string {
   const rows: string[] = [];
   for (const token of namedPaths(claim)) {
@@ -109,9 +108,6 @@ export function buildPacket(input: PacketInput): Packet {
       "summary: one short paragraph",
       "If the claim names no product, the verdict is not-done.",
       "If a product's text is not included below, read that file. You can read and search files. Do not edit them.",
-      ...(input.project
-        ? ["A KEPT decision is not unfinished by itself. An outcome still owed, with no finishing product and no explicit deferral, is not-done."]
-        : []),
       "",
       "## Destination",
       input.destination,

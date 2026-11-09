@@ -1,10 +1,8 @@
-import { namedPaths } from "./packet.js";
 import {
   CLAIM_PROMPT,
   DRAFT_PROMPT,
   PROJECT_CLAIM_PROMPT,
   QUESTION_PROMPT,
-  REMAINDER_PROMPT,
   judgeErrorPrompt,
   projectErrorPrompt,
   projectRejectionPrompt,
@@ -78,10 +76,6 @@ export function freshState(): GoState {
     aimMet: false,
     projectDone: false,
   };
-}
-
-export function namesFoundations(claim: string): boolean {
-  return namedPaths(claim).some((path) => path.endsWith("first-questions.md"));
 }
 
 export function fingerprint(snap: Snap): string {
@@ -251,7 +245,6 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
     }
     const projectClaim = turn.text.trim();
     if (!projectClaim) return pause(state, "ctx-go paused: done-claim was empty");
-    if (!namesFoundations(projectClaim)) return pause(state, "ctx-go paused: project claim did not name first-questions.md");
     return { state: { ...state, lastClaim: projectClaim }, actions: [{ type: "judge", claim: projectClaim }] };
   }
   if (state.phase !== "work" && state.phase !== "claim") {
@@ -287,7 +280,7 @@ export function onJudge(
   }
   if (result.done) {
     const record = report("Pass", result.summary, state.lastClaim);
-    if (state.aimMet && namesFoundations(state.lastClaim)) {
+    if (state.aimMet) {
       return {
         state: { ...freshState(), approvedDestinationId: state.approvedDestinationId, aimMet: true, projectDone: true },
         actions: [
@@ -296,20 +289,18 @@ export function onJudge(
         ],
       };
     }
-    const step = prompt(
-      {
-        ...state,
-        armed: true,
-        aimMet: true,
-        projectDone: false,
-        phase: "questions",
-        lastVerdict: "",
-        verdictKind: "none",
-        hold: false,
-      },
-      REMAINDER_PROMPT,
-      snap,
-    );
+    const accepted = {
+      ...state,
+      armed: true,
+      aimMet: true,
+      projectDone: false,
+      lastVerdict: "",
+      verdictKind: "none" as const,
+      hold: false,
+    };
+    const step = questionsOpen(snap)
+      ? prompt({ ...accepted, phase: "questions" }, QUESTION_PROMPT, snap)
+      : prompt({ ...accepted, phase: "project" }, PROJECT_CLAIM_PROMPT, snap);
     return withRecord(step, record);
   }
   const rejections = state.rejections + 1;
