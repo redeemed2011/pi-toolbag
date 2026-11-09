@@ -118,7 +118,7 @@ describe("ctx-go loop", () => {
     expect(again.state.rejections).toBe(2);
     expect(again.state.lastVerdict).toBe("still no");
     expect(again.actions[0]).toMatchObject({
-      message: "ctx-go paused: no product change\nWorker: did the thing\nJudge: missing product\nJudge: still no",
+      message: "Fail: still no\nctx-go paused: no product change\nWorker: did the thing\nJudge: missing product\nJudge: still no",
     });
     expect(again.state.verdictKind).toBe("rejection");
     expect(again.actions.some((action) => action.type === "record" && action.text.includes("Worker: did the thing") && action.text.includes("Judge: still no"))).toBe(true);
@@ -152,7 +152,7 @@ describe("ctx-go loop", () => {
     expect(accepted.state.rejections).toBe(1);
     expect(accepted.actions[0]).toMatchObject({ type: "prompt", text: REMAINDER_PROMPT });
     expect(accepted.actions.some((action) => action.type === "notify" && action.message.startsWith("ctx-go done"))).toBe(false);
-    expect(accepted.actions.some((action) => action.type === "record" && action.text.includes("Judge: met"))).toBe(true);
+    expect(accepted.actions.some((action) => action.type === "record" && action.text.startsWith("Pass: met") && action.text.includes("Judge: met"))).toBe(true);
     const claimAsk = onTurn(accepted.state, empty, doneTurn);
     expect(claimAsk.state.phase).toBe("project");
     expect(claimAsk.actions[0]).toMatchObject({ type: "prompt", text: PROJECT_CLAIM_PROMPT });
@@ -168,6 +168,7 @@ describe("ctx-go loop", () => {
     expect(finished.state.projectDone).toBe(true);
     expect(finished.state.aimMet).toBe(true);
     expect(finished.actions[0]).toMatchObject({ type: "notify", message: "ctx-go done\nproject met" });
+    expect(finished.actions[1]).toMatchObject({ type: "record", text: "Pass: project met\nWorker: Done. `proj/.pi/foundations/first-questions.md`\nJudge: project met" });
     const stopped = onGo(finished.state, empty);
     expect(stopped.state.armed).toBe(true);
     expect(stopped.state.projectDone).toBe(false);
@@ -189,6 +190,30 @@ describe("ctx-go loop", () => {
     expect(resumed.actions[0]).toMatchObject({ type: "prompt", text: projectErrorPrompt("Build the app.", "no verdict") });
     expect(String((resumed.actions[0] as { text: string }).text)).not.toContain("not met");
     expect(String((resumed.actions[0] as { text: string }).text)).not.toContain("destination's work");
+  });
+
+  it("states a pass or fail in one sentence and keeps the report", () => {
+    const empty = snap({ frontierIds: [], destinationText: "Build the app." });
+    const state = {
+      ...freshState(),
+      armed: true,
+      phase: "claim" as const,
+      approvedDestinationId: "d1",
+      aimMet: true,
+      lastClaim: "done `proj/.pi/foundations/first-questions.md`",
+    };
+    const passed = onJudge(state, empty, { ok: true, done: true, summary: "The app carries. The rest is detail." });
+    expect(passed.actions[1]).toMatchObject({
+      type: "record",
+      text: "Pass: The app carries.\nWorker: done `proj/.pi/foundations/first-questions.md`\nJudge: The app carries. The rest is detail.",
+    });
+    const failed = onJudge(
+      { ...state, aimMet: false, phase: "claim" },
+      empty,
+      { ok: true, done: false, summary: "The assignment never started. More follows." },
+    );
+    expect(failed.actions.some((action) => action.type === "record" && action.text.startsWith("Fail: The assignment never started."))).toBe(true);
+    expect(failed.actions.some((action) => action.type === "record" && action.text.includes("Judge: The assignment never started. More follows."))).toBe(true);
   });
 
   it("a saved done clock starts again when the operator runs /ctx-go", () => {
@@ -243,6 +268,7 @@ describe("ctx-go loop", () => {
     );
     expect(capped.state.phase).toBe("paused");
     expect(capped.state.rejections).toBe(10);
+    expect(String((capped.actions[0] as { message: string }).message)).toContain("Fail: tenth");
     expect(String((capped.actions[0] as { message: string }).message)).toContain("after 10 judge calls");
     expect(String((capped.actions[0] as { message: string }).message)).toContain("Judge: tenth");
     const finished = onJudge(

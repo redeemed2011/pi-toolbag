@@ -282,11 +282,11 @@ export function onJudge(
   if (!result.ok) {
     return withRecord(
       pause({ ...state, phase: "questions", lastVerdict: result.error, verdictKind: "error" }, `ctx-go paused: judge ${result.error}`),
-      `Worker: ${state.lastClaim}\nJudge: ${result.error}`,
+      report("Fail", result.error, state.lastClaim),
     );
   }
   if (result.done) {
-    const record = `Worker: ${state.lastClaim}\nJudge: ${result.summary}`;
+    const record = report("Pass", result.summary, state.lastClaim);
     if (state.aimMet && namesFoundations(state.lastClaim)) {
       return {
         state: { ...freshState(), approvedDestinationId: state.approvedDestinationId, aimMet: true, projectDone: true },
@@ -324,18 +324,27 @@ export function onJudge(
     verdictKind: "rejection" as const,
   };
   if (rejections >= JUDGE_CAP) {
-    const message = `ctx-go paused after ${JUDGE_CAP} judge calls\nWorker: ${state.lastClaim}\nJudge: ${summary}`;
+    const message = `${resultLine("Fail", summary)}\nctx-go paused after ${JUDGE_CAP} judge calls\nWorker: ${state.lastClaim}\nJudge: ${summary}`;
     return withRecord(pause(rejected, message, true), message);
   }
   if (rejections >= 2 && !moved) {
-    const message = `ctx-go paused: no product change\nWorker: ${state.lastClaim}\nJudge: ${state.priorVerdict}\nJudge: ${summary}`;
+    const message = `${resultLine("Fail", summary)}\nctx-go paused: no product change\nWorker: ${state.lastClaim}\nJudge: ${state.priorVerdict}\nJudge: ${summary}`;
     return withRecord(pause(rejected, message, true), message);
   }
   const next = { ...rejected, phase: state.aimMet ? ("questions" as const) : ("work" as const) };
   const text = state.aimMet
     ? projectRejectionPrompt(snap.destinationText ?? "", summary)
     : rejectionPrompt(snap.destinationText ?? "", summary);
-  return prompt(next, text, snap);
+  return withRecord(prompt(next, text, snap), report("Fail", summary, state.lastClaim));
+}
+
+function resultLine(kind: "Pass" | "Fail", why: string): string {
+  const sentence = why.trim().split(/(?<=[.!?])\s/)[0] || "no reason given";
+  return `${kind}: ${sentence}`;
+}
+
+function report(kind: "Pass" | "Fail", why: string, claim: string): string {
+  return `${resultLine(kind, why)}\nWorker: ${claim}\nJudge: ${why}`;
 }
 
 function withRecord(step: Step, text: string): Step {
