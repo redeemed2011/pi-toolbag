@@ -32,7 +32,8 @@ write = [
   "~/src",
 ]
 # Herdr agent-view hook (pane.report_agent_session over AF_UNIX)
-socket = ["~/.config/herdr/herdr.sock"]
+# pi-voice microphone. This file does not expand $XDG_RUNTIME_DIR.
+socket = ["~/.config/herdr/herdr.sock", "/run/user/1000/pulse/native"]
 
 [deny]
 # Global path denials (optional). Prefer repo [deny] for project secrets.
