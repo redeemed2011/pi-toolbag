@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { evaluateObserverTriggers } from "../src/hooks/observer-trigger.js";
 import { Runtime } from "../src/runtime.js";
+import { workerRetryWaits } from "../src/spawn/observer.js";
 import { runResultPath, writeObserverResult } from "../src/spawn/runs.js";
 import type { Entry } from "../src/types.js";
 import { userMsg } from "./fixtures.js";
@@ -25,8 +26,11 @@ vi.mock("../src/spawn/observer.js", async () => {
 	};
 });
 
+const realWaits = [...workerRetryWaits.ms];
+
 afterEach(() => {
 	gate.jobs.length = 0;
+	workerRetryWaits.ms = [...realWaits];
 });
 
 function triggeringRuntime(): Runtime {
@@ -186,6 +190,43 @@ describe("observer after the session ctx is stale", () => {
 		await expect(task).resolves.toBeUndefined();
 		expect(appended).toEqual([]);
 		expect(runtime.lastWorkerError).toMatch(/exited with code/);
+	});
+
+	const capacity =
+		"The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing";
+
+	it("retries a capacity exit and commits the later success", async () => {
+		workerRetryWaits.ms = [0, 0];
+		const { runtime, ui, appended, task, job } = start(true);
+		job.resolve({ code: 1, signal: null, stderr: capacity });
+		await vi.waitFor(() => expect(gate.jobs.length).toBe(2));
+		const retry = gate.jobs[1]!;
+		writeObserverResult(runResultPath(retry.cwd), {
+			observations: [{ timestamp: "2026-09-14T10:00:00.000Z", content: "noted" }],
+		});
+		retry.resolve({ code: 0, signal: null, stderr: "" });
+		await expect(task).resolves.toBeUndefined();
+		expect(appended.map((entry) => entry.customType)).toEqual(["ctx.observations.recorded"]);
+		expect(runtime.lastWorkerError).toBeUndefined();
+		expect(ui.notifications.some((note) => note.level === "warning" && note.message.includes("retrying"))).toBe(
+			true,
+		);
+		expect(ui.notifications.some((note) => note.level === "error")).toBe(false);
+	});
+
+	it("stops after three capacity exits and reports the last one", async () => {
+		workerRetryWaits.ms = [0, 0];
+		const { runtime, ui, appended, task, job } = start(true);
+		job.resolve({ code: 1, signal: null, stderr: capacity });
+		await vi.waitFor(() => expect(gate.jobs.length).toBe(2));
+		gate.jobs[1]!.resolve({ code: 1, signal: null, stderr: capacity });
+		await vi.waitFor(() => expect(gate.jobs.length).toBe(3));
+		gate.jobs[2]!.resolve({ code: 1, signal: null, stderr: capacity });
+		await expect(task).resolves.toBeUndefined();
+		expect(gate.jobs).toHaveLength(3);
+		expect(appended).toEqual([]);
+		expect(runtime.lastWorkerError).toMatch(/at capacity/);
+		expect(ui.notifications.filter((note) => note.level === "error")).toHaveLength(1);
 	});
 
 	it("commits an empty cover when print mode exits 0 with no observations", async () => {

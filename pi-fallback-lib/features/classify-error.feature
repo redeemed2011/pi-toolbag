@@ -30,6 +30,8 @@ Feature: Classify settled assistant errors
       | servers are currently busy | transient     | true   |
       | currently experiencing high demand | transient | true |
       | model is at capacity      | transient     | true   |
+      | currently at capacity     | transient     | true   |
+      | The model is currently at capacity due to high demand. Please try again in a few minutes | transient | true |
       | provider returned an error | transient     | true   |
       | Provider returned error    | transient     | true   |
       | The provider returned an error. Please try again. | transient | true |

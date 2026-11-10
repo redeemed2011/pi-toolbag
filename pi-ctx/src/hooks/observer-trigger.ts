@@ -3,7 +3,16 @@ import { resolveObserverModel } from "../config.js";
 import { entryIndexForId, latestCoverageMarkerId, rawTokensAfterIndex, selectSourceSlice, type SourceSlice } from "../progress.js";
 import type { Runtime } from "../runtime.js";
 import { nowTimestamp, serializeSourceEntries } from "../serialize.js";
-import { buildWorkerArgv, isTruncatedPrintExit, prepareWorkerCwd, spawnWorker } from "../spawn/observer.js";
+import {
+	buildWorkerArgv,
+	isRetryableWorkerExit,
+	isTruncatedPrintExit,
+	prepareWorkerCwd,
+	spawnWorker,
+	waitForWorkerRetry,
+	workerRetryWaits,
+	type WorkerExit,
+} from "../spawn/observer.js";
 import { readObserverResult, runResultPath } from "../spawn/runs.js";
 import { coverageCommit } from "../commit.js";
 import type { Entry, Observation } from "../types.js";
@@ -19,6 +28,10 @@ type TriggerCtx = {
 
 
 let runCounter = 0;
+
+function exitMessage(exit: WorkerExit): string {
+	return `observer exited with code ${exit.code}${exit.stderr ? `: ${exit.stderr.trim().slice(0, 200)}` : ""}`;
+}
 
 function nextRunId(): string {
 	runCounter += 1;
@@ -107,13 +120,20 @@ async function dispatchObserver(
 			CTX_RESULT_PATH: runResultPath(cwd),
 			CTX_RUN_ID: runId,
 		};
-		const exit = await spawnWorker({ argv, cwd, env, signal: controller.signal });
-		const truncated = isTruncatedPrintExit(exit);
-		if (exit.code !== 0 && !truncated) {
-			throw new Error(
-				`observer exited with code ${exit.code}${exit.stderr ? `: ${exit.stderr.trim().slice(0, 200)}` : ""}`,
-			);
+		let exit: WorkerExit | undefined;
+		for (let attempt = 0; attempt < 3; attempt++) {
+			if (controller.signal.aborted) return;
+			exit = await spawnWorker({ argv, cwd, env, signal: controller.signal });
+			if (controller.signal.aborted) return;
+			const failed = exit.code !== 0 && !isTruncatedPrintExit(exit);
+			if (!failed) break;
+			if (!isRetryableWorkerExit(exit) || attempt === 2) break;
+			toast?.(`ctx: observer retrying after: ${exit.stderr.trim().slice(0, 120)}`, "warning");
+			await waitForWorkerRetry(workerRetryWaits.ms[attempt] ?? 45_000, controller.signal);
 		}
+		if (!exit || controller.signal.aborted) return;
+		const truncated = isTruncatedPrintExit(exit);
+		if (exit.code !== 0 && !truncated) throw new Error(exitMessage(exit));
 
 		const result = readObserverResult(runResultPath(cwd));
 		const observations: Observation[] = result.observations.map((raw, i) => ({

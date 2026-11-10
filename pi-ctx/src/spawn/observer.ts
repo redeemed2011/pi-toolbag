@@ -145,6 +145,30 @@ export function isTruncatedPrintExit(exit: WorkerExit): boolean {
 
 export type WorkerExit = { code: number | null; signal: NodeJS.Signals | null; stderr: string };
 
+/** Waits before the second and third attempt. Tests set these to zero. */
+export const workerRetryWaits = { ms: [15_000, 45_000] };
+
+const RETRYABLE_STDERR =
+	/at capacity|high demand|overloaded|rate limit|too many requests|resource_exhausted|server_busy|servers are currently busy|provider returned (?:an )?error|\b429\b|\b50[234]\b|\b529\b|fetch failed|timed out|timeout|econnreset|socket hang up/i;
+
+/** Capacity, rate limit, and other short-lived provider failures. A signal or a length stop is not one. */
+export function isRetryableWorkerExit(exit: WorkerExit): boolean {
+	if (exit.code === 0 || exit.signal !== null || isTruncatedPrintExit(exit)) return false;
+	return RETRYABLE_STDERR.test(exit.stderr);
+}
+
+export function waitForWorkerRetry(ms: number, signal: AbortSignal): Promise<void> {
+	if (ms <= 0 || signal.aborted) return Promise.resolve();
+	return new Promise((resolve) => {
+		const timer = setTimeout(resolve, ms);
+		const stop = () => {
+			clearTimeout(timer);
+			resolve();
+		};
+		signal.addEventListener("abort", stop, { once: true });
+	});
+}
+
 export function spawnWorker(opts: {
 	argv: string[];
 	cwd: string;

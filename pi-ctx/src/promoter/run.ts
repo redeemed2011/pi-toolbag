@@ -4,7 +4,16 @@ import { resolvePromoterModel, type SessionModelSource } from "../config.js";
 import { foldLive, foldSession, resolveOccupancy } from "../fold.js";
 import type { Hitl } from "../hitl.js";
 import type { Runtime } from "../runtime.js";
-import { buildWorkerArgv, isTruncatedPrintExit, prepareWorkerCwd, spawnWorker } from "../spawn/observer.js";
+import {
+	buildWorkerArgv,
+	isRetryableWorkerExit,
+	isTruncatedPrintExit,
+	prepareWorkerCwd,
+	spawnWorker,
+	waitForWorkerRetry,
+	workerRetryWaits,
+	type WorkerExit,
+} from "../spawn/observer.js";
 import { runResultPath } from "../spawn/runs.js";
 import { CTX_PROMOTER_LATCH, type Entry, type JudgmentRecord } from "../types.js";
 import { applyPromoterResult } from "./apply.js";
@@ -219,11 +228,21 @@ async function spawnPromoter(opts: {
 	};
 	const controller = new AbortController();
 	opts.runtime.trackWorkerAbort(controller);
-	let exit: Awaited<ReturnType<typeof spawnWorker>>;
+	let exit: WorkerExit | undefined;
 	try {
-		exit = await spawnWorker({ argv, cwd, env, signal: controller.signal });
+		for (let attempt = 0; attempt < 3; attempt++) {
+			if (controller.signal.aborted) break;
+			exit = await spawnWorker({ argv, cwd, env, signal: controller.signal });
+			if (controller.signal.aborted) break;
+			if (exit.code === 0 || isTruncatedPrintExit(exit)) break;
+			if (!isRetryableWorkerExit(exit) || attempt === 2) break;
+			await waitForWorkerRetry(workerRetryWaits.ms[attempt] ?? 45_000, controller.signal);
+		}
 	} finally {
 		opts.runtime.untrackWorkerAbort(controller);
+	}
+	if (!exit) {
+		throw new Error("promoter exited with code null");
 	}
 	const truncated = isTruncatedPrintExit(exit);
 	if (exit.code !== 0 && !truncated) {

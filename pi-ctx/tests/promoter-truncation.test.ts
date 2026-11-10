@@ -5,6 +5,7 @@ type Exit = { code: number | null; signal: NodeJS.Signals | null; stderr: string
 const gate = vi.hoisted(() => ({
 	exit: { code: 0, signal: null, stderr: "" } as Exit,
 	write: undefined as ((cwd: string) => void) | undefined,
+	calls: 0,
 }));
 
 vi.mock("../src/spawn/observer.js", async () => {
@@ -12,6 +13,7 @@ vi.mock("../src/spawn/observer.js", async () => {
 	return {
 		...actual,
 		spawnWorker: async (opts: { cwd: string }) => {
+			gate.calls += 1;
 			gate.write?.(opts.cwd);
 			return gate.exit;
 		},
@@ -19,6 +21,7 @@ vi.mock("../src/spawn/observer.js", async () => {
 });
 
 import { writePromoterResult } from "../src/promoter/io.js";
+import { workerRetryWaits } from "../src/spawn/observer.js";
 import { harvestAfterBind } from "../src/promoter/run.js";
 import { emptyPromoterResult } from "../src/promoter/schema.js";
 import { Runtime } from "../src/runtime.js";
@@ -51,10 +54,14 @@ function harvest() {
 	return { pending, notes };
 }
 
+const realWaits = [...workerRetryWaits.ms];
+
 describe("promoter truncated print", () => {
 	beforeEach(() => {
 		gate.exit = { code: 0, signal: null, stderr: "" };
 		gate.write = undefined;
+		gate.calls = 0;
+		workerRetryWaits.ms = [...realWaits];
 		delete process.env.PI_CTX_NO_WORKERS;
 	});
 
@@ -77,6 +84,19 @@ describe("promoter truncated print", () => {
 		const { pending } = harvest();
 		const receipt = await pending;
 		expect(receipt.note).toMatch(/exited with code 1/);
+	});
+
+	it("retries a capacity exit three times before the failure note", async () => {
+		workerRetryWaits.ms = [0, 0];
+		gate.exit = {
+			code: 1,
+			signal: null,
+			stderr: "The model is currently at capacity due to high demand.",
+		};
+		const { pending } = harvest();
+		const receipt = await pending;
+		expect(gate.calls).toBe(3);
+		expect(receipt.note).toMatch(/at capacity/);
 	});
 
 	it("throws when a submitted harvest is killed by a signal", async () => {

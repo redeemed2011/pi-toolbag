@@ -43,7 +43,7 @@ const TRANSIENT_NEEDLES = [
   "server_busy",
   "servers are currently busy",
   "currently experiencing high demand",
-  "model is at capacity",
+  "at capacity",
   "provider returned an error",
   "provider returned error",
   "server error",

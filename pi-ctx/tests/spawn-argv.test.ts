@@ -3,7 +3,15 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { buildWorkerArgv, compareNodeVersionDir, extraWorkerExtensionPaths, modelArg, WORKER_EXTENSION_PATH } from "../src/spawn/observer.js";
+import {
+	buildWorkerArgv,
+	compareNodeVersionDir,
+	extraWorkerExtensionPaths,
+	isRetryableWorkerExit,
+	modelArg,
+	TRUNCATED_PRINT_STDERR,
+	WORKER_EXTENSION_PATH,
+} from "../src/spawn/observer.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -59,6 +67,15 @@ describe("observer argv", () => {
 
 	it("formats provider/id", () => {
 		expect(modelArg(model)).toBe("openrouter/z-ai/glm-5.3");
+	});
+
+	it("retries the xAI capacity sentence and not a length stop or a signal", () => {
+		const capacity =
+			"The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing";
+		expect(isRetryableWorkerExit({ code: 1, signal: null, stderr: capacity })).toBe(true);
+		expect(isRetryableWorkerExit({ code: 1, signal: null, stderr: TRUNCATED_PRINT_STDERR })).toBe(false);
+		expect(isRetryableWorkerExit({ code: null, signal: "SIGTERM", stderr: capacity })).toBe(false);
+		expect(isRetryableWorkerExit({ code: 1, signal: null, stderr: "boom" })).toBe(false);
 	});
 
 	it("worker.ts does not register orchestrator hooks", () => {
