@@ -1,8 +1,8 @@
 import type { ExtensionAPI, ExtensionContext, SessionBoundaryDraft } from "@earendil-works/pi-coding-agent";
 import { approveDestination } from "./src/approve.js";
 import { readClock, writeClock } from "./src/clock.js";
-import { runJudge, thinkingLevel, type JudgeModel } from "./src/judge.js";
-import { buildPacket, parseVerdict, productStamp } from "./src/packet.js";
+import { IMPASSE_ASK, runJudge, thinkingLevel, type JudgeModel } from "./src/judge.js";
+import { buildImpassePacket, buildPacket, parseImpasse, parseVerdict, productStamp } from "./src/packet.js";
 import { closedQuestions, prepareClaim, readSnap, type BoundSnap } from "./src/snap.js";
 import { CTX_CLAIM } from "../pi-ctx/src/types.js";
 import {
@@ -10,6 +10,7 @@ import {
   onApproved,
   onDraftRejected,
   onGo,
+  onImpasseJudge,
   onJudge,
   onStop,
   onTurn,
@@ -223,7 +224,9 @@ export default function ctxGo(pi: ExtensionAPI): void {
 
     const judge = step.actions.find((action) => action.type === "judge");
     if (judge && judge.type === "judge") {
-      const judged = await judgeNow(goCtx, snap, state, judge.claim, override);
+      const judged = judge.review === "impasse"
+        ? await judgeImpasse(goCtx, snap, state, judge.claim, override)
+        : await judgeNow(goCtx, snap, state, judge.claim, override);
       state = remember(goCtx, judged.state);
       notify(goCtx, judged.actions);
       if (!wroteClaim(goCtx, judged.actions)) return;
@@ -234,6 +237,33 @@ export default function ctxGo(pi: ExtensionAPI): void {
     if (goCtx.hasPendingMessages()) return;
     return continued(event.entries, step.actions);
   });
+}
+
+function impasseOpen(snap: BoundSnap): string {
+  const lines = [
+    ...snap.frontierIds.map((id) => `open ${id}`),
+    ...snap.askIds.map((id, index) => `ask ${id} ${snap.askHeadlines[index] ?? ""}`),
+    ...snap.blocked.map((item) => `blocked ${item.id} ${item.headline}`),
+  ];
+  return lines.join("\n");
+}
+
+async function judgeImpasse(ctx: GoCtx, snap: BoundSnap, state: GoState, claim: string, override: JudgeOverride | null) {
+  if (!snap.live) return onImpasseJudge(state, snap, { ok: false, error: "not bound" });
+  const packet = buildImpassePacket({
+    destination: snap.destinationText ?? "",
+    constraints: snap.live.constraints
+      .filter((item) => snap.live?.live.has(item.id))
+      .map((item) => ({ headline: item.headline, body: item.directive || item.body })),
+    claim,
+    open: impasseOpen(snap),
+  });
+  if (!packet.ok) return onImpasseJudge(state, snap, packet);
+  const model = modelOf(ctx, override);
+  if (!model) return onImpasseJudge(state, snap, { ok: false, error: "no model" });
+  const ran = await runJudge(model, packet.text, ctx.cwd, IMPASSE_ASK);
+  const verdict = ran.ok ? parseImpasse(ran.text) : ran;
+  return onImpasseJudge(state, snap, verdict);
 }
 
 async function judgeNow(ctx: GoCtx, snap: BoundSnap, state: GoState, claim: string, override: JudgeOverride | null) {

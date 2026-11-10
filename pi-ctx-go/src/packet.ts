@@ -135,6 +135,45 @@ export function buildPacket(input: PacketInput): Packet {
   return { ok: true, text };
 }
 
+export function buildImpassePacket(input: {
+  destination: string;
+  constraints: { headline: string; body: string }[];
+  claim: string;
+  open: string;
+}): Packet {
+  const constraints = input.constraints.map((item) => `${item.headline}: ${item.body}`).join("\n") || "none";
+  const text = [
+    "Judge this impasse.",
+    "The worker says this item cannot be recorded.",
+    "If the worker missed a way through, reply: way through: and a one-line summary.",
+    "If there is no missed work, reply: no way through: and the reason.",
+    "Do not ask the operator.",
+    "",
+    "## Impasse",
+    input.claim,
+    "",
+    "## Destination",
+    input.destination || "none",
+    "",
+    "## Constraints",
+    constraints,
+    "",
+    "## Open questions",
+    input.open || "none",
+  ].join("\n");
+  if (text.length > CALL_CAP) return { ok: false, error: "packet does not fit: impasse" };
+  return { ok: true, text };
+}
+
+export function parseImpasse(text: string): { ok: true; through: boolean; summary: string } | { ok: false; error: string } {
+  const line = text.split("\n").map((item) => item.trim()).find(Boolean) ?? "";
+  const through = line.match(/^way through:?\s*(.*)$/i);
+  if (through) return { ok: true, through: true, summary: (through[1] ?? "").trim() };
+  const none = line.match(/^no way through:?\s*(.*)$/i);
+  if (none) return { ok: true, through: false, summary: (none[1] ?? "").trim() };
+  return { ok: false, error: "no verdict" };
+}
+
 export function parseVerdict(text: string): { ok: true; done: boolean; summary: string } | { ok: false; error: string } {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   const verdicts = lines.filter((line) => line.toLowerCase().startsWith("verdict:"));

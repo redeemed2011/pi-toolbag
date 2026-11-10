@@ -5,10 +5,36 @@ import { describe, expect, it } from "vitest";
 import { foldLive } from "../../pi-ctx/src/fold.js";
 import { putJudgment } from "../../pi-ctx/src/mint.js";
 import { judgeArgv } from "../src/judge.js";
-import { buildPacket, namedPaths, parseVerdict, productStamp } from "../src/packet.js";
+import { buildImpassePacket, buildPacket, namedPaths, parseImpasse, parseVerdict, productStamp } from "../src/packet.js";
 import { closedQuestions } from "../src/snap.js";
 
 describe("judge packet", () => {
+  it("parses an impasse as a way through, agreement, or an error", () => {
+    expect(parseImpasse("way through: record the question")).toEqual({
+      ok: true,
+      through: true,
+      summary: "record the question",
+    });
+    expect(parseImpasse("no way through: nothing was missed")).toEqual({
+      ok: true,
+      through: false,
+      summary: "nothing was missed",
+    });
+    expect(parseImpasse("verdict: done\nsummary: shipped")).toEqual({ ok: false, error: "no verdict" });
+    const packet = buildImpassePacket({
+      destination: "Build the app.",
+      constraints: [],
+      claim: "Impasse: the annotation question is blocked",
+      open: "none",
+    });
+    expect(packet.ok).toBe(true);
+    if (packet.ok) {
+      expect(packet.text).toContain("Judge this impasse.");
+      expect(packet.text).not.toContain("verdict: done");
+      expect(packet.text).toContain("Do not ask the operator.");
+    }
+  });
+
   it("parses a verdict and rejects anything else", () => {
     expect(parseVerdict("verdict: done\nsummary: shipped")).toEqual({ ok: true, done: true, summary: "shipped" });
     expect(parseVerdict("verdict: done\nsummary: echoed\nverdict: not-done\nsummary: real")).toEqual({

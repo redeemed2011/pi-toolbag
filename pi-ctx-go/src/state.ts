@@ -62,7 +62,7 @@ export type Action =
   | { type: "notify"; level: "info" | "warning" | "error"; message: string }
   | { type: "prompt"; text: string }
   | { type: "approve"; text: string }
-  | { type: "judge"; claim: string }
+  | { type: "judge"; claim: string; review?: "impasse" }
   | { type: "claim"; questionId: string }
   | { type: "record"; text: string };
 
@@ -277,7 +277,13 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
     const blocked = blockedPause(state, snap);
     if (blocked) return blocked;
     const impasse = namedImpasse(turn.text);
-    if (impasse) return pause(state, `ctx-go paused: ${impasse}`);
+    if (impasse) {
+      const line = turn.text.split("\n").map((item) => item.trim()).find((item) => item.toLowerCase().startsWith("impasse:")) ?? `Impasse: ${impasse}`;
+      return {
+        state: { ...state, lastClaim: line },
+        actions: [{ type: "judge", claim: line, review: "impasse" }],
+      };
+    }
     if (snap.notBuiltOpen && !questionsOpen(snap)) return pause(state, NOT_BUILT);
     return finishReconcile(state, snap);
   }
@@ -314,6 +320,33 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
     state: { ...state, lastClaim: claim },
     actions: [{ type: "judge", claim }],
   };
+}
+
+/** The judge already reviewed the impasse. A way through continues. Agreement pauses. An error pauses and is not agreement. */
+export function onImpasseJudge(
+  state: GoState,
+  snap: Snap,
+  result: { ok: true; through: boolean; summary: string } | { ok: false; error: string },
+): Step {
+  if (!result.ok) {
+    return pause(
+      { ...state, lastVerdict: result.error, verdictKind: "error" },
+      `ctx-go paused: ${result.error}`,
+    );
+  }
+  if (result.through) {
+    const summary = result.summary.trim() || "a way through";
+    return prompt(
+      { ...state, phase: "reconcile", lastVerdict: summary, verdictKind: "none" },
+      `${RECONCILE_PROMPT}\nThe judge found a way through:\n${summary}\nRecord that item.`,
+      snap,
+    );
+  }
+  const reason = result.summary.trim() || "no missed work";
+  return pause(
+    { ...state, lastVerdict: reason, verdictKind: "none" },
+    `ctx-go paused: ${reason}`,
+  );
 }
 
 const JUDGE_CAP = 10;

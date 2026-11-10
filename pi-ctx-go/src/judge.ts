@@ -19,8 +19,9 @@ export function thinkingLevel(value: string): ModelThinkingLevel | null {
 }
 
 const JUDGE_ASK = "The completion packet is above. Answer it with the two lines it requests.";
+export const IMPASSE_ASK = "The impasse packet is above. Answer with the one line it requests.";
 
-export function judgeArgv(model: JudgeModel): string[] {
+export function judgeArgv(model: JudgeModel, ask = JUDGE_ASK): string[] {
   const pi = resolvePiBinary();
   const args = [
     ...pi.baseArgs,
@@ -38,12 +39,17 @@ export function judgeArgv(model: JudgeModel): string[] {
   if (model.thinking) args.push("--thinking", model.thinking);
   args.push("-e", JUDGE_FALLBACK_PATH);
   for (const extra of extraWorkerExtensionPaths(model, { chain: false })) args.push("-e", extra);
-  args.push("-p", JUDGE_ASK);
+  args.push("-p", ask);
   return [pi.command, ...args];
 }
 
-export function runJudge(model: JudgeModel, prompt: string, cwd: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
-  const argv = judgeArgv(model).map(withoutNullBytes);
+export function runJudge(
+  model: JudgeModel,
+  prompt: string,
+  cwd: string,
+  ask = JUDGE_ASK,
+): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  const argv = judgeArgv(model, ask).map(withoutNullBytes);
   const [command, ...rest] = argv;
   if (!command) return Promise.resolve({ ok: false, error: "no pi binary" });
   return new Promise((resolvePromise) => {

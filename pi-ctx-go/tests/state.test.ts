@@ -15,7 +15,7 @@ import {
   rejectionPrompt,
   workPrompt,
 } from "../src/prompts.js";
-import { freshState, onApproved, onGo, onJudge, onStop, onTurn, type Snap } from "../src/state.js";
+import { freshState, onApproved, onGo, onImpasseJudge, onJudge, onStop, onTurn, type Snap } from "../src/state.js";
 
 function snap(partial: Partial<Snap> = {}): Snap {
   return {
@@ -417,7 +417,11 @@ describe("ctx-go loop", () => {
     expect(stalled.actions).toEqual([{ type: "notify", level: "warning", message: "ctx-go paused: a not-built decision has no question" }]);
     const impasse = onTurn(started.state, owed, { ...doneTurn, text: "Impasse: the annotation question is blocked" });
     expect(impasse.state.reconciledThrough).toBeNull();
-    expect(impasse.actions[0]).toMatchObject({ type: "notify", message: "ctx-go paused: the annotation question is blocked" });
+    expect(impasse.state.hold).toBe(false);
+    expect(impasse.state.phase).toBe("reconcile");
+    expect(impasse.actions).toEqual([
+      { type: "judge", claim: "Impasse: the annotation question is blocked", review: "impasse" },
+    ]);
     const covered = onTurn(
       started.state,
       snap({ frontierIds: ["q-annot"], destinationText: "Build the app.", sessionTip: "m2", notBuiltOpen: false }),
@@ -426,6 +430,41 @@ describe("ctx-go loop", () => {
     expect(covered.state.reconciledThrough).toBe("m2");
     expect(covered.actions[0]).toEqual({ type: "claim", questionId: "q-annot" });
     expect(covered.actions[1]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
+  });
+
+  it("reviews an impasse before pausing", () => {
+    const owed = snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "m1", notBuiltOpen: true });
+    const started = onGo({ ...freshState(), approvedDestinationId: "d1" }, owed);
+    const impasse = onTurn(started.state, owed, { ...doneTurn, text: "Impasse: the annotation question is blocked" });
+    expect(impasse.actions.some((action) => action.type === "notify")).toBe(false);
+    expect(impasse.state.rejections).toBe(0);
+    const through = onImpasseJudge(impasse.state, owed, { ok: true, through: true, summary: "record the annotation question" });
+    expect(through.state.phase).toBe("reconcile");
+    expect(through.state.reconciledThrough).toBeNull();
+    expect(through.state.rejections).toBe(0);
+    expect(through.state.hold).toBe(false);
+    expect(through.actions[0]).toMatchObject({ type: "prompt" });
+    expect(String((through.actions[0] as { text: string }).text)).toContain("record the annotation question");
+    expect(String((through.actions[0] as { text: string }).text)).toContain("The judge found a way through:");
+    expect(through.actions.some((action) => action.type === "notify" || action.type === "approve")).toBe(false);
+    const agreed = onImpasseJudge(impasse.state, owed, { ok: true, through: false, summary: "the annotation question is already blocked" });
+    expect(agreed.state.hold).toBe(true);
+    expect(agreed.state.reconciledThrough).toBeNull();
+    expect(agreed.state.verdictKind).not.toBe("error");
+    expect(agreed.state.rejections).toBe(0);
+    expect(agreed.actions).toEqual([
+      { type: "notify", level: "warning", message: "ctx-go paused: the annotation question is already blocked" },
+    ]);
+    expect(String((agreed.actions[0] as { message: string }).message)).not.toContain("Ask the operator");
+    const erred = onImpasseJudge(impasse.state, owed, { ok: false, error: "no verdict" });
+    expect(erred.state.hold).toBe(true);
+    expect(erred.state.verdictKind).toBe("error");
+    expect(erred.state.rejections).toBe(0);
+    expect(erred.state.reconciledThrough).toBeNull();
+    expect(erred.actions).toEqual([{ type: "notify", level: "warning", message: "ctx-go paused: no verdict" }]);
+    expect(String((erred.actions[0] as { message: string }).message)).not.toContain("already blocked");
+    expect(String((erred.actions[0] as { message: string }).message)).not.toContain("Ask the operator");
+    expect(erred.actions.some((action) => action.type === "prompt")).toBe(false);
   });
 
   it("claims an unclaimed question instead of pausing", () => {
