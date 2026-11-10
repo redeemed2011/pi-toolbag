@@ -10,6 +10,7 @@ import {
 	prepareWorkerCwd,
 	spawnWorker,
 	waitForWorkerRetry,
+	workerAttemptSessionDir,
 	workerRetryWaits,
 	type WorkerExit,
 } from "../spawn/observer.js";
@@ -108,21 +109,22 @@ async function dispatchObserver(
 		toast = notifyFrom(ctx);
 		const sessionId = runtime.sessionId || ctx.sessionManager.getSessionId?.() || "session";
 		const { cwd, sessionDir } = prepareWorkerCwd(sessionId, runId);
-		const argv = buildWorkerArgv({
-			model: resolveObserverModel(runtime.config, pi),
-			sessionName: `ctx-observer-${runId}`,
-			kickoffPrompt: userText,
-			sessionDir,
-		});
 		const env: NodeJS.ProcessEnv = {
 			...process.env,
 			CTX_WORKER: "observer",
 			CTX_RESULT_PATH: runResultPath(cwd),
 			CTX_RUN_ID: runId,
 		};
+		const model = resolveObserverModel(runtime.config, pi);
 		let exit: WorkerExit | undefined;
 		for (let attempt = 0; attempt < 3; attempt++) {
 			if (controller.signal.aborted) return;
+			const argv = buildWorkerArgv({
+				model,
+				sessionName: `ctx-observer-${runId}-${attempt}`,
+				kickoffPrompt: userText,
+				sessionDir: workerAttemptSessionDir(sessionDir, attempt),
+			});
 			exit = await spawnWorker({ argv, cwd, env, signal: controller.signal });
 			if (controller.signal.aborted) return;
 			const failed = exit.code !== 0 && !isTruncatedPrintExit(exit);

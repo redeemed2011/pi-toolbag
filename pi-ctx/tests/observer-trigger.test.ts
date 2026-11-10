@@ -11,14 +11,18 @@ type Exit = { code: number | null; signal: NodeJS.Signals | null; stderr: string
 
 const gate = vi.hoisted(() => {
 	const jobs: { cwd: string; resolve: (exit: Exit) => void }[] = [];
-	return { jobs };
+	const launches: { sessionDir: string; sessionName: string }[] = [];
+	return { jobs, launches };
 });
 
 vi.mock("../src/spawn/observer.js", async () => {
 	const actual = await vi.importActual<typeof import("../src/spawn/observer.js")>("../src/spawn/observer.js");
 	return {
 		...actual,
-		buildWorkerArgv: () => ["node", "pi"],
+		buildWorkerArgv: (opts: { sessionDir: string; sessionName: string }) => {
+			gate.launches.push({ sessionDir: opts.sessionDir, sessionName: opts.sessionName });
+			return ["node", "pi"];
+		},
 		spawnWorker: (opts: { cwd: string }) =>
 			new Promise<Exit>((resolve) => {
 				gate.jobs.push({ cwd: opts.cwd, resolve });
@@ -30,6 +34,7 @@ const realWaits = [...workerRetryWaits.ms];
 
 afterEach(() => {
 	gate.jobs.length = 0;
+	gate.launches.length = 0;
 	workerRetryWaits.ms = [...realWaits];
 });
 
@@ -212,6 +217,9 @@ describe("observer after the session ctx is stale", () => {
 			true,
 		);
 		expect(ui.notifications.some((note) => note.level === "error")).toBe(false);
+		expect(gate.launches.map((launch) => launch.sessionDir)).toHaveLength(2);
+		expect(new Set(gate.launches.map((launch) => launch.sessionDir)).size).toBe(2);
+		expect(new Set(gate.launches.map((launch) => launch.sessionName)).size).toBe(2);
 	});
 
 	it("stops after three capacity exits and reports the last one", async () => {

@@ -149,7 +149,7 @@ export type WorkerExit = { code: number | null; signal: NodeJS.Signals | null; s
 export const workerRetryWaits = { ms: [15_000, 45_000] };
 
 const RETRYABLE_STDERR =
-	/at capacity|high demand|overloaded|rate limit|too many requests|resource_exhausted|server_busy|servers are currently busy|provider returned (?:an )?error|\b429\b|\b50[234]\b|\b529\b|fetch failed|timed out|timeout|econnreset|socket hang up/i;
+	/at capacity|high demand|overloaded|unavailable|rate limit|too many requests|resource_exhausted|server_busy|servers are currently busy|server error|provider returned (?:an )?error|\b429\b|\b50[0234]\b|\b529\b|fetch failed|timed out|timeout|econnreset|econnrefused|etimedout|connection reset|connection refused|socket hang up/i;
 
 /** Capacity, rate limit, and other short-lived provider failures. A signal or a length stop is not one. */
 export function isRetryableWorkerExit(exit: WorkerExit): boolean {
@@ -227,4 +227,12 @@ export function prepareWorkerCwd(sessionId: string, runId: string): { cwd: strin
 	const sessionDir = join(cwd, "session");
 	mkdirSync(sessionDir, { recursive: true });
 	return { cwd, sessionDir };
+}
+
+/** A retry must not resume the session that just failed. Attempt 0 keeps the original directory. */
+export function workerAttemptSessionDir(sessionDir: string, attempt: number): string {
+	if (attempt === 0) return sessionDir;
+	const dir = join(sessionDir, `retry-${attempt}`);
+	mkdirSync(dir, { recursive: true });
+	return dir;
 }

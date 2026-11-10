@@ -11,6 +11,7 @@ import {
 	prepareWorkerCwd,
 	spawnWorker,
 	waitForWorkerRetry,
+	workerAttemptSessionDir,
 	workerRetryWaits,
 	type WorkerExit,
 } from "../spawn/observer.js";
@@ -212,13 +213,7 @@ async function spawnPromoter(opts: {
 		n: PROMOTER_N,
 		chars: PROMOTER_CHARS,
 	});
-	const argv = buildWorkerArgv({
-		model: resolvePromoterModel(opts.runtime.config, opts.sessionModel),
-		sessionName: `ctx-promoter-${runId}`,
-		kickoffPrompt: kickoff,
-		sessionDir,
-		workerExtensionPath: PROMOTER_EXTENSION_PATH,
-	});
+	const model = resolvePromoterModel(opts.runtime.config, opts.sessionModel);
 	const env: NodeJS.ProcessEnv = {
 		...process.env,
 		CTX_WORKER: "promoter",
@@ -232,6 +227,13 @@ async function spawnPromoter(opts: {
 	try {
 		for (let attempt = 0; attempt < 3; attempt++) {
 			if (controller.signal.aborted) break;
+			const argv = buildWorkerArgv({
+				model,
+				sessionName: `ctx-promoter-${runId}-${attempt}`,
+				kickoffPrompt: kickoff,
+				sessionDir: workerAttemptSessionDir(sessionDir, attempt),
+				workerExtensionPath: PROMOTER_EXTENSION_PATH,
+			});
 			exit = await spawnWorker({ argv, cwd, env, signal: controller.signal });
 			if (controller.signal.aborted) break;
 			if (exit.code === 0 || isTruncatedPrintExit(exit)) break;
@@ -240,6 +242,9 @@ async function spawnPromoter(opts: {
 		}
 	} finally {
 		opts.runtime.untrackWorkerAbort(controller);
+	}
+	if (controller.signal.aborted) {
+		throw new Error(`promoter exited with code ${exit?.code ?? "null"}: aborted`);
 	}
 	if (!exit) {
 		throw new Error("promoter exited with code null");

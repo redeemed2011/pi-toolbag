@@ -10,6 +10,7 @@ import {
 	isRetryableWorkerExit,
 	modelArg,
 	TRUNCATED_PRINT_STDERR,
+	workerAttemptSessionDir,
 	WORKER_EXTENSION_PATH,
 } from "../src/spawn/observer.js";
 
@@ -76,6 +77,16 @@ describe("observer argv", () => {
 		expect(isRetryableWorkerExit({ code: 1, signal: null, stderr: TRUNCATED_PRINT_STDERR })).toBe(false);
 		expect(isRetryableWorkerExit({ code: null, signal: "SIGTERM", stderr: capacity })).toBe(false);
 		expect(isRetryableWorkerExit({ code: 1, signal: null, stderr: "boom" })).toBe(false);
+		expect(isRetryableWorkerExit({ code: 1, signal: null, stderr: "server error" })).toBe(true);
+		expect(isRetryableWorkerExit({ code: 1, signal: null, stderr: "HTTP 500" })).toBe(true);
+	});
+
+	it("gives a retry its own session directory", () => {
+		const root = mkdtempSync(join(tmpdir(), "ctx-retry-session-"));
+		expect(workerAttemptSessionDir(root, 0)).toBe(root);
+		const retry = workerAttemptSessionDir(root, 1);
+		expect(retry).toBe(join(root, "retry-1"));
+		expect(retry).not.toBe(root);
 	});
 
 	it("worker.ts does not register orchestrator hooks", () => {
