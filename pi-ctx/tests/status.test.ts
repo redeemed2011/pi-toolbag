@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { foldLive } from "../src/fold.js";
@@ -72,6 +74,12 @@ function statusOf(messages: { role?: string; content?: unknown }[] | undefined):
 }
 
 describe("ctx status line", () => {
+	it("registers context_with_system without casting the event away", () => {
+		const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/hooks/context-hook.ts"), "utf8");
+		const start = src.indexOf('pi.on("context_with_system"');
+		expect(start).toBeGreaterThan(-1);
+		expect(src.slice(start)).not.toContain("as never");
+	});
 	it("counts unblocked unclaimed questions and names a live claim", () => {
 		const live = foldLive([
 			question("q1", "one"),

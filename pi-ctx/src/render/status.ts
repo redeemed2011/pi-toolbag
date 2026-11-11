@@ -1,5 +1,4 @@
 import { frontierItems } from "../fold.js";
-import type { AgentMessage } from "./fonce.js";
 import { claimedBodyOrEmpty } from "./gated-edge.js";
 import { CTX_STATUS_INJECT, type LiveSet, type Occupancy } from "../types.js";
 
@@ -32,7 +31,9 @@ function withoutStatusBlock(text: string): string {
  * A user or custom message would reach the model as a user utterance.
  * Providers drop every system message except the first, so the line has to live there.
  */
-export function applyStatusToSystem(messages: AgentMessage[], line: string): AgentMessage[] {
+type StatusCarrier = { role?: string; content?: unknown; customType?: string };
+
+export function applyStatusToSystem<T extends StatusCarrier>(messages: readonly T[], line: string): T[] {
 	const stripped = messages.filter((m) => m.customType !== CTX_STATUS_INJECT);
 	const head = stripped[0];
 	if (!head || head.role !== "system" || typeof head.content !== "string") return stripped;
