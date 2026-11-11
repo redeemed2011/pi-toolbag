@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionContext, SessionBoundaryDraft } from "@earendil-works/pi-coding-agent";
 import { approveDestination } from "./src/approve.js";
 import { readClock, writeClock } from "./src/clock.js";
+import { CONFLICT_ASK, buildConflictPacket, conflictStamp, formalConflicts, parseConflictPairs, shouldReadConflicts } from "./src/conflicts.js";
 import { IMPASSE_ASK, runJudge, thinkingLevel, type JudgeModel } from "./src/judge.js";
 import { buildImpassePacket, buildPacket, judgedDone, parseImpasse, productStamp } from "./src/packet.js";
 import { closedQuestions, prepareClaim, readSnap, type BoundSnap } from "./src/snap.js";
@@ -8,6 +9,7 @@ import { CTX_CLAIM } from "../pi-ctx/src/types.js";
 import {
   freshState,
   onApproved,
+  onConflictRead,
   onDraftRejected,
   onGo,
   onImpasseJudge,
@@ -181,6 +183,22 @@ export default function ctxGo(pi: ExtensionAPI): void {
       const goCtx = ctx as GoCtx;
       if (goCtx.waitForIdle) await goCtx.waitForIdle();
       const snap = readSnap(branchOf(goCtx).branch, branchOf(goCtx).sessionId);
+      if (snap.live && shouldReadConflicts(conflictStamp(snap.live), state.conflictStamp, state.awaitingAccept)) {
+        const stamp = conflictStamp(snap.live);
+        const packet = buildConflictPacket(snap.live);
+        const formal = formalConflicts(snap.live);
+        const model = packet.ok ? modelOf(goCtx, override) : null;
+        const ran = !packet.ok
+          ? packet
+          : !model
+            ? { ok: false as const, error: "no model" }
+            : await runJudge(model, packet.text, goCtx.cwd, CONFLICT_ASK, false);
+        const read = ran.ok ? { ok: true as const, pairs: parseConflictPairs(ran.text, snap.live) } : ran;
+        const gated = onConflictRead(state, stamp, read, formal);
+        state = remember(goCtx, gated.state);
+        notify(goCtx, gated.actions);
+        if (gated.actions.length > 0) return;
+      }
       const opened = onGo(state, snap);
       const step = await settle(goCtx, opened, snap);
       state = remember(goCtx, step.state);

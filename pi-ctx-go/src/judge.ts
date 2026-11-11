@@ -21,7 +21,7 @@ export function thinkingLevel(value: string): ModelThinkingLevel | null {
 const JUDGE_ASK = "The completion packet is above. Reply with the outcome lines and gap lines it requests. Do not edit files or run tests.";
 export const IMPASSE_ASK = "The impasse packet is above. Answer with the one line it requests.";
 
-export function judgeArgv(model: JudgeModel, ask = JUDGE_ASK): string[] {
+export function judgeArgv(model: JudgeModel, ask = JUDGE_ASK, tools = true): string[] {
   const pi = resolvePiBinary();
   const args = [
     ...pi.baseArgs,
@@ -29,13 +29,10 @@ export function judgeArgv(model: JudgeModel, ask = JUDGE_ASK): string[] {
     "--no-skills",
     "--no-prompt-templates",
     "--no-context-files",
-    "--tools",
-    "read,grep,find",
-    "--exclude-tools",
-    "mcp__*",
-    "--model",
-    modelArg(model),
   ];
+  if (tools) args.push("--tools", "read,grep,find", "--exclude-tools", "mcp__*");
+  else args.push("--no-tools");
+  args.push("--model", modelArg(model));
   if (model.thinking) args.push("--thinking", model.thinking);
   args.push("-e", JUDGE_FALLBACK_PATH);
   for (const extra of extraWorkerExtensionPaths(model, { chain: false })) args.push("-e", extra);
@@ -48,8 +45,9 @@ export function runJudge(
   prompt: string,
   cwd: string,
   ask = JUDGE_ASK,
+  tools = true,
 ): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
-  const argv = judgeArgv(model, ask).map(withoutNullBytes);
+  const argv = judgeArgv(model, ask, tools).map(withoutNullBytes);
   const [command, ...rest] = argv;
   if (!command) return Promise.resolve({ ok: false, error: "no pi binary" });
   return new Promise((resolvePromise) => {

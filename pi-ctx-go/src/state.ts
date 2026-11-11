@@ -38,6 +38,8 @@ export type GoState = {
   reconciledThrough: string | null;
   /** Status reports in a row. The first is sent back to the work. The next unchanged one pauses. */
   statusReports: number;
+  /** Live record ids already read for contradictions. Null means the read has not succeeded. */
+  conflictStamp: string | null;
 };
 
 export type BlockedQuestion = { id: string; headline: string; blockers: string[] };
@@ -94,6 +96,7 @@ export function freshState(): GoState {
     obligation: "",
     reconciledThrough: null,
     statusReports: 0,
+    conflictStamp: null,
   };
 }
 
@@ -139,6 +142,7 @@ export function onStop(state: GoState): Step {
       awaitingAccept: state.awaitingAccept,
       obligation: state.obligation,
       reconciledThrough: state.reconciledThrough,
+      conflictStamp: state.conflictStamp,
       phase: state.phase === "paused" ? "paused" : "idle",
     },
     actions: [{ type: "notify", level: "info", message: "ctx-go stopped" }],
@@ -246,6 +250,32 @@ export function onApproved(state: GoState, snap: Snap, destinationId: string): S
 
 export function onDraftRejected(state: GoState, snap: Snap): Step {
   return draftAsk({ ...state, phase: "draft" }, snap);
+}
+
+export type ConflictRead = { ok: true; pairs: { a: string; b: string; why: string }[] } | { ok: false; error: string };
+
+/** A failed read does not remember the set. A listed pair pauses and does not arm the loop. */
+export function onConflictRead(state: GoState, stamp: string, read: ConflictRead, formal: string[]): Step {
+  if (!read.ok) {
+    return {
+      state: { ...state, phase: "paused", hold: false, armed: false },
+      actions: [{ type: "notify", level: "warning", message: `ctx-go paused: conflict read ${read.error}` }],
+    };
+  }
+  if (read.pairs.length > 0 || formal.length > 0) {
+    const lines = [...formal, ...read.pairs.map((pair) => `pair ${pair.a} ${pair.b} ${pair.why}`)];
+    return {
+      state: { ...state, conflictStamp: stamp, phase: "paused", hold: false, armed: false },
+      actions: [
+        {
+          type: "notify",
+          level: "warning",
+          message: `ctx-go paused: the project contradicts itself\n${lines.join("\n")}`,
+        },
+      ],
+    };
+  }
+  return { state: { ...state, conflictStamp: stamp }, actions: [] };
 }
 
 function pause(state: GoState, message: string, hard = false): Step {

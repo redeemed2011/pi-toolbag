@@ -111,6 +111,13 @@
 **Source / evidence**: Operator, 2026-11-05, confirmed in `.pi/foundations/first-questions.md` under "Guide until `/ctx-go` can work." Current code, read 2026-11-05: `onGo` in `pi-ctx-go/src/state.ts` notifies "ctx-go needs a bound CTX project" and does not arm or prompt. When bound and the destination is not approved, it sends `DRAFT_PROMPT` to the model and does not tell the operator that approval is the remaining step. `pi-ctx-go/index.ts` `ctx-go` handler.
 **Status**: Verified
 
+### Fact 16 — A live contradiction is not a formal conflict
+
+**Statement**: `foldLive` records a parent in `liveConflict` only when that parent has two or more live successors. A live record stays live until a later record lists its id in `supersedes`. Two live records can say opposite things and still produce an empty `liveConflict`.
+**Why it is load-bearing**: The apple-pi project had 284 live records and no formal conflict. Several still said the judge finishes, beside a live record that said only the operator finishes. A kickoff check that only prints `liveConflict` would have continued.
+**Source / evidence**: `pi-ctx/src/fold.ts`, `foldLive`, read 2026-11-11. Operator session `01a14602-6015-725c-ba9d-b9898afb9413`, 2026-11-11T16:32:06Z. Operator confirmed the kickoff pause the same day in `.pi/foundations/first-questions.md`.
+**Status**: Verified
+
 ## Hypotheses requiring fresh verification
 
 None. The queued-message flag is Fact 14. The remaining operator-prose case is a decision, not a missing measurement.
@@ -121,6 +128,8 @@ None. The queued-message flag is Fact 14. The remaining operator-prose case is a
 
 One extension, listed in `pi.extensions`, idle until CTX is bound. `/ctx-go` arms it. `/ctx-stop` disarms it. While armed, it does three phases and then stops. A pause that is not `/ctx-stop` stays armed: the operator's next message is an ordinary turn, and the loop continues after that turn if the phase rules still say so. The armed flag and the rejection count live in the extension's memory. Compaction does not restart the process, so that memory survives it. The model transcript does not.
 
+0. Contradictions. Before the draft, a question, or a claim, `/ctx-go` reads the live records once when their id set has not been read. The read lists pairs that cannot both be true and that neither record superseded. It also lists a formal `liveConflict`. Copies that agree are not listed. Any pair pauses, names the records, and does not arm the loop. It does not supersede anything. The next `/ctx-go` continues when that id set is unchanged. A changed set is read again. A failed read pauses and does not store the set, so the work does not start. This read is not the completion judge.
+
 1. Destination. If CTX is not bound, `/ctx-go` tells the operator to bind and stops. It does not arm, and it does not ask the model to bind. If the injected destination is not already a sentence this extension stored after an operator approval, it tells the operator that the model will draft the destination and they will approve it, then asks the worker for that draft and holds the first two lines of that reply. Those are the only lines the session will see. It shows those lines to the operator and asks for a yes or a no through the extension, the same kind of operator pick pi-ctx already uses. Yes writes one destination with that text, superseding every other live destination, so the new record is the one `destinationMd` injects. An older destination is replaced. No asks for another draft. The worker's `ctx_record`, and a chat reply of "yes", do not approve. Phase 2 does not start until the write succeeds.
 
 2. Questions. The list is every unblocked, unmarked, unclaimed, live question in the bound project, oldest first. Not a subset, and not a copy. The worker settles those by superseding them. No notice is required. A question with the ask-operator marker is not claimed and not superseded by the worker. The loop surfaces that question and pauses. The marker is not `blocks`, and the worker does not set it because a model disagreed. It is set because the operator said to ask. When the only remaining questions are blocked, it pauses and names those questions and the live records that block them. A question is settled when a later record supersedes it. Closing the claim, filing a finding, or the worker saying it is done does not settle it. When a turn ends and the workable list still has a question, the extension starts one more turn, unless that turn made no progress: no tool results, and the frontier, the claim, and the destination are unchanged. It does not start that extra turn when a message is already queued; Pi will deliver the queue. It does not abort the turn that is already running. A no-progress end stays armed and does not spend another model call until the operator sends a message.
@@ -129,6 +138,7 @@ One extension, listed in `pi.extensions`, idle until CTX is bound. `/ctx-go` arm
 
 ### Justified components
 
+- One contradiction read of the live records before the draft, a question, or a claim. Fact 16. The id set is remembered so an unchanged project is not read again. A formal `liveConflict` is listed without asking the model to notice it. Nothing is superseded.
 - A `pi.extensions` entry and a bound-CTX check. Facts 1 and 8. When not bound, the operator is told to bind. Fact 15. Nothing is asked of the model.
 - One operator notice before the draft, saying the model will draft and the operator will approve, then the existing draft prompt. Fact 15. The notice is not a list and not a second turn.
 - `/ctx-go` and `/ctx-stop` as commands, not tools. Fact 8.
@@ -140,7 +150,8 @@ One extension, listed in `pi.extensions`, idle until CTX is bound. `/ctx-go` arm
 
 ### Explicitly rejected approaches
 
-- A judge along the way, or a second model that chooses what to read. Fact 10.
+- A judge of the work along the way, or a second model that chooses what to read. Fact 10. The kickoff read in Fact 16 is not that judge: it cannot say the project is done, and it does not run on later turns.
+- Retiring a contradicting record from the kickoff read. Fact 16. The operator supersedes it.
 - The worker grading itself, or the worker picking the judge. Fact 10.
 - A code-and-tests checklist. Fact 10. The work may not be code.
 - pi-goal-x, `/goal`, or any checklist that is not the frontier. Fact 2.

@@ -1,7 +1,7 @@
 # First Questions
 
 **Session date**: 2026-11-04
-**Revisited**: 2026-11-05
+**Revisited**: 2026-11-11
 **Status**: REVISITED
 
 ## The one-sentence goal
@@ -183,6 +183,15 @@ The directory `pi-ctx-go` holds this contract so it does not replace the 2026-10
 - **Challenges**: The approved packet already says the work may be a report, an investigation, or a draft, not code. Nothing in that approval says the product has to sit inside the Pi process directory. The directory check was added later as a guard so a claim could not hand the judge an arbitrary file. That guard is what stopped this claim. On 2026-11-04 the operator also cut a judge that searches the session for what is relevant. "Let the judge look around" is that cut, reopened. A judge that can read any path, mailbox, or cluster on its own is a second investigation, and a claim that can point at any path can also put a secret in the judge's prompt.
 - **Decision rationale**: A product is whatever the done-claim points at. If it is a file, the judge is given that file even when it is outside the session directory. If it is not a file, the claim's account of it is the product. The packet stays the destination, the constraints, how the questions were closed, and those products. The judge does not browse the session, the disk, or remote systems for other work. Noticing a misleading claim is the judge's verdict on that packet, not a search.
 
+### Surface a project that contradicts itself before the work starts
+
+- **Original request**: "in the other session, it was discovered the ctx project was conflicting itself. i think part of ctx-go's kickoff should be to detect and surface those issues before we continue."
+- **Source / who / when**: User, 2026-11-11, pointing at session `01a14602-6015-725c-ba9d-b9898afb9413`. That session evaluated the apple-pi project and found 284 live records and no formal conflict.
+- **Alignment with the goal**: Strong
+- **Outcome**: MODIFIED to one kickoff pause that names the contradicting live records and does not retire them.
+- **Challenges**: The fold already surfaces `live_conflict` when two successors share one parent, or when two live constraints share a headline. That check missed the apple-pi case. Records there were replaced in words and never superseded, so both copies stayed law: several still said the judge finishes, while a later record said only the operator finishes. Copies that say the same thing are not a conflict. A model that retires the losers would be the worker rewriting the contract. A model that grades the work at kickoff is the mid-run judge already cut. Checking again on every turn is a second loop.
+- **Decision rationale**: Before `/ctx-go` drafts, works a question, or takes a claim, one read of the live records lists pairs that contradict and that neither one superseded. It includes a formal `live_conflict`. It skips copies that agree. It shows the pairs to the operator and pauses. It does not supersede anything, and it is not the completion judge. The next `/ctx-go` continues when that live set is unchanged. A changed set is read again. If the read fails, `/ctx-go` names that and does not start the work.
+
 ## Deleted / avoided scope
 
 - Judge along the way — a second clock that can finish a slice while CTX work remains.
@@ -200,7 +209,10 @@ The directory `pi-ctx-go` holds this contract so it does not replace the 2026-10
 - The extension binding CTX, or guiding while it is not loaded — bind stays the operator's, and an unloaded extension cannot present anything.
 - Guiding the question loop, the judge, or record writing — that is the loop, not a requirement for starting it.
 - Products must live in the Pi session directory — the operator did not require that. The directory check is what stopped a real file in another tree.
+- Auto-retiring a contradicting record at kickoff — the operator retires it. The kickoff only names the pair.
+- Treating agreeing copies as a conflict — the apple-pi session found duplicate decisions that said the same thing. Those are not the issue.
+- A contradiction check on every turn — one read at kickoff, then again only if the live set changed.
 
 ## Open questions
 
-None. The operator confirmed the modified product rule on 2026-11-05. The judge still does not go looking.
+None, pending the operator's yes on the kickoff pause. The 2026-11-05 product rule stays as confirmed.

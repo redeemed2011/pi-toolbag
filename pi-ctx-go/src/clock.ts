@@ -44,6 +44,8 @@ export function readClock(sessionFile: string): GoState {
   const awaitingAccept = body.awaitingAccept === undefined ? false : body.awaitingAccept;
   const obligation = body.obligation === undefined ? "" : body.obligation;
   if (typeof awaitingAccept !== "boolean" || typeof obligation !== "string") return freshState();
+  const conflictStamp = body.conflictStamp === undefined || body.conflictStamp === null ? null : body.conflictStamp;
+  if (conflictStamp !== null && typeof conflictStamp !== "string") return freshState();
   return {
     ...freshState(),
     phase: body.phase,
@@ -60,6 +62,7 @@ export function readClock(sessionFile: string): GoState {
     projectDone,
     awaitingAccept,
     obligation,
+    conflictStamp,
     armed: false,
     hold: false,
   };
@@ -80,6 +83,7 @@ export function writeClock(sessionFile: string, state: GoState): void {
     projectDone: state.projectDone,
     awaitingAccept: state.awaitingAccept,
     obligation: state.obligation,
+    conflictStamp: state.conflictStamp,
     reconciledThrough: state.reconciledThrough,
     statusReports: state.statusReports,
     armed: false,
