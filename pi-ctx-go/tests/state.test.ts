@@ -347,6 +347,28 @@ describe("ctx-go loop", () => {
     expect(rejected.actions.some((action) => action.type === "notify" && action.message.includes("no product change"))).toBe(true);
   });
 
+  it("sends a status report during the outcomes turn back to that turn", () => {
+    const empty = snap({ frontierIds: [], destinationText: "Build the app." });
+    const accepted = onAccept(
+      onJudge(
+        { ...freshState(), armed: true, phase: "claim", approvedDestinationId: "d1", lastClaim: "aim" },
+        empty,
+        { ok: true, done: true, summary: "met" },
+      ).state,
+      empty,
+    );
+    const report = onTurn(accepted.state, empty, { ...doneTurn, text: "The goal is in place." });
+    expect(report.state.outcomesAsked).toBe(false);
+    expect(report.state.phase).toBe("outcomes");
+    expect(report.actions.some((action) => action.type === "judge")).toBe(false);
+    expect(String((report.actions[0] as { text: string }).text)).toContain("first-questions.md");
+    expect(String((report.actions[0] as { text: string }).text)).not.toContain("Name the result of the project");
+    const again = onTurn(report.state, empty, { ...doneTurn, text: "The goal is in place." });
+    expect(again.state.outcomesAsked).toBe(false);
+    expect(again.actions.some((action) => action.type === "judge")).toBe(false);
+    expect(again.actions[0]).toMatchObject({ type: "notify", message: "ctx-go paused: no progress" });
+  });
+
   it("records owed outcomes before a project claim, and a claim that misses the file does not call the judge", () => {
     const empty = snap({ frontierIds: [], destinationText: "Build the app." });
     const waiting = onJudge(

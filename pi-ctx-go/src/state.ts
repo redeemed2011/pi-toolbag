@@ -357,6 +357,7 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
   }
   if (state.phase === "outcomes") {
     if (turn.pending) return { state, actions: [] };
+    if (isStatusReport(turn.text)) return rejectStatus(state, snap);
     const asked = { ...state, outcomesAsked: true, statusReports: 0 };
     if (questionsOpen(snap)) return workQuestions(asked, snap);
     const owedHeld = blockedPause(asked, snap);
@@ -574,6 +575,7 @@ function rejectStatus(state: GoState, snap: Snap): Step {
   const again =
     "That report did not do the work. Write the missing product or record the missing question now. Do not say you are checking.";
   if (state.phase === "reconcile") return prompt(next, `${RECONCILE_PROMPT}\n${again}`, snap);
+  if (state.phase === "outcomes") return prompt(next, `${OUTCOMES_PROMPT}\n${again}`, snap);
   if (state.phase === "questions") {
     const step = workQuestions(next, snap);
     return {
