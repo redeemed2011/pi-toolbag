@@ -60,6 +60,22 @@ describe("ctx-go contradiction read", () => {
     expect(shouldReadConflicts(stamp, failed.state.conflictStamp, false)).toBe(true);
   });
 
+  it("sends one line per distinct rule and keeps a long one", () => {
+    const live = foldLive([
+      rec("a", "Keep the mic", { directive: "Keep the mic." }),
+      rec("b", "Keep the mic again", { directive: "Keep the mic." }),
+      rec("c", "Stop the mic", { directive: "Turn the mic off." }),
+      rec("d", "Essay", { directive: `start ${"x".repeat(400)} end` }),
+    ]);
+    const packet = buildConflictPacket(live);
+    expect(packet.ok).toBe(true);
+    if (!packet.ok) return;
+    expect(packet.text).toContain("a decision Keep the mic — Keep the mic.");
+    expect(packet.text).not.toContain("b decision");
+    expect(packet.text).toContain("Turn the mic off.");
+    expect(packet.text).toContain(`start ${"x".repeat(400)} end`);
+  });
+
   it("lists a formal conflict even when the read says clear", () => {
     const live = foldLive([
       rec("parent", "Old rule"),

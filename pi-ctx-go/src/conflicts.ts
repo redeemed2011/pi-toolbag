@@ -24,6 +24,11 @@ function liveRecords(live: LiveSet): JudgmentRecord[] {
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
+function ruleText(rec: JudgmentRecord): string {
+  return (rec.directive || rec.body || "").replace(/\s+/g, " ").trim();
+}
+
+/** One line per distinct rule. Agreeing copies are omitted. The rule text is kept. */
 export function buildConflictPacket(live: LiveSet): { ok: true; text: string } | { ok: false; error: string } {
   const lines = [
     "These are the live records. Two records contradict when both cannot be true.",
@@ -33,14 +38,17 @@ export function buildConflictPacket(live: LiveSet): { ok: true; text: string } |
     "Or, if there is no such pair, one line: clear",
     "",
   ];
+  const seen = new Set<string>();
   for (const rec of liveRecords(live)) {
-    const body = (rec.directive || rec.body || "").trim();
-    lines.push(`### ${rec.id} ${rec.type}`);
-    lines.push(rec.headline);
-    if (body) lines.push(body);
+    const body = ruleText(rec);
+    const key = body || rec.headline.trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const parts = [`${rec.id} ${rec.type} ${rec.headline.trim()}`];
+    if (body) parts.push(body);
     const supersedes = (rec.supersedes ?? []).join(" ");
-    if (supersedes) lines.push(`supersedes ${supersedes}`);
-    lines.push("");
+    if (supersedes) parts.push(`supersedes ${supersedes}`);
+    lines.push(parts.join(" — "));
   }
   const text = lines.join("\n");
   if (text.length > CALL_CAP) return { ok: false, error: "conflict packet does not fit" };

@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext, SessionBoundaryDraft } from "@earendil-works/pi-coding-agent";
 import { approveDestination } from "./src/approve.js";
 import { readClock, writeClock } from "./src/clock.js";
-import { CONFLICT_ASK, buildConflictPacket, conflictStamp, formalConflicts, parseConflictPairs, shouldReadConflicts } from "./src/conflicts.js";
+import { runConflictRead } from "./src/conflict-read.js";
 import { IMPASSE_ASK, runJudge, thinkingLevel, type JudgeModel } from "./src/judge.js";
 import { buildImpassePacket, buildPacket, judgedDone, parseImpasse, productStamp } from "./src/packet.js";
 import { closedQuestions, prepareClaim, readSnap, type BoundSnap } from "./src/snap.js";
@@ -9,7 +9,6 @@ import { CTX_CLAIM } from "../pi-ctx/src/types.js";
 import {
   freshState,
   onApproved,
-  onConflictRead,
   onDraftRejected,
   onGo,
   onImpasseJudge,
@@ -36,6 +35,8 @@ type GoCtx = ExtensionContext & {
     select(title: string, options: string[]): Promise<string | undefined>;
     input(title: string, placeholder?: string): Promise<string | undefined>;
     notify(message: string, level?: "info" | "warning" | "error"): void;
+    setStatus?(key: string, text: string | undefined): void;
+    setWidget?(key: string, content: string[] | undefined): void;
   };
 };
 
@@ -54,10 +55,19 @@ function branchOf(ctx: GoCtx): { branch: Entry[]; sessionId: string } {
   };
 }
 
+const BUSY_KEY = "ctx-go";
+
 function notify(ctx: GoCtx, actions: Action[]): void {
   for (const action of actions) {
     if (action.type === "notify" && ctx.hasUI) ctx.ui.notify(action.message, action.level);
   }
+}
+
+function showBusy(ctx: GoCtx, text: string | undefined): void {
+  if (!ctx.hasUI) return;
+  ctx.ui.setStatus?.(BUSY_KEY, text);
+  if (text) ctx.ui.setWidget?.(BUSY_KEY, [text]);
+  else ctx.ui.setWidget?.(BUSY_KEY, undefined);
 }
 
 function continued(eventEntries: SessionBoundaryDraft[], actions: Action[]): Continue | undefined {
@@ -183,18 +193,23 @@ export default function ctxGo(pi: ExtensionAPI): void {
       const goCtx = ctx as GoCtx;
       if (goCtx.waitForIdle) await goCtx.waitForIdle();
       const snap = readSnap(branchOf(goCtx).branch, branchOf(goCtx).sessionId);
-      if (snap.live && shouldReadConflicts(conflictStamp(snap.live), state.conflictStamp, state.awaitingAccept)) {
-        const stamp = conflictStamp(snap.live);
-        const packet = buildConflictPacket(snap.live);
-        const formal = formalConflicts(snap.live);
-        const model = packet.ok ? modelOf(goCtx, override) : null;
-        const ran = !packet.ok
-          ? packet
-          : !model
-            ? { ok: false as const, error: "no model" }
-            : await runJudge(model, packet.text, goCtx.cwd, CONFLICT_ASK, false);
-        const read = ran.ok ? { ok: true as const, pairs: parseConflictPairs(ran.text, snap.live) } : ran;
-        const gated = onConflictRead(state, stamp, read, formal);
+      let gated: Step | null = null;
+      try {
+        gated = await runConflictRead({
+          state,
+          live: snap.live,
+          model: modelOf(goCtx, override),
+          cwd: goCtx.cwd,
+          tell: (message) => {
+            if (!goCtx.hasUI) return;
+            goCtx.ui.notify(message, "info");
+            showBusy(goCtx, message);
+          },
+        });
+      } finally {
+        showBusy(goCtx, undefined);
+      }
+      if (gated) {
         state = remember(goCtx, gated.state);
         notify(goCtx, gated.actions);
         if (gated.actions.length > 0) return;
