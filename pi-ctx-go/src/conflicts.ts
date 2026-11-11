@@ -2,14 +2,24 @@ import type { JudgmentRecord, LiveSet } from "../../pi-ctx/src/types.js";
 
 const CALL_CAP = 1_000_000;
 
+/** A record is compared only when it states a rule. A finding, tombstone, citation, or evidence file does not. */
+const COMPARED = new Set(["constraint", "decision", "destination", "out_of_scope"]);
+
+function compared(live: LiveSet): JudgmentRecord[] {
+  return liveRecords(live).filter((rec) => COMPARED.has(rec.type));
+}
+
 export const CONFLICT_ASK =
   "The live CTX records are above. List pairs that contradict and that neither record superseded. Skip copies that agree. Reply with pair lines or one clear line. Do not edit anything.";
 
 export type ConflictPair = { a: string; b: string; why: string };
 
-/** The live id set. A supersede changes it. Agreeing copies do not. */
+/** The compared id set. A new finding does not change it. A supersede of a rule does. */
 export function conflictStamp(live: LiveSet): string {
-  return [...live.live].sort().join(",");
+  return compared(live)
+    .map((rec) => rec.id)
+    .sort()
+    .join(",");
 }
 
 export function shouldReadConflicts(stamp: string, seen: string | null, awaitingAccept: boolean): boolean {
@@ -31,7 +41,7 @@ function ruleText(rec: JudgmentRecord): string {
 /** One line per distinct rule. Agreeing copies are omitted. The rule text is kept. */
 export function buildConflictPacket(live: LiveSet): { ok: true; text: string } | { ok: false; error: string } {
   const lines = [
-    "These are the live records. Two records contradict when both cannot be true.",
+    "These are the live rules. Two rules contradict when both cannot be true.",
     "A copy that says the same thing is not a pair.",
     "Reply with one line per pair:",
     "pair: <id> <id> <what cannot both be true>",
@@ -39,7 +49,7 @@ export function buildConflictPacket(live: LiveSet): { ok: true; text: string } |
     "",
   ];
   const seen = new Set<string>();
-  for (const rec of liveRecords(live)) {
+  for (const rec of compared(live)) {
     const body = ruleText(rec);
     const key = body || rec.headline.trim();
     if (seen.has(key)) continue;
@@ -77,6 +87,7 @@ export function parseConflictPairs(text: string, live: LiveSet): ConflictPair[] 
     const b = match[2] ?? "";
     const why = (match[3] ?? "").trim();
     if (!live.live.has(a) || !live.live.has(b) || a === b || !why) continue;
+    if (/not a contradict|do not contradict|does not contradict/i.test(why)) continue;
     const left = live.byId.get(a);
     const right = live.byId.get(b);
     if ((left?.supersedes ?? []).includes(b) || (right?.supersedes ?? []).includes(a)) continue;
@@ -86,4 +97,31 @@ export function parseConflictPairs(text: string, live: LiveSet): ConflictPair[] 
     pairs.push({ a, b, why });
   }
   return pairs;
+}
+
+function findingText(live: LiveSet): string[] {
+  return liveRecords(live)
+    .filter((rec) => rec.type === "finding")
+    .map((rec) => `${rec.headline}\n${rec.directive ?? ""}\n${rec.body}`);
+}
+
+/** A pair is settled when one rule is no longer live, or a finding names both ids. */
+export function unresolved(lines: string[], live: LiveSet): string[] {
+  const formalNow = new Set(formalConflicts(live).map((line) => line.split(" ")[1] ?? ""));
+  const findings = findingText(live);
+  const open: string[] = [];
+  for (const line of lines) {
+    const pair = /^pair\s+(\S+)\s+(\S+)\s+/.exec(line);
+    if (pair) {
+      const a = pair[1] ?? "";
+      const b = pair[2] ?? "";
+      if (!live.live.has(a) || !live.live.has(b)) continue;
+      if (findings.some((text) => text.includes(a) && text.includes(b))) continue;
+      open.push(line);
+      continue;
+    }
+    const formal = /^formal\s+(\S+)\s+/.exec(line);
+    if (formal && formalNow.has(formal[1] ?? "")) open.push(line);
+  }
+  return open;
 }

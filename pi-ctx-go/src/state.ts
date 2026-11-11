@@ -1,5 +1,6 @@
 import {
   CLAIM_PROMPT,
+  conflictPrompt,
   DRAFT_PROMPT,
   OUTCOMES_PROMPT,
   PROJECT_CLAIM_PROMPT,
@@ -13,7 +14,7 @@ import {
 } from "./prompts.js";
 import { twoLines } from "./text.js";
 
-export type GoPhase = "idle" | "draft" | "reconcile" | "questions" | "work" | "claim" | "outcomes" | "project" | "paused";
+export type GoPhase = "idle" | "draft" | "reconcile" | "conflicts" | "questions" | "work" | "claim" | "outcomes" | "project" | "paused";
 
 export type VerdictKind = "none" | "rejection" | "error";
 
@@ -41,6 +42,8 @@ export type GoState = {
   statusReports: number;
   /** Live record ids already read for contradictions. Null means the read has not succeeded. */
   conflictStamp: string | null;
+  /** Pair and formal lines the session agent still has to settle. */
+  conflictOpen: string[];
   /** The worker has had a turn to record owed outcomes from first-questions.md. */
   outcomesAsked: boolean;
 };
@@ -71,7 +74,7 @@ export type TurnView = {
 
 export type Action =
   | { type: "notify"; level: "info" | "warning" | "error"; message: string }
-  | { type: "prompt"; text: string }
+  | { type: "prompt"; text: string; display?: boolean }
   | { type: "approve"; text: string }
   | { type: "judge"; claim: string; review?: "impasse" }
   | { type: "accept"; summary: string }
@@ -100,6 +103,7 @@ export function freshState(): GoState {
     reconciledThrough: null,
     statusReports: 0,
     conflictStamp: null,
+    conflictOpen: [],
     outcomesAsked: false,
   };
 }
@@ -147,6 +151,7 @@ export function onStop(state: GoState): Step {
       obligation: state.obligation,
       reconciledThrough: state.reconciledThrough,
       conflictStamp: state.conflictStamp,
+      conflictOpen: state.conflictOpen,
       outcomesAsked: state.outcomesAsked,
       phase: state.phase === "paused" ? "paused" : "idle",
     },
@@ -262,28 +267,57 @@ export function onDraftRejected(state: GoState, snap: Snap): Step {
 
 export type ConflictRead = { ok: true; pairs: { a: string; b: string; why: string }[] } | { ok: false; error: string };
 
-/** A failed read does not remember the set. A listed pair pauses and does not arm the loop. */
-export function onConflictRead(state: GoState, stamp: string, read: ConflictRead, formal: string[]): Step {
+const RESOLVE_NOTE = "ctx-go is resolving contradictions";
+
+function sendConflicts(state: GoState, stamp: string, lines: string[]): Step {
+  return {
+    state: {
+      ...state,
+      conflictStamp: stamp,
+      conflictOpen: lines,
+      phase: "conflicts",
+      armed: true,
+      hold: false,
+      statusReports: 0,
+    },
+    actions: [
+      { type: "notify", level: "info", message: RESOLVE_NOTE },
+      { type: "prompt", text: conflictPrompt(lines), display: false },
+    ],
+  };
+}
+
+/** A failed read does not remember the set. Open pairs go to the session agent, not the operator. */
+export function onConflictRead(state: GoState, stamp: string, read: ConflictRead, open: string[]): Step {
   if (!read.ok) {
     return {
       state: { ...state, phase: "paused", hold: false, armed: false },
       actions: [{ type: "notify", level: "warning", message: `ctx-go paused: conflict read ${read.error}` }],
     };
   }
-  if (read.pairs.length > 0 || formal.length > 0) {
-    const lines = [...formal, ...read.pairs.map((pair) => `pair ${pair.a} ${pair.b} ${pair.why}`)];
+  if (open.length > 0) return sendConflicts(state, stamp, open);
+  return { state: { ...state, conflictStamp: stamp, conflictOpen: [] }, actions: [] };
+}
+
+/** The agent has had a turn. Settled lines continue the loop. An unchanged list is sent back once, then the loop pauses. */
+export function onConflictsTurn(state: GoState, snap: Snap, turn: TurnView, still: string[]): Step {
+  if (!state.armed || !snap.bound) return { state, actions: [] };
+  if (turn.outcome !== "completed") return pause(state, `ctx-go paused: turn ${turn.outcome}`);
+  if (turn.toolCount > 0 || turn.pending) return { state, actions: [] };
+  if (still.length === 0) return onGo({ ...state, conflictOpen: [], statusReports: 0 }, snap);
+  const same = still.join("\n") === state.conflictOpen.join("\n");
+  const count = same ? state.statusReports + 1 : 0;
+  const next = { ...state, conflictOpen: still, statusReports: count, phase: "conflicts" as const };
+  if (count >= 2) {
     return {
-      state: { ...state, conflictStamp: stamp, phase: "paused", hold: false, armed: false },
-      actions: [
-        {
-          type: "notify",
-          level: "warning",
-          message: `ctx-go paused: the project contradicts itself\n${lines.join("\n")}`,
-        },
-      ],
+      state: { ...next, phase: "paused", hold: false, armed: false },
+      actions: [{ type: "notify", level: "warning", message: "ctx-go paused: contradictions were not resolved" }],
     };
   }
-  return { state: { ...state, conflictStamp: stamp }, actions: [] };
+  return {
+    state: next,
+    actions: [{ type: "prompt", text: conflictPrompt(still), display: false }],
+  };
 }
 
 function pause(state: GoState, message: string, hard = false): Step {

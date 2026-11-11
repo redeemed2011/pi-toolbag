@@ -53,6 +53,18 @@ export function rejectionPrompt(destination: string, summary: string): string {
   ].join("\n");
 }
 
+export function conflictPrompt(lines: string[]): string {
+  return [
+    "These live rules contradict. Resolve each one before any other work.",
+    "Settle a pair by recording a later CTX record that supersedes the rule that lost, or a tombstone for that rule.",
+    "If the two do not contradict, record a finding that names both ids and says they do not contradict.",
+    "Do not ask the operator to sort this list.",
+    "Do not stop this loop.",
+    "Do not say you are checking.",
+    ...lines,
+  ].join("\n");
+}
+
 export const RECONCILE_PROMPT = [
   "Compare this session with the live CTX project.",
   "A decision that says an outcome is not built, and has no question for it, must be recorded as a question.",

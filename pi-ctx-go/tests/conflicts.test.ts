@@ -11,9 +11,10 @@ import {
   formalConflicts,
   parseConflictPairs,
   shouldReadConflicts,
+  unresolved,
 } from "../src/conflicts.js";
 import { judgeArgv } from "../src/judge.js";
-import { freshState, onConflictRead, onStop } from "../src/state.js";
+import { freshState, onConflictRead, onConflictsTurn, onStop } from "../src/state.js";
 
 function rec(id: string, headline: string, extra: Partial<JudgmentRecord> = {}): JudgmentRecord {
   return {
@@ -46,14 +47,23 @@ describe("ctx-go contradiction read", () => {
       expect(packet.text).not.toContain("### old ");
       expect(packet.text).toContain("same thing is not a pair");
     }
-    const pairs = parseConflictPairs("pair: a b the judge cannot both finish and wait\npair: a old retired\npair: c c same", live);
+    const pairs = parseConflictPairs(
+      "pair: a b the judge cannot both finish and wait\npair: a old retired\npair: c c same\npair: a b they do not contradict",
+      live,
+    );
     expect(pairs).toEqual([{ a: "a", b: "b", why: "the judge cannot both finish and wait" }]);
-    const paused = onConflictRead(freshState(), stamp, { ok: true, pairs }, []);
-    expect(paused.state.armed).toBe(false);
-    expect(paused.state.conflictStamp).toBe(stamp);
-    expect(paused.actions[0]).toMatchObject({ type: "notify" });
-    if (paused.actions[0]?.type === "notify") expect(paused.actions[0].message).toContain("pair a b");
-    expect(shouldReadConflicts(stamp, paused.state.conflictStamp, false)).toBe(false);
+    const open = unresolved(pairs.map((pair) => `pair ${pair.a} ${pair.b} ${pair.why}`), live);
+    const sent = onConflictRead(freshState(), stamp, { ok: true, pairs }, open);
+    expect(sent.state.armed).toBe(true);
+    expect(sent.state.phase).toBe("conflicts");
+    expect(sent.state.conflictStamp).toBe(stamp);
+    expect(sent.actions[0]).toMatchObject({ type: "notify", message: "ctx-go is resolving contradictions" });
+    expect(sent.actions[1]).toMatchObject({ type: "prompt", display: false });
+    if (sent.actions[1]?.type === "prompt") {
+      expect(sent.actions[1].text).toContain("pair a b");
+      expect(sent.actions[1].text).toContain("Do not ask the operator");
+    }
+    expect(shouldReadConflicts(stamp, sent.state.conflictStamp, false)).toBe(false);
     const failed = onConflictRead(freshState(), stamp, { ok: false, error: "no model" }, []);
     expect(failed.state.conflictStamp).toBe(null);
     expect(failed.actions[0]).toMatchObject({ message: "ctx-go paused: conflict read no model" });
@@ -76,6 +86,37 @@ describe("ctx-go contradiction read", () => {
     expect(packet.text).toContain(`start ${"x".repeat(400)} end`);
   });
 
+  it("leaves out records that do not state a rule", () => {
+    const live = foldLive([
+      rec("law", "Keep the mic", { type: "constraint", directive: "Keep the mic." }),
+      rec("aim", "Build it", { type: "destination", body: "Build the app." }),
+      rec("skip", "No tour", { type: "out_of_scope", body: "No tour." }),
+      rec("note", "Worker note", { type: "finding", body: "The mic was seen." }),
+      rec("gone", "Retired", { type: "tombstone", body: "Old mic rule." }),
+      rec("cite", "Cites the file", { type: "citation", body: "See the file." }),
+      rec("file", "The file", { type: "evidence", body: "hash" }),
+    ]);
+    const packet = buildConflictPacket(live);
+    expect(packet.ok).toBe(true);
+    if (!packet.ok) return;
+    expect(packet.text).toContain("law constraint");
+    expect(packet.text).toContain("aim destination");
+    expect(packet.text).toContain("skip out_of_scope");
+    expect(packet.text).not.toContain("note");
+    expect(packet.text).not.toContain("gone");
+    expect(packet.text).not.toContain("cite");
+    expect(packet.text).not.toContain("file");
+    const withNote = conflictStamp(live);
+    const without = conflictStamp(
+      foldLive([
+        rec("law", "Keep the mic", { type: "constraint", directive: "Keep the mic." }),
+        rec("aim", "Build it", { type: "destination", body: "Build the app." }),
+        rec("skip", "No tour", { type: "out_of_scope", body: "No tour." }),
+      ]),
+    );
+    expect(withNote).toBe(without);
+  });
+
   it("lists a formal conflict even when the read says clear", () => {
     const live = foldLive([
       rec("parent", "Old rule"),
@@ -83,19 +124,47 @@ describe("ctx-go contradiction read", () => {
       rec("right", "Other successor", { supersedes: ["parent"] }),
     ]);
     expect(formalConflicts(live)).toEqual(["formal parent successors left right"]);
-    const cleared = onConflictRead(freshState(), conflictStamp(live), { ok: true, pairs: [] }, formalConflicts(live));
-    expect(cleared.state.armed).toBe(false);
-    expect(cleared.actions[0]).toMatchObject({ type: "notify" });
-    if (cleared.actions[0]?.type === "notify") expect(cleared.actions[0].message).toContain("formal parent successors left right");
+    const formal = formalConflicts(live);
+    const sent = onConflictRead(freshState(), conflictStamp(live), { ok: true, pairs: [] }, formal);
+    expect(sent.state.armed).toBe(true);
+    expect(sent.actions[0]).toMatchObject({ type: "notify", message: "ctx-go is resolving contradictions" });
+    if (sent.actions[1]?.type === "prompt") expect(sent.actions[1].text).toContain("formal parent successors left right");
+    const noted = foldLive([
+      rec("parent", "Old rule"),
+      rec("left", "One successor", { supersedes: ["parent"] }),
+      rec("right", "Other successor", { supersedes: ["parent"] }),
+      rec("note", "Settled", { type: "finding", body: "left and right do not contradict" }),
+    ]);
+    expect(unresolved(["pair left right two successors"], noted)).toEqual([]);
+    const done = onConflictsTurn(
+      sent.state,
+      { bound: true, destinationId: "d", frontierIds: [], claimedId: null, askIds: [], askHeadlines: [], blocked: [] },
+      { outcome: "completed", toolCount: 0, pending: false, text: "recorded" },
+      [],
+    );
+    expect(done.state.conflictOpen).toEqual([]);
+    expect(done.state.phase).not.toBe("conflicts");
+    const stuck = { ...sent.state, statusReports: 1 };
+    const paused = onConflictsTurn(
+      stuck,
+      { bound: true, destinationId: "d", frontierIds: [], claimedId: null, askIds: [], askHeadlines: [], blocked: [] },
+      { outcome: "completed", toolCount: 0, pending: false, text: "still looking" },
+      sent.state.conflictOpen,
+    );
+    expect(paused.state.armed).toBe(false);
+    expect(paused.actions[0]).toMatchObject({ type: "notify", message: "ctx-go paused: contradictions were not resolved" });
+    if (paused.actions[0]?.type === "notify") expect(paused.actions[0].message).not.toContain("pair");
   });
 
   it("keeps a shown set across stop and reload", () => {
     const dir = mkdtempSync(join(tmpdir(), "ctx-go-conflict-"));
     const session = join(dir, "session.jsonl");
-    const stopped = onStop({ ...freshState(), conflictStamp: "a,b" });
+    const stopped = onStop({ ...freshState(), conflictStamp: "a,b", conflictOpen: ["pair a b why"], phase: "conflicts" });
     expect(stopped.state.conflictStamp).toBe("a,b");
+    expect(stopped.state.conflictOpen).toEqual(["pair a b why"]);
     writeClock(session, stopped.state);
     expect(readClock(session).conflictStamp).toBe("a,b");
+    expect(readClock(session).conflictOpen).toEqual(["pair a b why"]);
   });
 
   it("gives the contradiction read no tools", () => {

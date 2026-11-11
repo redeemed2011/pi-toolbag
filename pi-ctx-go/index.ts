@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionContext, SessionBoundaryDraft } from "@eare
 import { approveDestination } from "./src/approve.js";
 import { readClock, writeClock } from "./src/clock.js";
 import { runConflictRead } from "./src/conflict-read.js";
+import { unresolved } from "./src/conflicts.js";
 import { IMPASSE_ASK, runJudge, thinkingLevel, type JudgeModel } from "./src/judge.js";
 import { buildImpassePacket, buildPacket, judgedDone, parseImpasse, productStamp } from "./src/packet.js";
 import { closedQuestions, prepareClaim, readSnap, type BoundSnap } from "./src/snap.js";
@@ -9,6 +10,7 @@ import { CTX_CLAIM } from "../pi-ctx/src/types.js";
 import {
   freshState,
   onApproved,
+  onConflictsTurn,
   onDraftRejected,
   onGo,
   onImpasseJudge,
@@ -75,7 +77,8 @@ function continued(eventEntries: SessionBoundaryDraft[], actions: Action[]): Con
   let prompt = false;
   for (const action of actions) {
     if (action.type !== "prompt" && action.type !== "record") continue;
-    entries.push({ type: "custom_message", customType: "ctx-go", content: action.text, display: true });
+    const display = action.type === "prompt" ? action.display !== false : true;
+    entries.push({ type: "custom_message", customType: "ctx-go", content: action.text, display });
     if (action.type === "prompt") prompt = true;
   }
   if (entries.length === eventEntries.length) return undefined;
@@ -212,6 +215,11 @@ export default function ctxGo(pi: ExtensionAPI): void {
       if (gated) {
         state = remember(goCtx, gated.state);
         notify(goCtx, gated.actions);
+        const conflict = gated.actions.find((action) => action.type === "prompt");
+        if (conflict && conflict.type === "prompt") {
+          pi.sendMessage({ customType: "ctx-go", content: conflict.text, display: conflict.display !== false }, { triggerTurn: true });
+          return;
+        }
         if (gated.actions.length > 0) return;
       }
       const opened = onGo(state, snap);
@@ -230,6 +238,20 @@ export default function ctxGo(pi: ExtensionAPI): void {
     if (!state.armed) return;
     const { branch, sessionId } = branchOf(goCtx);
     const snap = readSnap(branch, sessionId);
+    if (state.phase === "conflicts") {
+      const still = snap.live ? unresolved(state.conflictOpen, snap.live) : state.conflictOpen;
+      const step = onConflictsTurn(state, snap, {
+        outcome: event.outcome,
+        toolCount: event.toolResults.length,
+        pending: goCtx.hasPendingMessages(),
+        text: messageText(event.message),
+      }, still);
+      state = remember(goCtx, step.state);
+      notify(goCtx, step.actions);
+      if (!wroteClaim(goCtx, step.actions)) return;
+      if (goCtx.hasPendingMessages()) return;
+      return continued(event.entries, step.actions);
+    }
     const step = onTurn(state, snap, {
       outcome: event.outcome,
       toolCount: event.toolResults.length,

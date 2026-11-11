@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { freshState, type GoPhase, type GoState, type VerdictKind } from "./state.js";
 
-const PHASES: readonly GoPhase[] = ["idle", "draft", "reconcile", "questions", "work", "claim", "outcomes", "project", "paused"];
+const PHASES: readonly GoPhase[] = ["idle", "draft", "reconcile", "conflicts", "questions", "work", "claim", "outcomes", "project", "paused"];
 const KINDS: readonly VerdictKind[] = ["none", "rejection", "error"];
 
 export function clockPath(sessionFile: string): string {
@@ -48,6 +48,8 @@ export function readClock(sessionFile: string): GoState {
   if (conflictStamp !== null && typeof conflictStamp !== "string") return freshState();
   const outcomesAsked = body.outcomesAsked === undefined ? false : body.outcomesAsked;
   if (typeof outcomesAsked !== "boolean") return freshState();
+  const conflictOpen = body.conflictOpen === undefined ? [] : body.conflictOpen;
+  if (!Array.isArray(conflictOpen) || conflictOpen.some((line) => typeof line !== "string")) return freshState();
   return {
     ...freshState(),
     phase: body.phase,
@@ -65,6 +67,7 @@ export function readClock(sessionFile: string): GoState {
     awaitingAccept,
     obligation,
     conflictStamp,
+    conflictOpen,
     outcomesAsked,
     armed: false,
     hold: false,
@@ -87,6 +90,7 @@ export function writeClock(sessionFile: string, state: GoState): void {
     awaitingAccept: state.awaitingAccept,
     obligation: state.obligation,
     conflictStamp: state.conflictStamp,
+    conflictOpen: state.conflictOpen,
     outcomesAsked: state.outcomesAsked,
     reconciledThrough: state.reconciledThrough,
     statusReports: state.statusReports,

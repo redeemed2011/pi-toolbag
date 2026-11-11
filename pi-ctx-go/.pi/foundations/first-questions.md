@@ -188,9 +188,9 @@ The directory `pi-ctx-go` holds this contract so it does not replace the 2026-10
 - **Original request**: "in the other session, it was discovered the ctx project was conflicting itself. i think part of ctx-go's kickoff should be to detect and surface those issues before we continue."
 - **Source / who / when**: User, 2026-11-11, pointing at session `01a14602-6015-725c-ba9d-b9898afb9413`. That session evaluated the apple-pi project and found 284 live records and no formal conflict.
 - **Alignment with the goal**: Strong
-- **Outcome**: MODIFIED to one kickoff pause that names the contradicting live records and does not retire them.
-- **Challenges**: The fold already surfaces `live_conflict` when two successors share one parent, or when two live constraints share a headline. That check missed the apple-pi case. Records there were replaced in words and never superseded, so both copies stayed law: several still said the judge finishes, while a later record said only the operator finishes. Copies that say the same thing are not a conflict. A model that retires the losers would be the worker rewriting the contract. A model that grades the work at kickoff is the mid-run judge already cut. Checking again on every turn is a second loop.
-- **Decision rationale**: Before `/ctx-go` drafts, works a question, or takes a claim, one read of the live records lists pairs that contradict and that neither one superseded. It includes a formal `live_conflict`. It skips copies that agree. It shows the pairs to the operator and pauses. It does not supersede anything, and it is not the completion judge. The next `/ctx-go` continues when that live set is unchanged. A changed set is read again. If the read fails, `/ctx-go` names that and does not start the work.
+- **Outcome**: MODIFIED. The read names the pairs and does not retire them. The session agent resolves them before other work. Confirmed by the operator, 2026-11-11, after the operator was shown the pair list and called it a wall of text no person will work.
+- **Challenges**: The fold already surfaces `live_conflict` when two successors share one parent, or when two live constraints share a headline. That check missed the apple-pi case. Records there were replaced in words and never superseded, so both copies stayed law. Copies that say the same thing are not a conflict. A check that retires the losers would be the worker rewriting the contract by itself. Showing the pairs to the operator produced a list a person will not sort. A finding or a tombstone can settle a pair, and the session agent can record those. Checking again on every turn is a second loop.
+- **Decision rationale**: Before `/ctx-go` drafts, works a question, or takes a claim, one read lists pairs that contradict and that neither record superseded. It includes a formal `live_conflict`. It skips copies that agree, and it skips a pair a live finding already names. The pairs go to the session agent. The agent supersedes or tombstones the rule that lost, or records a finding that names both ids and says they do not contradict. The operator does not get the list. The read does not supersede anything, and it is not the completion judge. If the agent leaves the same pairs, the loop sends them back once and then pauses without the list. If the read fails, `/ctx-go` names that and does not start the work.
 
 ## Deleted / avoided scope
 
@@ -209,7 +209,8 @@ The directory `pi-ctx-go` holds this contract so it does not replace the 2026-10
 - The extension binding CTX, or guiding while it is not loaded — bind stays the operator's, and an unloaded extension cannot present anything.
 - Guiding the question loop, the judge, or record writing — that is the loop, not a requirement for starting it.
 - Products must live in the Pi session directory — the operator did not require that. The directory check is what stopped a real file in another tree.
-- Auto-retiring a contradicting record at kickoff — the operator retires it. The kickoff only names the pair.
+- Auto-retiring a contradicting record at kickoff — the read does not retire it. The session agent records the supersede, tombstone, or finding.
+- Showing the contradiction list to the operator — a person will not sort that list. The session agent gets it.
 - Treating agreeing copies as a conflict — the apple-pi session found duplicate decisions that said the same thing. Those are not the issue.
 - A contradiction check on every turn — one read at kickoff, then again only if the live set changed.
 
