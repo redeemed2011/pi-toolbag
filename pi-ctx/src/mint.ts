@@ -56,6 +56,8 @@ export type PutErr = {
 	conflict_ids?: string[];
 	would_gate_ge?: 0 | 1;
 	would_gate_cs?: 0 | 1;
+	/** Shown to the agent. Never a user dialog. */
+	message?: string;
 };
 
 export function putJudgment(opts: {

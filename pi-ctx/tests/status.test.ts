@@ -304,6 +304,10 @@ describe("ctx tool duties", () => {
 		expect(BIND_GUIDELINE).toContain("ctx_bind");
 		expect(BIND_GUIDELINE).toContain("never bind silently");
 		expect(RECORD_GUIDELINE).toContain("ctx_record");
+		expect(RECORD_GUIDELINE).toContain("Always keep the CTX records up to date. Always.");
+		expect(RECORD_GUIDELINE).toContain("does not open a dialog");
+		expect(RECORD_GUIDELINE).toContain("Narrowing applies_to does not shrink the list in gated-edge");
+		expect(RECORD_GUIDELINE).toContain("tell the user the constraint list is full");
 		expect(RECORD_GUIDELINE).toContain("turn notes");
 		expect(GRANT_GUIDELINE).toContain("ctx_grant");
 		expect(ATTACH_GUIDELINE).toContain("ctx_attach");

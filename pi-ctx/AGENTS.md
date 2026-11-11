@@ -29,7 +29,7 @@ Before committing, run `npm test` from the pi-toolbag root. `npm test` in this d
 | Occupancy switch | `src/commands/occupancy.ts` — TUI GATE confirm; print refuse-with-reason |
 | Bind HITL | `src/commands/bind.ts` (name + confirm; nested bind-consent harvest; no observation-promotion quiz). |
 | Bind-consent promoter | `src/promoter/`, `promoter-worker.ts` — after attended bind; project `pending_replace`; HITL again after 3 settled parent turns (`agent_settled`), not tool rounds. |
-| Mint GATE overflow HITL | `src/commands/record.ts` — TUI refuse-first `select` vs supersede/split; print `"gate"` |
+| Mint GATE overflow | `src/commands/record.ts` — no dialog; `"gate"` returns to the agent |
 | Mint live_conflict HITL | `src/commands/record.ts` — TUI `select` which to supersede; print `"live_conflict"` |
 | Mismatch Banner | `src/render/banner.ts` — `MATCH`/`DIVERGED` + `n`; omit empty/stale/unstamped tail |
 | Mint / refuse | `src/mint.ts` |
@@ -39,7 +39,7 @@ Print mode (`hasUI === false`): bind refuse; occupancy **switch** refuses with a
 
 ## After compact
 
-`cd pi-ctx && npm test`. Sequence 1–10 is in tree. Bind does not promote observations. GATE TUI is refuse-first `select`. Confirm with the user before coding held items.
+`cd pi-ctx && npm test`. Sequence 1–10 is in tree. Bind does not promote observations. A full constraint list returns `"gate"` to the agent and does not open a dialog. Confirm with the user before coding held items.
 
 ## Next
 

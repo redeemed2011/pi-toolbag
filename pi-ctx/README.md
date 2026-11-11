@@ -8,7 +8,7 @@ The spec’s “PR 1–10” is a **local implementation sequence**, not GitHub 
 
 ## Status (2026-09-14)
 
-Shipped: local sequence **1–10** — session inject (observers + model-free compact inject); fold; both occupancy renderers; F-once **A**; tools `ctx_get` `ctx_zoom` `ctx_frontier` `ctx_claim` `ctx_bind` `ctx_record`; `/ctx bind` `/unbind` `/claim`; bind does not run the old observation-promotion quiz; attended bind runs bind-consent harvest (nested promoter, N=10, project pending_replace); per-writer JSONL; mint refuse path; occupancy-switch GATE warn + print refuse-with-reason; golden slot-table inject tests; `sendGuardTokens` on compact-trigger live usage; mint GATE overflow HITL (TUI refuse-first `select`); mint `live_conflict` TUI `select`; Mismatch Banner + Directive Off-Window; sequence 9 tests (Pi `estimateTokens` identity, observer cannot mint judgments, enabled compact hook never `undefined` except off/passive, no `search_similar`). Spawn Envelope held.
+Shipped: local sequence **1–10** — session inject (observers + model-free compact inject); fold; both occupancy renderers; F-once **A**; tools `ctx_get` `ctx_zoom` `ctx_frontier` `ctx_claim` `ctx_bind` `ctx_record`; `/ctx bind` `/unbind` `/claim`; bind does not run the old observation-promotion quiz; attended bind runs bind-consent harvest (nested promoter, N=10, project pending_replace); per-writer JSONL; mint refuse path; occupancy-switch GATE warn + print refuse-with-reason; golden slot-table inject tests; `sendGuardTokens` on compact-trigger live usage; mint GATE overflow returns to the agent with no dialog; mint `live_conflict` TUI `select`; Mismatch Banner + Directive Off-Window; sequence 9 tests (Pi `estimateTokens` identity, observer cannot mint judgments, enabled compact hook never `undefined` except off/passive, no `search_similar`). Spawn Envelope held.
 
 Do not reopen closed leftovers (packing 15k/5k, suffix cap/stub, stop-hook evaluator, Order-flip A, F-packer).
 
@@ -70,7 +70,7 @@ bash scripts/check-sandbox.sh
 | `/ctx bind` / `/ctx unbind` | Project law: name HITL, confirm; bind-consent nested harvest; no observation-promotion quiz |
 | `/ctx claim` | HITL claim / re-claim / close |
 
-Named tools: `ctx_get`, `ctx_zoom`, `ctx_frontier`, `ctx_claim`, `ctx_bind`, `ctx_record`. Print mode refuses HITL bind (no silent bind). Mint GATE overflow: print refuses `"gate"`; TUI refuse-first `select` vs supersede/split. Mint `live_conflict`: print refuses; TUI `select` which to supersede.
+Named tools: `ctx_get`, `ctx_zoom`, `ctx_frontier`, `ctx_claim`, `ctx_bind`, `ctx_record`. Print mode refuses HITL bind (no silent bind). Mint GATE overflow: no dialog; `"gate"` returns to the agent, which resolves it or tells the user. Mint `live_conflict`: print refuses; TUI `select` which to supersede.
 
 ## Layout
 
@@ -83,5 +83,5 @@ Matches the spec §5.10 package layout.
 - `src/store/` — `CTX_HOME` / `~/.pi/ctx`, per-writer JSONL, `project.json`
 - `src/commands/bind.ts` — shared bind HITL used by `/ctx bind` and the `bind` tool
 - `src/commands/occupancy.ts` — per-session occupancy switch (TUI GATE warn; print refuse)
-- `src/commands/record.ts` — mint GATE overflow HITL (print `"gate"`; TUI refuse-first `select` vs supersede/split) and `live_conflict` TUI `select` (print `"live_conflict"`)
+- `src/commands/record.ts` — mint GATE overflow returns `"gate"` to the agent with no dialog; `live_conflict` TUI `select` (print `"live_conflict"`)
 - `src/render/banner.ts` — Mismatch Banner (`MATCH`/`DIVERGED`; omit empty/stale/unstamped tail)

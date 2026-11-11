@@ -1,12 +1,18 @@
-import { bodySetCS, bodySetGE, foldLive } from "../fold.js";
+import { foldLive } from "../fold.js";
 import type { Hitl } from "../hitl.js";
 import type { PutErr, PutInput, PutOk } from "../mint.js";
 import { executeRecord } from "../tools/record.js";
 import type { JudgmentRecord, Occupancy } from "../types.js";
 
-export const GATE_REFUSE = "refuse write";
-export const GATE_SUPERSEDE = "supersede a live constraint";
-export const GATE_SPLIT = "split applies_to";
+const GATE_TELL = "If you cannot resolve it, tell the user the constraint list is full.";
+
+export function gateAgentMessage(occupancy: Occupancy): string {
+	const resolve =
+		occupancy === "claim-strip"
+			? "Resolve it by calling ctx_record again with supersedes set to the live constraint this replaces and reason_class decision_change, or with applies_to set to one live question other than the claimed question."
+			: "Resolve it by calling ctx_record again with supersedes set to the live constraint this replaces and reason_class decision_change. Narrowing applies_to does not shrink this list.";
+	return `The constraint list is full. ${resolve} ${GATE_TELL}`;
+}
 
 export type RecordFlowOpts = {
 	hitl: Hitl;
@@ -63,33 +69,9 @@ async function openLiveConflict(
 	});
 }
 
-async function openSupersede(opts: RecordFlowOpts, gate: PutErr): Promise<PutOk | PutErr | { ok: false; error: string }> {
-	const live = foldLive(opts.existing);
-	const bodies = opts.occupancy === "claim-strip" ? bodySetCS(live, opts.claimedId) : bodySetGE(live);
-	if (bodies.length === 0) return gate;
-	const picked = await opts.hitl.select("Supersede which live constraint?", bodies.map(labelOf));
-	const id = pickId(bodies, picked);
-	if (!id) return { ok: false, error: "cancelled" };
-	return retry(opts, {
-		...opts.input,
-		supersedes: id,
-		reason_class: opts.input.reason_class ?? "decision_change",
-	});
-}
-
-async function openSplit(opts: RecordFlowOpts, gate: PutErr): Promise<PutOk | PutErr | { ok: false; error: string }> {
-	const live = foldLive(opts.existing);
-	if (live.questions.length === 0) return gate;
-	const picked = await opts.hitl.select("Split applies_to to one question", live.questions.map(labelOf));
-	const id = pickId(live.questions, picked);
-	if (!id) return { ok: false, error: "cancelled" };
-	return retry(opts, { ...opts.input, applies_to: [id] });
-}
-
 /**
- * Mint write with live_conflict and GATE overflow HITL.
- * Print stays refuse `"live_conflict"` / `"gate"`.
- * TUI GATE: refuse-first `select` (Pi `confirm()` is Yes-first and cannot refuse-default).
+ * Mint write with live_conflict HITL.
+ * A full constraint list does not open a dialog. The error goes back to the agent.
  */
 export async function runRecordFlow(
 	opts: RecordFlowOpts,
@@ -98,11 +80,5 @@ export async function runRecordFlow(
 	if (first.ok) return first;
 	if (first.error === "live_conflict") return openLiveConflict(opts, first);
 	if (first.error !== "gate") return first;
-	if (!opts.hitl.hasUI) return first;
-
-	const choice = await opts.hitl.select("Mint would GATE", [GATE_REFUSE, GATE_SUPERSEDE, GATE_SPLIT]);
-	if (!choice || choice === GATE_REFUSE) return first;
-	if (choice === GATE_SUPERSEDE) return openSupersede(opts, first);
-	if (choice === GATE_SPLIT) return openSplit(opts, first);
-	return { ok: false, error: "cancelled" };
+	return { ...first, message: gateAgentMessage(opts.occupancy) };
 }
