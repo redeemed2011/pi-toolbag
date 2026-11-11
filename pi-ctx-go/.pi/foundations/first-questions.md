@@ -6,7 +6,7 @@
 
 ## The one-sentence goal
 
-> "A new Pi extension that runs only while CTX is bound keeps that session working through the open CTX work until a separate model judge, asked only at the claim of done, agrees the project is done, for the operator who said go."
+> "A new Pi extension that runs only while CTX is bound keeps that session working through the open CTX work until a separate model judge, asked only at the claim of done, recommends it is done, and the operator who said go accepts that result."
 
 The directory `pi-ctx-go` holds this contract so it does not replace the 2026-10-14 failover contract in `pi-toolbag/.pi/foundations/`. The extension's home is pi-toolbag. The package name is not part of the goal.
 

@@ -1,6 +1,7 @@
 import {
   CLAIM_PROMPT,
   DRAFT_PROMPT,
+  OUTCOMES_PROMPT,
   PROJECT_CLAIM_PROMPT,
   QUESTION_PROMPT,
   RECONCILE_PROMPT,
@@ -12,7 +13,7 @@ import {
 } from "./prompts.js";
 import { twoLines } from "./text.js";
 
-export type GoPhase = "idle" | "draft" | "reconcile" | "questions" | "work" | "claim" | "project" | "paused";
+export type GoPhase = "idle" | "draft" | "reconcile" | "questions" | "work" | "claim" | "outcomes" | "project" | "paused";
 
 export type VerdictKind = "none" | "rejection" | "error";
 
@@ -40,6 +41,8 @@ export type GoState = {
   statusReports: number;
   /** Live record ids already read for contradictions. Null means the read has not succeeded. */
   conflictStamp: string | null;
+  /** The worker has had a turn to record owed outcomes from first-questions.md. */
+  outcomesAsked: boolean;
 };
 
 export type BlockedQuestion = { id: string; headline: string; blockers: string[] };
@@ -97,6 +100,7 @@ export function freshState(): GoState {
     reconciledThrough: null,
     statusReports: 0,
     conflictStamp: null,
+    outcomesAsked: false,
   };
 }
 
@@ -143,6 +147,7 @@ export function onStop(state: GoState): Step {
       obligation: state.obligation,
       reconciledThrough: state.reconciledThrough,
       conflictStamp: state.conflictStamp,
+      outcomesAsked: state.outcomesAsked,
       phase: state.phase === "paused" ? "paused" : "idle",
     },
     actions: [{ type: "notify", level: "info", message: "ctx-go stopped" }],
@@ -190,6 +195,9 @@ function workFrom(state: GoState, snap: Snap): Step {
       `${base}\nThe operator said this is not done: ${state.obligation}`,
       snap,
     );
+  }
+  if (!questionsOpen(snap) && state.aimMet && !state.outcomesAsked) {
+    return prompt({ ...state, phase: "outcomes" }, OUTCOMES_PROMPT, snap);
   }
   if (!questionsOpen(snap)) {
     const verdict = state.lastVerdict.trim();
@@ -347,6 +355,14 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
     if (snap.notBuiltOpen && !questionsOpen(snap)) return pause(state, NOT_BUILT);
     return finishReconcile({ ...state, statusReports: 0 }, snap);
   }
+  if (state.phase === "outcomes") {
+    if (turn.pending) return { state, actions: [] };
+    const asked = { ...state, outcomesAsked: true, statusReports: 0 };
+    if (questionsOpen(snap)) return workQuestions(asked, snap);
+    const owedHeld = blockedPause(asked, snap);
+    if (owedHeld) return owedHeld;
+    return prompt({ ...asked, phase: "project" }, PROJECT_CLAIM_PROMPT, snap);
+  }
   const changed = fingerprint(snap) !== state.lastFingerprint;
   const held = blockedPause(state, snap);
   if (held) return held;
@@ -358,6 +374,10 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
     return workQuestions({ ...state, statusReports: 0 }, snap);
   }
   if (state.aimMet && state.phase !== "work") {
+    if (!state.outcomesAsked) {
+      if (turn.pending) return { state, actions: [] };
+      return prompt({ ...state, phase: "outcomes" }, OUTCOMES_PROMPT, snap);
+    }
     if (state.phase !== "project") {
       if (turn.pending) return { state, actions: [] };
       return prompt({ ...state, phase: "project" }, PROJECT_CLAIM_PROMPT, snap);
@@ -365,6 +385,9 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
     const projectClaim = turn.text.trim();
     if (isStatusReport(projectClaim)) return rejectStatus({ ...state, phase: "project" }, snap);
     if (!projectClaim) return pause(state, "ctx-go paused: done-claim was empty");
+    if (!namesQuestionsFile(projectClaim)) {
+      return pause(state, "ctx-go paused: the project claim did not name first-questions.md");
+    }
     return { state: { ...state, lastClaim: projectClaim, statusReports: 0 }, actions: [{ type: "judge", claim: projectClaim }] };
   }
   if (state.phase !== "work" && state.phase !== "claim") {
@@ -487,10 +510,10 @@ export function onAccept(state: GoState, snap: Snap): Step {
     hold: false,
   };
   if (!state.aimMet) {
-    const accepted = { ...cleared, armed: true, aimMet: true, projectDone: false };
+    const accepted = { ...cleared, armed: true, aimMet: true, projectDone: false, outcomesAsked: false };
     return questionsOpen(snap)
       ? workQuestions(accepted, snap)
-      : prompt({ ...accepted, phase: "project" }, PROJECT_CLAIM_PROMPT, snap);
+      : prompt({ ...accepted, phase: "outcomes" }, OUTCOMES_PROMPT, snap);
   }
   return {
     state: { ...freshState(), approvedDestinationId: state.approvedDestinationId, aimMet: true, projectDone: true },
@@ -569,6 +592,11 @@ function rejectStatus(state: GoState, snap: Snap): Step {
         ? rejectionPrompt(snap.destinationText ?? "", state.lastVerdict)
         : workPrompt(snap.destinationText ?? "");
   return prompt(next, `${text}\n${again}`, snap);
+}
+
+/** An absolute path. A relative path or a slash command does not name the file. */
+function namesQuestionsFile(claim: string): boolean {
+  return /(?:^|[\s`'"])\/\S*first-questions\.md\b/.test(claim);
 }
 
 function reportsNoQuestions(text: string): boolean {

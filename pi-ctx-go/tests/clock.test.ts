@@ -72,5 +72,16 @@ describe("ctx-go clock", () => {
     expect(loaded.armed).toBe(false);
     expect(loaded.aimMet).toBe(true);
     expect(loaded.projectDone).toBe(false);
+    expect(loaded.outcomesAsked).toBe(false);
+  });
+
+  it("keeps the outcomes turn across reload", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ctx-go-clock-"));
+    const session = join(dir, "session.jsonl");
+    writeClock(session, { ...freshState(), phase: "outcomes", approvedDestinationId: "d1", aimMet: true, outcomesAsked: true });
+    const loaded = readClock(session);
+    expect(loaded.phase).toBe("outcomes");
+    expect(loaded.outcomesAsked).toBe(true);
+    expect(loaded.armed).toBe(false);
   });
 });

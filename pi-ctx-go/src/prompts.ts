@@ -66,6 +66,13 @@ export const RECONCILE_PROMPT = [
   "If you cannot record one item, start with Impasse: and name that item.",
 ].join("\n");
 
+export const OUTCOMES_PROMPT = [
+  "The destination was accepted. The project is not done.",
+  "Read this project's first-questions.md.",
+  "Record each still-owed outcome as a CTX question.",
+  "Do not claim the project on this turn.",
+].join("\n");
+
 export const PROJECT_CLAIM_PROMPT = [
   "Name the result of the project.",
   "Name each product file by its full path. A path relative to this session is not enough.",

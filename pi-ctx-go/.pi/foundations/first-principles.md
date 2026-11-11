@@ -2,7 +2,7 @@
 
 **Session date**: 2026-11-04
 **Revisited**: 2026-11-05
-**Scope**: A new Pi extension that runs only while CTX is bound keeps that session working through the open CTX work until a separate model judge, asked only at the claim of done, agrees the project is done, for the operator who said go. Acceptance of the two-line destination is not that agreement.
+**Scope**: A new Pi extension that runs only while CTX is bound keeps that session working through the open CTX work until a separate model judge, asked only at the claim of done, recommends it is done, and the operator who said go accepts that result. No AI marks the project finished.
 
 ## Bedrock facts
 
