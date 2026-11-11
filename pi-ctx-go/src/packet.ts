@@ -11,6 +11,8 @@ export type PacketInput = {
   constraints: { id: string; headline: string; body: string }[];
   closed: { id: string; headline: string; body: string; superseded: string }[];
   claim: string;
+  /** The operator's Not-done sentence. It stays until Accept. */
+  obligation?: string;
 };
 
 export type Packet = { ok: true; text: string } | { ok: false; error: string };
@@ -24,10 +26,11 @@ function isSlashCommand(token: string): boolean {
   return /^\/[^/\s.]+$/.test(token);
 }
 
+/** A session-relative path is not a product. Only an absolute path counts. */
 function isFilePath(token: string): boolean {
-  if (!token || token.includes("://") || /\s/.test(token) || isSlashCommand(token)) return false;
-  if (token.includes("/")) return !bareProse(token);
-  return /\.[A-Za-z0-9]{1,8}$/.test(token);
+  if (!token.startsWith("/") || token.includes("://") || /\s/.test(token) || isSlashCommand(token)) return false;
+  if (token.length < 2 || token.endsWith("/")) return false;
+  return !bareProse(token);
 }
 
 export function namedPaths(claim: string): string[] {
@@ -101,13 +104,18 @@ export function buildPacket(input: PacketInput): Packet {
       ...unread.map((token) => `### ${token}\nThis file is not in the packet. Read it.`),
     ];
     return [
-      "You are the completion judge. Reply with two lines:",
+      "You are the completion judge. Reply with these lines:",
       "verdict: done",
       "or",
       "verdict: not-done",
-      "summary: one short paragraph",
+      "outcome: \"<quote from the destination>\" <absolute product path> <behavior you read there>",
+      "gap: <what is missing or wrong>",
+      "Write one outcome line for each part of the destination you found. Quote the destination and name an absolute path.",
+      "Write a gap line for each part you could not find. Omit gap lines when nothing is missing.",
+      "A restatement of the claim is not an outcome. A bare verdict is not done.",
       "If the claim names no product, the verdict is not-done.",
-      "If a product's text is not included below, read that file. You can read and search files. Do not edit them.",
+      "Questions closed below are worker claims, not proof.",
+      "If a product's text is not included below, read that file. You can read and search files. Do not edit them. Do not run tests.",
       "",
       "## Destination",
       input.destination,
@@ -116,7 +124,11 @@ export function buildPacket(input: PacketInput): Packet {
       constraints,
       "",
       "## Questions closed",
+      "These are worker claims, not proof.",
       closed,
+      "",
+      "## Operator Not-done",
+      input.obligation?.trim() || "none",
       "",
       "## Done claim",
       input.claim,
@@ -174,15 +186,48 @@ export function parseImpasse(text: string): { ok: true; through: boolean; summar
   return { ok: false, error: "no verdict" };
 }
 
-export function parseVerdict(text: string): { ok: true; done: boolean; summary: string } | { ok: false; error: string } {
+function outcomePaths(line: string): string[] {
+  const body = line.replace(/^outcome:\s*/i, "");
+  return body.split(/[\s"'`()]+/).filter((token) => isFilePath(token));
+}
+
+function quotesDestination(line: string, destination: string): boolean {
+  if (!destination) return true;
+  const quotes = [...line.matchAll(/"([^"]+)"|'([^']+)'/g)].map((match) => match[1] || match[2] || "");
+  return quotes.some((quote) => quote.length > 0 && destination.includes(quote));
+}
+
+/** A bare verdict is not done. A gap line, or an outcome without an absolute path, is not done. */
+export function parseVerdict(text: string, destination = ""): { ok: true; done: boolean; summary: string } | { ok: false; error: string } {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   const verdicts = lines.filter((line) => line.toLowerCase().startsWith("verdict:"));
   const verdict = verdicts[verdicts.length - 1];
   if (!verdict) return { ok: false, error: "no verdict" };
   const value = verdict.slice("verdict:".length).trim().toLowerCase();
   if (value !== "done" && value !== "not-done") return { ok: false, error: "bad verdict" };
+  const outcomes = lines.filter((line) => line.toLowerCase().startsWith("outcome:"));
+  const gaps = lines.filter((line) => line.toLowerCase().startsWith("gap:"));
   const summaries = lines.filter((line) => line.toLowerCase().startsWith("summary:"));
   const summaryLine = summaries[summaries.length - 1];
   const summary = summaryLine ? summaryLine.slice("summary:".length).trim() : "";
-  return { ok: true, done: value === "done", summary };
+  const gapText = gaps.map((line) => line.slice(line.indexOf(":") + 1).trim()).filter(Boolean).join(" ");
+  if (value !== "done") return { ok: true, done: false, summary: gapText || summary || "not done" };
+  if (outcomes.length === 0) return { ok: true, done: false, summary: summary || "no outcome line" };
+  if (outcomes.some((line) => outcomePaths(line).length === 0)) return { ok: true, done: false, summary: "an outcome line has no absolute path" };
+  if (destination && outcomes.some((line) => !quotesDestination(line, destination))) {
+    return { ok: true, done: false, summary: "an outcome line does not quote the destination" };
+  }
+  if (gaps.length > 0) return { ok: true, done: false, summary: gapText || "gap" };
+  return { ok: true, done: true, summary: outcomes.join("\n") };
+}
+
+/** A done verdict with no product in the claim is not done. */
+export function judgedDone(
+  text: string,
+  destination: string,
+  claim: string,
+): { ok: true; done: boolean; summary: string } | { ok: false; error: string } {
+  const parsed = parseVerdict(text, destination);
+  if (parsed.ok && parsed.done && namedPaths(claim).length === 0) return { ok: true, done: false, summary: "no product" };
+  return parsed;
 }

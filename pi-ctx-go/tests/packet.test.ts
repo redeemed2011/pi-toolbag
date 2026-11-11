@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { foldLive } from "../../pi-ctx/src/fold.js";
 import { putJudgment } from "../../pi-ctx/src/mint.js";
 import { judgeArgv } from "../src/judge.js";
-import { buildImpassePacket, buildPacket, namedPaths, parseImpasse, parseVerdict, productStamp } from "../src/packet.js";
+import { buildImpassePacket, buildPacket, judgedDone, namedPaths, parseImpasse, parseVerdict, productStamp } from "../src/packet.js";
 import { closedQuestions } from "../src/snap.js";
 
 describe("judge packet", () => {
@@ -36,7 +36,7 @@ describe("judge packet", () => {
   });
 
   it("parses a verdict and rejects anything else", () => {
-    expect(parseVerdict("verdict: done\nsummary: shipped")).toEqual({ ok: true, done: true, summary: "shipped" });
+    expect(parseVerdict("verdict: done\nsummary: shipped")).toEqual({ ok: true, done: false, summary: "shipped" });
     expect(parseVerdict("verdict: done\nsummary: echoed\nverdict: not-done\nsummary: real")).toEqual({
       ok: true,
       done: false,
@@ -45,23 +45,79 @@ describe("judge packet", () => {
     expect(parseVerdict("looks good")).toEqual({ ok: false, error: "no verdict" });
   });
 
+  it("accepts done only with an outcome path and no gap line", () => {
+    const destination = "Build the app.";
+    const outcome = 'outcome: "Build the app." /tmp/app.ts the function builds it';
+    expect(parseVerdict(`verdict: done\n${outcome}`, destination)).toMatchObject({ ok: true, done: true });
+    expect(parseVerdict(`verdict: done\n${outcome}\ngap: the tests fail`, destination)).toMatchObject({
+      ok: true,
+      done: false,
+      summary: "the tests fail",
+    });
+    expect(parseVerdict(`verdict: done\noutcome: "Build the app." the function builds it`, destination)).toMatchObject({
+      done: false,
+      summary: "an outcome line has no absolute path",
+    });
+    expect(parseVerdict(`verdict: done\noutcome: "Build the app." /tmp/app.ts no gap remains`, destination)).toMatchObject({
+      done: true,
+    });
+    const echoed = `verdict: done\n${outcome}`;
+    expect(judgedDone(echoed, destination, "The cluster report is the product.")).toMatchObject({
+      ok: true,
+      done: false,
+      summary: "no product",
+    });
+    expect(judgedDone(echoed, destination, "Product is `/tmp/app.ts`.")).toMatchObject({ ok: true, done: true });
+    const packet = buildPacket({
+      cwd: mkdtempSync(join(tmpdir(), "ctx-go-gap-")),
+      destination,
+      constraints: [],
+      closed: [],
+      claim: "The cluster report is the product.",
+      obligation: "the copy stays down",
+    });
+    expect(packet.ok).toBe(true);
+    if (packet.ok) {
+      expect(packet.text).toContain("worker claims, not proof");
+      expect(packet.text).toContain("outcome:");
+      expect(packet.text).toContain("the copy stays down");
+      expect(packet.text).toContain("Do not run tests.");
+    }
+  });
+
   it("names file products and skips prose and slash commands", () => {
-    expect(namedPaths("and/or read/write src/out.md. `Makefile` `https://x/y` `/ctx-go` `/ctx-stop`")).toEqual([
-      "src/out.md",
-    ]);
-    expect(namedPaths("wrote `out.md` and `the report`")).toEqual(["out.md"]);
+    expect(namedPaths("and/or read/write src/out.md. `Makefile` `https://x/y` `/ctx-go` `/ctx-stop`")).toEqual([]);
+    expect(namedPaths("wrote `out.md` and `the report`")).toEqual([]);
+    expect(namedPaths("Product is `/tmp/out.md`")).toEqual(["/tmp/out.md"]);
+  });
+
+  it("does not treat a session-relative path as a product", () => {
+    expect(namedPaths("Product is `out.md` and src/out.md")).toEqual([]);
+    const cwd = mkdtempSync(join(tmpdir(), "ctx-go-rel-"));
+    writeFileSync(join(cwd, "out.md"), "hello");
+    const packet = buildPacket({
+      cwd,
+      destination: "Ship it",
+      constraints: [],
+      closed: [],
+      claim: "Product is `out.md`",
+    });
+    expect(packet.ok).toBe(true);
+    if (packet.ok) expect(packet.text).not.toContain("hello");
+    expect(productStamp(cwd, "`out.md` `src/out.md`")).toBe("");
   });
 
   it("includes a named file and refuses one it cannot read", () => {
     const cwd = mkdtempSync(join(tmpdir(), "ctx-go-"));
-    writeFileSync(join(cwd, "out.md"), "hello");
-    expect(namedPaths("wrote `out.md` and `the report`")).toEqual(["out.md"]);
+    const file = join(cwd, "out.md");
+    writeFileSync(file, "hello");
+    expect(namedPaths(`wrote \`${file}\` and \`the report\``)).toEqual([file]);
     const packet = buildPacket({
       cwd,
       destination: "Ship it",
       constraints: [{ id: "c1", headline: "Be reliable", body: "Be reliable" }],
       closed: [],
-      claim: "Product is `out.md`",
+      claim: `Product is \`${file}\``,
     });
     expect(packet.ok).toBe(true);
     if (packet.ok) expect(packet.text).toContain("hello");
@@ -70,7 +126,7 @@ describe("judge packet", () => {
       destination: "Ship it",
       constraints: [],
       closed: [],
-      claim: "Product is `missing.md`",
+      claim: `Product is \`${join(cwd, "missing.md")}\``,
     });
     expect(missing.ok).toBe(false);
     const mentioned = buildPacket({
@@ -78,22 +134,24 @@ describe("judge packet", () => {
       destination: "Ship it",
       constraints: [],
       closed: [],
-      claim: "Started with `/ctx-go`. Product is `out.md`.",
+      claim: `Started with \`/ctx-go\`. Product is \`${file}\`.`,
     });
     expect(mentioned.ok).toBe(true);
     if (mentioned.ok) {
       expect(mentioned.text).toContain("hello");
       expect(mentioned.text).not.toContain("missing product");
     }
-    writeFileSync(join(cwd, "..notes.md"), "kept");
+    const dottedPath = join(cwd, "..notes.md");
+    writeFileSync(dottedPath, "kept");
     const dotted = buildPacket({
       cwd,
       destination: "Ship it",
       constraints: [],
       closed: [],
-      claim: "Product is `..notes.md`",
+      claim: `Product is \`${dottedPath}\``,
     });
     expect(dotted.ok).toBe(true);
+    if (dotted.ok) expect(dotted.text).toContain("kept");
   });
 
   it("reads a file outside the session directory", () => {
@@ -200,23 +258,29 @@ describe("judge packet", () => {
     const ask = argv[argv.indexOf("-p") + 1] ?? "";
     expect(ask.length).toBeLessThan(200);
     expect(ask).not.toContain("verdict:");
+    expect(ask).not.toMatch(/two lines/i);
+    expect(ask).toMatch(/outcome/i);
+    expect(ask).toMatch(/gap/i);
   });
 
   it("stamps product bytes and ignores the contract file", () => {
     const cwd = mkdtempSync(join(tmpdir(), "ctx-go-stamp-"));
-    writeFileSync(join(cwd, "app.txt"), "one");
-    writeFileSync(join(cwd, "first-questions.md"), "kept");
-    const claim = "`app.txt` `first-questions.md`";
+    const app = join(cwd, "app.txt");
+    const contract = join(cwd, "first-questions.md");
+    const extra = join(cwd, "extra.txt");
+    writeFileSync(app, "one");
+    writeFileSync(contract, "kept");
+    const claim = `\`${app}\` \`${contract}\``;
     const first = productStamp(cwd, claim);
-    expect(first).toContain("app.txt");
+    expect(first).toContain(app);
     expect(first).not.toContain("first-questions.md");
-    expect(productStamp(cwd, "`first-questions.md` only")).toBe("");
-    writeFileSync(join(cwd, "first-questions.md"), "changed");
+    expect(productStamp(cwd, `\`${contract}\` only`)).toBe("");
+    writeFileSync(contract, "changed");
     expect(productStamp(cwd, claim)).toBe(first);
-    writeFileSync(join(cwd, "app.txt"), "two");
+    writeFileSync(app, "two");
     expect(productStamp(cwd, claim)).not.toBe(first);
-    writeFileSync(join(cwd, "extra.txt"), "x");
-    expect(productStamp(cwd, "`app.txt` `extra.txt`")).not.toBe(productStamp(cwd, "`app.txt`"));
+    writeFileSync(extra, "x");
+    expect(productStamp(cwd, `\`${app}\` \`${extra}\``)).not.toBe(productStamp(cwd, `\`${app}\``));
   });
 
   it("does not load fallback-chain providers for the judge", () => {

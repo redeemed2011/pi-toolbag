@@ -15,7 +15,7 @@ import {
   rejectionPrompt,
   workPrompt,
 } from "../src/prompts.js";
-import { freshState, onApproved, onGo, onImpasseJudge, onJudge, onStop, onTurn, type Snap } from "../src/state.js";
+import { freshState, onAccept, onApproved, onGo, onImpasseJudge, onJudge, onNotDone, onStop, onTurn, type Snap } from "../src/state.js";
 
 function snap(partial: Partial<Snap> = {}): Snap {
   return {
@@ -101,6 +101,92 @@ describe("ctx-go loop", () => {
     expect(String((marked.actions[0] as { message: string }).message)).toContain("q9");
   });
 
+  it("does not advance when the turn says the goal is in place", () => {
+    const phrase = "The goal is in place.";
+    const empty = snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "tip" });
+    const started = onApproved({ ...freshState(), armed: true }, empty, "d1");
+    const reconcile = onTurn(started.state, empty, { ...doneTurn, text: phrase });
+    expect(reconcile.state.phase).toBe("reconcile");
+    expect(reconcile.state.reconciledThrough).toBeNull();
+    const working = onTurn(started.state, empty, doneTurn).state;
+    const work = onTurn(working, empty, { ...doneTurn, text: phrase });
+    expect(work.state.phase).toBe("work");
+    expect(work.actions.some((action) => action.type === "judge")).toBe(false);
+  });
+
+  it("does not advance when the turn says the outcomes are not proven", () => {
+    const phrase = "The outcomes are not proven.";
+    const empty = snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "tip" });
+    const started = onApproved({ ...freshState(), armed: true }, empty, "d1");
+    const reconcile = onTurn(started.state, empty, { ...doneTurn, text: phrase });
+    expect(reconcile.state.phase).toBe("reconcile");
+    expect(reconcile.state.reconciledThrough).toBeNull();
+    const working = onTurn(started.state, empty, doneTurn).state;
+    const work = onTurn(working, empty, { ...doneTurn, text: phrase });
+    expect(work.state.phase).toBe("work");
+    expect(work.actions.some((action) => action.type === "judge")).toBe(false);
+  });
+
+  it("does not advance when the turn says the model is checking", () => {
+    const phrase = "The model is checking.";
+    const empty = snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "tip" });
+    const started = onApproved({ ...freshState(), armed: true }, empty, "d1");
+    const reconcile = onTurn(started.state, empty, { ...doneTurn, text: phrase });
+    expect(reconcile.state.phase).toBe("reconcile");
+    expect(reconcile.state.reconciledThrough).toBeNull();
+    const working = onTurn(started.state, empty, doneTurn).state;
+    const work = onTurn(working, empty, { ...doneTurn, text: phrase });
+    expect(work.state.phase).toBe("work");
+    expect(work.actions.some((action) => action.type === "judge")).toBe(false);
+  });
+
+  it("does not finish reconcile on a status report", () => {
+    const empty = snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "tip" });
+    const started = onApproved({ ...freshState(), armed: true }, empty, "d1");
+    const status =
+      "The one-sentence goal is in place, but the other recorded outcomes are not all proven. I am checking those against what is actually running.";
+    const step = onTurn(started.state, empty, { ...doneTurn, text: status });
+    expect(step.state.phase).toBe("reconcile");
+    expect(step.state.reconciledThrough).toBeNull();
+    expect(step.actions.some((action) => action.type === "judge")).toBe(false);
+  });
+
+  it("resets the status-report count when the turn changed something", () => {
+    const phrase = "The model is checking.";
+    const empty = snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "tip" });
+    let state = onApproved({ ...freshState(), armed: true }, empty, "d1").state;
+    state = onTurn(state, empty, doneTurn).state;
+    const first = onTurn(state, empty, { ...doneTurn, text: phrase });
+    expect(first.state.statusReports).toBe(1);
+    expect(first.actions[0]).toMatchObject({ type: "prompt" });
+    const moved = snap({ frontierIds: [], claimedId: "q9", destinationText: "Build the app.", sessionTip: "tip" });
+    const changed = onTurn(first.state, moved, { ...doneTurn, text: phrase });
+    expect(changed.state.statusReports).toBe(0);
+    expect(changed.actions[0]).toMatchObject({ type: "prompt" });
+    const again = onTurn(changed.state, moved, { ...doneTurn, text: phrase });
+    expect(again.state.statusReports).toBe(1);
+    expect(again.actions[0]).toMatchObject({ type: "prompt" });
+    const repeated = onTurn(again.state, moved, { ...doneTurn, text: phrase });
+    expect(repeated.actions).toEqual([{ type: "notify", level: "warning", message: "ctx-go paused: no progress" }]);
+  });
+
+  it("sends a status report back to the work and pauses only when it is repeated", () => {
+    const empty = snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "tip" });
+    const status =
+      "The one-sentence goal is in place, but the other recorded outcomes are not all proven. I am checking those against what is actually running.";
+    let state = onApproved({ ...freshState(), armed: true }, empty, "d1").state;
+    state = onTurn(state, empty, doneTurn).state;
+    expect(state.phase).toBe("work");
+    const first = onTurn(state, empty, { ...doneTurn, text: status });
+    expect(first.state.phase).toBe("work");
+    expect(first.state.statusReports).toBe(1);
+    expect(first.actions.some((action) => action.type === "judge")).toBe(false);
+    expect(String((first.actions[0] as { text: string }).text)).toContain("Do not say you are checking");
+    const second = onTurn(first.state, empty, { ...doneTurn, text: status });
+    expect(second.state.phase).toBe("work");
+    expect(second.actions).toEqual([{ type: "notify", level: "warning", message: "ctx-go paused: no progress" }]);
+  });
+
   it("judges only from the claim phase, and the second rejection pauses", () => {
     const empty = snap({ frontierIds: [], destinationText: "Build the app.", sessionTip: "tip" });
     let state = onApproved({ ...freshState(), armed: true }, empty, "d1").state;
@@ -158,28 +244,47 @@ describe("ctx-go loop", () => {
       verdictKind: "rejection" as const,
       rejections: 1,
     };
-    const accepted = onJudge(state, empty, { ok: true, done: true, summary: "met" });
-    expect(accepted.state.armed).toBe(true);
+    const waiting = onJudge(state, empty, { ok: true, done: true, summary: "met" });
+    expect(waiting.state.armed).toBe(true);
+    expect(waiting.state.aimMet).toBe(false);
+    expect(waiting.state.projectDone).toBe(false);
+    expect(waiting.state.awaitingAccept).toBe(true);
+    expect(waiting.state.phase).toBe("paused");
+    expect(waiting.actions.some((action) => action.type === "notify" && action.message.startsWith("ctx-go done"))).toBe(false);
+    expect(waiting.actions.some((action) => action.type === "accept" && action.summary === "met")).toBe(true);
+    expect(waiting.actions.some((action) => action.type === "record" && action.text.startsWith("Pass: met") && action.text.includes("Judge: met"))).toBe(true);
+    const skipped = onGo(waiting.state, empty);
+    expect(skipped.state.aimMet).toBe(false);
+    expect(skipped.actions[0]).toMatchObject({ type: "accept", summary: "met" });
+    const accepted = onAccept(waiting.state, empty);
     expect(accepted.state.aimMet).toBe(true);
     expect(accepted.state.projectDone).toBe(false);
-    expect(accepted.state.rejections).toBe(1);
+    expect(accepted.state.awaitingAccept).toBe(false);
     expect(accepted.state.phase).toBe("project");
     expect(accepted.actions[0]).toMatchObject({ type: "prompt", text: PROJECT_CLAIM_PROMPT });
-    expect(accepted.actions.some((action) => action.type === "notify" && action.message.startsWith("ctx-go done"))).toBe(false);
-    expect(accepted.actions.some((action) => action.type === "record" && action.text.startsWith("Pass: met") && action.text.includes("Judge: met"))).toBe(true);
-    const openWork = onJudge(state, snap({ frontierIds: ["fork"], destinationText: "Build the app." }), { ok: true, done: true, summary: "met" });
+    const openWork = onAccept(
+      onJudge(state, snap({ frontierIds: ["fork"], destinationText: "Build the app." }), { ok: true, done: true, summary: "met" }).state,
+      snap({ frontierIds: ["fork"], destinationText: "Build the app." }),
+    );
     expect(openWork.state.projectDone).toBe(false);
     expect(openWork.state.phase).toBe("questions");
     expect(openWork.actions[0]).toEqual({ type: "claim", questionId: "fork" });
     expect(openWork.actions[1]).toMatchObject({ type: "prompt", text: QUESTION_PROMPT });
-    const claimed = onTurn(accepted.state, empty, { ...doneTurn, text: "Done. `proj/src/app.ts`" });
+    const declined = onNotDone(waiting.state, empty, "the copy stays down");
+    expect(declined.state.awaitingAccept).toBe(false);
+    expect(declined.state.aimMet).toBe(false);
+    expect(declined.state.obligation).toBe("the copy stays down");
+    expect(onNotDone(waiting.state, empty, "  ").state.awaitingAccept).toBe(true);
+    const claimed = onTurn(accepted.state, empty, { ...doneTurn, text: "Done. /tmp/app.ts" });
     expect(claimed.actions[0]).toMatchObject({ type: "judge" });
-    const finished = onJudge(claimed.state, empty, { ok: true, done: true, summary: "project met" });
+    const projectWait = onJudge(claimed.state, empty, { ok: true, done: true, summary: "project met" });
+    expect(projectWait.state.projectDone).toBe(false);
+    expect(projectWait.state.awaitingAccept).toBe(true);
+    const finished = onAccept(projectWait.state, empty);
     expect(finished.state.armed).toBe(false);
     expect(finished.state.projectDone).toBe(true);
     expect(finished.state.aimMet).toBe(true);
     expect(finished.actions[0]).toMatchObject({ type: "notify", message: "ctx-go done\nproject met" });
-    expect(finished.actions[1]).toMatchObject({ type: "record", text: "Pass: project met\nWorker: Done. `proj/src/app.ts`\nJudge: project met" });
     const stopped = onGo(finished.state, empty);
     expect(stopped.state.armed).toBe(true);
     expect(stopped.state.projectDone).toBe(false);
@@ -206,7 +311,7 @@ describe("ctx-go loop", () => {
 
   it("does not reset the rejection count when the destination is accepted", () => {
     const empty = snap({ frontierIds: [], destinationText: "Build the app." });
-    const accepted = onJudge(
+    const waiting = onJudge(
       {
         ...freshState(),
         armed: true,
@@ -219,8 +324,10 @@ describe("ctx-go loop", () => {
       empty,
       { ok: true, done: true, summary: "met" },
     );
+    expect(waiting.state.rejections).toBe(1);
+    const accepted = onAccept(waiting.state, empty);
     expect(accepted.state.rejections).toBe(1);
-    const project = onTurn(accepted.state, empty, { ...doneTurn, text: "Done. `proj/src/app.ts`" });
+    const project = onTurn(accepted.state, empty, { ...doneTurn, text: "Done. /tmp/app.ts" });
     const rejected = onJudge(project.state, empty, { ok: true, done: false, summary: "still open" }, "same");
     expect(rejected.state.rejections).toBe(2);
     expect(rejected.state.phase).toBe("paused");
@@ -238,10 +345,8 @@ describe("ctx-go loop", () => {
       lastClaim: "done `proj/.pi/foundations/first-questions.md`",
     };
     const passed = onJudge(state, empty, { ok: true, done: true, summary: "The app carries. The rest is detail." });
-    expect(passed.actions[1]).toMatchObject({
-      type: "record",
-      text: "Pass: The app carries.\nWorker: done `proj/.pi/foundations/first-questions.md`\nJudge: The app carries. The rest is detail.",
-    });
+    expect(passed.state.projectDone).toBe(false);
+    expect(passed.actions.some((action) => action.type === "record" && action.text === "Pass: The app carries.\nWorker: done `proj/.pi/foundations/first-questions.md`\nJudge: The app carries. The rest is detail.")).toBe(true);
     const failed = onJudge(
       { ...state, aimMet: false, phase: "claim" },
       empty,
@@ -318,13 +423,14 @@ describe("ctx-go loop", () => {
     expect(String((capped.actions[0] as { message: string }).message)).toContain("after 10 judge calls");
     expect(String((capped.actions[0] as { message: string }).message)).toContain("Judge: tenth");
     const finished = onJudge(
-      { ...base, aimMet: true, rejections: 9, lastClaim: "done `proj/.pi/foundations/first-questions.md`" },
+      { ...base, aimMet: true, rejections: 9, lastClaim: "done /tmp/app.ts" },
       empty,
       { ok: true, done: true, summary: "project met" },
       "b",
     );
-    expect(finished.state.projectDone).toBe(true);
-    expect(finished.actions[0]).toMatchObject({ type: "notify", message: "ctx-go done\nproject met" });
+    expect(finished.state.projectDone).toBe(false);
+    expect(finished.state.awaitingAccept).toBe(true);
+    expect(finished.actions.some((action) => action.type === "notify" && action.message.startsWith("ctx-go done"))).toBe(false);
   });
 
   it("a judge error is not a rejection", () => {

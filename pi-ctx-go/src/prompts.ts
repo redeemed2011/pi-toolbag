@@ -10,6 +10,7 @@ export const QUESTION_PROMPT = [
   "Closing the claim does not settle it. Do not supersede a question marked for the operator.",
   "Do not stop because the question was unclaimed.",
   "Do not stop this loop.",
+  "Do not say you are checking. A report of what is in place is not the work.",
 ].join("\n");
 
 export const CLAIM_PROMPT = [
@@ -27,6 +28,7 @@ export function workPrompt(destination: string): string {
     "Destination:",
     destination,
     "Do not claim it is met. A file that only describes the destination is not the result.",
+    "Do not say you are checking. A report of what is in place is not the work.",
   ].join("\n");
 }
 
@@ -47,6 +49,7 @@ export function rejectionPrompt(destination: string, summary: string): string {
     "Destination:",
     destination,
     "Do the missing work. Do not claim it is met yet. A file that only describes the destination is not the result.",
+    "Do not say you are checking. A report of what is in place is not the work.",
   ].join("\n");
 }
 
@@ -59,6 +62,7 @@ export const RECONCILE_PROMPT = [
   "Do not record an outcome this session deferred.",
   "Do not approve a destination.",
   "Do not claim the work is done.",
+  "Do not say you are checking. A report of what is in place is not the work.",
   "If you cannot record one item, start with Impasse: and name that item.",
 ].join("\n");
 

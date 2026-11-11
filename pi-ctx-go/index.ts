@@ -2,7 +2,7 @@ import type { ExtensionAPI, ExtensionContext, SessionBoundaryDraft } from "@eare
 import { approveDestination } from "./src/approve.js";
 import { readClock, writeClock } from "./src/clock.js";
 import { IMPASSE_ASK, runJudge, thinkingLevel, type JudgeModel } from "./src/judge.js";
-import { buildImpassePacket, buildPacket, parseImpasse, parseVerdict, productStamp } from "./src/packet.js";
+import { buildImpassePacket, buildPacket, judgedDone, parseImpasse, productStamp } from "./src/packet.js";
 import { closedQuestions, prepareClaim, readSnap, type BoundSnap } from "./src/snap.js";
 import { CTX_CLAIM } from "../pi-ctx/src/types.js";
 import {
@@ -11,11 +11,14 @@ import {
   onDraftRejected,
   onGo,
   onImpasseJudge,
+  onAccept,
   onJudge,
+  onNotDone,
   onStop,
   onTurn,
   type Action,
   type GoState,
+  type Step,
 } from "./src/state.js";
 import { messageText, twoLines } from "./src/text.js";
 import type { Entry } from "../pi-ctx/src/types.js";
@@ -29,6 +32,7 @@ type GoCtx = ExtensionContext & {
   };
   ui: {
     select(title: string, options: string[]): Promise<string | undefined>;
+    input(title: string, placeholder?: string): Promise<string | undefined>;
     notify(message: string, level?: "info" | "warning" | "error"): void;
   };
 };
@@ -97,6 +101,22 @@ export default function ctxGo(pi: ExtensionAPI): void {
     state = file ? readClock(file) : freshState();
   });
 
+  async function settle(goCtx: GoCtx, step: Step, snap: BoundSnap): Promise<Step> {
+    const accept = step.actions.find((action) => action.type === "accept");
+    if (!accept || accept.type !== "accept" || !goCtx.hasUI) return step;
+    const picked = await goCtx.ui.select(`Accept this judge result?\n${accept.summary}`, ["Accept", "Not done"]);
+    const records = step.actions.filter((action) => action.type === "record");
+    if (picked === "Accept") {
+      const next = onAccept(step.state, snap);
+      return { state: next.state, actions: [...next.actions, ...records] };
+    }
+    if (picked !== "Not done") return step;
+    const sentence = await goCtx.ui.input("What is not done?", "One sentence");
+    if (!sentence?.trim()) return step;
+    const next = onNotDone(step.state, snap, sentence);
+    return { state: next.state, actions: [...next.actions, ...records] };
+  }
+
   function wroteClaim(ctx: GoCtx, actions: Action[]): boolean {
     const claim = actions.find((action) => action.type === "claim");
     if (!claim || claim.type !== "claim") return true;
@@ -161,7 +181,8 @@ export default function ctxGo(pi: ExtensionAPI): void {
       const goCtx = ctx as GoCtx;
       if (goCtx.waitForIdle) await goCtx.waitForIdle();
       const snap = readSnap(branchOf(goCtx).branch, branchOf(goCtx).sessionId);
-      const step = onGo(state, snap);
+      const opened = onGo(state, snap);
+      const step = await settle(goCtx, opened, snap);
       state = remember(goCtx, step.state);
       notify(goCtx, step.actions);
       if (!wroteClaim(goCtx, step.actions)) return;
@@ -227,11 +248,12 @@ export default function ctxGo(pi: ExtensionAPI): void {
       const judged = judge.review === "impasse"
         ? await judgeImpasse(goCtx, snap, state, judge.claim, override)
         : await judgeNow(goCtx, snap, state, judge.claim, override);
-      state = remember(goCtx, judged.state);
-      notify(goCtx, judged.actions);
-      if (!wroteClaim(goCtx, judged.actions)) return;
+      const settled = await settle(goCtx, judged, snap);
+      state = remember(goCtx, settled.state);
+      notify(goCtx, settled.actions);
+      if (!wroteClaim(goCtx, settled.actions)) return;
       if (goCtx.hasPendingMessages()) return;
-      return continued(event.entries, judged.actions);
+      return continued(event.entries, settled.actions);
     }
 
     if (goCtx.hasPendingMessages()) return;
@@ -276,11 +298,12 @@ async function judgeNow(ctx: GoCtx, snap: BoundSnap, state: GoState, claim: stri
       .map((item) => ({ id: item.id, headline: item.headline, body: item.directive || item.body })),
     closed: closedQuestions(snap.live),
     claim,
+    obligation: state.obligation,
   });
   if (!packet.ok) return onJudge(state, snap, packet);
   const model = modelOf(ctx, override);
   if (!model) return onJudge(state, snap, { ok: false, error: "no model" });
   const ran = await runJudge(model, packet.text, ctx.cwd);
-  const verdict = ran.ok ? parseVerdict(ran.text) : ran;
+  const verdict = ran.ok ? judgedDone(ran.text, snap.destinationText ?? "", claim) : ran;
   return onJudge(state, snap, verdict, productStamp(ctx.cwd, claim));
 }

@@ -18,7 +18,7 @@ export function thinkingLevel(value: string): ModelThinkingLevel | null {
   return null;
 }
 
-const JUDGE_ASK = "The completion packet is above. Answer it with the two lines it requests.";
+const JUDGE_ASK = "The completion packet is above. Reply with the outcome lines and gap lines it requests. Do not edit files or run tests.";
 export const IMPASSE_ASK = "The impasse packet is above. Answer with the one line it requests.";
 
 export function judgeArgv(model: JudgeModel, ask = JUDGE_ASK): string[] {

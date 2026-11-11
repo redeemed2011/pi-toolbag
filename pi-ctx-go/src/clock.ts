@@ -39,10 +39,16 @@ export function readClock(sessionFile: string): GoState {
   if (typeof aimMet !== "boolean" || typeof projectDone !== "boolean") return freshState();
   const reconciledThrough = body.reconciledThrough === undefined ? null : body.reconciledThrough;
   if (reconciledThrough !== null && typeof reconciledThrough !== "string") return freshState();
+  const statusReports = body.statusReports === undefined ? 0 : body.statusReports;
+  if (typeof statusReports !== "number" || !Number.isInteger(statusReports) || statusReports < 0) return freshState();
+  const awaitingAccept = body.awaitingAccept === undefined ? false : body.awaitingAccept;
+  const obligation = body.obligation === undefined ? "" : body.obligation;
+  if (typeof awaitingAccept !== "boolean" || typeof obligation !== "string") return freshState();
   return {
     ...freshState(),
     phase: body.phase,
     reconciledThrough,
+    statusReports,
     rejections: body.rejections,
     approvedDestinationId: body.approvedDestinationId,
     lastClaim: body.lastClaim,
@@ -52,6 +58,8 @@ export function readClock(sessionFile: string): GoState {
     verdictKind: body.verdictKind,
     aimMet,
     projectDone,
+    awaitingAccept,
+    obligation,
     armed: false,
     hold: false,
   };
@@ -70,7 +78,10 @@ export function writeClock(sessionFile: string, state: GoState): void {
     verdictKind: state.verdictKind,
     aimMet: state.aimMet,
     projectDone: state.projectDone,
+    awaitingAccept: state.awaitingAccept,
+    obligation: state.obligation,
     reconciledThrough: state.reconciledThrough,
+    statusReports: state.statusReports,
     armed: false,
   };
   mkdirSync(dirname(path), { recursive: true });
