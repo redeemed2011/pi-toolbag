@@ -1,7 +1,6 @@
 import {
   CLAIM_PROMPT,
   conflictPrompt,
-  DRAFT_PROMPT,
   OUTCOMES_PROMPT,
   PROJECT_CLAIM_PROMPT,
   QUESTION_PROMPT,
@@ -12,8 +11,6 @@ import {
   rejectionPrompt,
   workPrompt,
 } from "./prompts.js";
-import { twoLines } from "./text.js";
-
 export type GoPhase = "idle" | "draft" | "reconcile" | "conflicts" | "questions" | "work" | "claim" | "outcomes" | "project" | "paused";
 
 export type VerdictKind = "none" | "rejection" | "error";
@@ -46,6 +43,8 @@ export type GoState = {
   conflictOpen: string[];
   /** The worker has had a turn to record owed outcomes from first-questions.md. */
   outcomesAsked: boolean;
+  /** Prompt a tool turn produced. Pi clears that continue. The text-only stop sends it. */
+  owedPrompt: string | null;
 };
 
 export type BlockedQuestion = { id: string; headline: string; blockers: string[] };
@@ -75,9 +74,7 @@ export type TurnView = {
 export type Action =
   | { type: "notify"; level: "info" | "warning" | "error"; message: string }
   | { type: "prompt"; text: string; display?: boolean }
-  | { type: "approve"; text: string }
   | { type: "judge"; claim: string; review?: "impasse" }
-  | { type: "accept"; summary: string }
   | { type: "claim"; questionId: string }
   | { type: "record"; text: string };
 
@@ -105,6 +102,7 @@ export function freshState(): GoState {
     conflictStamp: null,
     conflictOpen: [],
     outcomesAsked: false,
+    owedPrompt: null,
   };
 }
 
@@ -113,25 +111,12 @@ export function fingerprint(snap: Snap): string {
 }
 
 const BIND_NEXT = "CTX is not bound. Bind a CTX project, then run /ctx-go again.";
-const DRAFT_NEXT = "No destination is approved. The model will draft one, and you will approve it.";
 
 function prompt(state: GoState, text: string, snap: Snap): Step {
   return {
     state: { ...state, lastFingerprint: fingerprint(snap) },
     actions: [{ type: "prompt", text }],
   };
-}
-
-function draftAsk(state: GoState, snap: Snap): Step {
-  const step = prompt(state, DRAFT_PROMPT, snap);
-  return {
-    state: step.state,
-    actions: [{ type: "notify", level: "info", message: DRAFT_NEXT }, ...step.actions],
-  };
-}
-
-function destinationReady(state: GoState, snap: Snap): boolean {
-  return state.approvedDestinationId !== null && state.approvedDestinationId === snap.destinationId;
 }
 
 export function onStop(state: GoState): Step {
@@ -163,24 +148,19 @@ export function onGo(state: GoState, snap: Snap): Step {
   if (!snap.bound) {
     return { state, actions: [{ type: "notify", level: "warning", message: BIND_NEXT }] };
   }
-  if (state.awaitingAccept) {
-    return {
-      state: { ...state, armed: true },
-      actions: [{ type: "accept", summary: state.lastVerdict }],
-    };
-  }
   const next: GoState = {
     ...state,
     armed: true,
+    awaitingAccept: false,
     hold: false,
     projectDone: false,
     rejections: state.phase === "paused" ? 0 : state.rejections,
     statusReports: state.phase === "paused" ? 0 : state.statusReports,
     productStamp: state.phase === "paused" ? null : state.productStamp,
     priorVerdict: state.phase === "paused" ? "" : state.priorVerdict,
-    phase: destinationReady(state, snap) ? "questions" : "draft",
+    phase: "questions",
   };
-  if (next.phase !== "questions") return draftAsk(next, snap);
+  // The live CTX project is the destination. A bound project is ready to work, and ctx-go does not ask the operator to approve a draft.
   if (!alreadyReconciled(state, snap)) return prompt({ ...next, phase: "reconcile" }, RECONCILE_PROMPT, snap);
   return workFrom(next, snap);
 }
@@ -236,8 +216,6 @@ function workQuestions(state: GoState, snap: Snap): Step {
   return { state: step.state, actions: [{ type: "claim", questionId }, ...step.actions] };
 }
 
-const NOT_BUILT = "ctx-go paused: a not-built decision has no question";
-
 function namedImpasse(text: string): string | null {
   const line = text.split("\n").map((item) => item.trim()).find((item) => item.toLowerCase().startsWith("impasse:"));
   if (!line) return null;
@@ -259,10 +237,6 @@ export function onApproved(state: GoState, snap: Snap, destinationId: string): S
     projectDone: false,
   };
   return prompt({ ...next, phase: "reconcile" }, RECONCILE_PROMPT, { ...snap, destinationId });
-}
-
-export function onDraftRejected(state: GoState, snap: Snap): Step {
-  return draftAsk({ ...state, phase: "draft" }, snap);
 }
 
 export type ConflictRead = { ok: true; pairs: { a: string; b: string; why: string }[] } | { ok: false; error: string };
@@ -303,7 +277,7 @@ export function onConflictRead(state: GoState, stamp: string, read: ConflictRead
 export function onConflictsTurn(state: GoState, snap: Snap, turn: TurnView, still: string[]): Step {
   if (!state.armed || !snap.bound) return { state, actions: [] };
   if (turn.outcome !== "completed") return pause(state, `ctx-go paused: turn ${turn.outcome}`);
-  if (turn.toolCount > 0 || turn.pending) return { state, actions: [] };
+  if (turn.pending) return { state, actions: [] };
   if (still.length === 0) return onGo({ ...state, conflictOpen: [], statusReports: 0 }, snap);
   const same = still.join("\n") === state.conflictOpen.join("\n");
   const count = same ? state.statusReports + 1 : 0;
@@ -336,6 +310,14 @@ function questionsOpen(snap: Snap): boolean {
   return snap.claimedId !== null && !snap.askIds.includes(snap.claimedId) && !claimBlocked(snap);
 }
 
+/** The tool-turn prompt was never delivered. An idle compaction sends it. A retry and a real hold do not. */
+export function onIdleCompact(state: GoState, snap: Snap, compact: { willRetry: boolean }): Step {
+  if (compact.willRetry || !state.armed || state.hold || state.phase === "paused" || !snap.bound) return { state, actions: [] };
+  if (!state.owedPrompt || !questionsOpen(snap)) return { state, actions: [] };
+  const text = state.owedPrompt;
+  return prompt({ ...state, owedPrompt: null }, text, snap);
+}
+
 function askPause(state: GoState, snap: Snap): Step {
   const lines = snap.askHeadlines.map((headline, i) => `${snap.askIds[i]} ${headline}`);
   return pause(state, `Ask the operator:\n${lines.join("\n")}`);
@@ -358,21 +340,24 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
   if (turn.outcome !== "completed") {
     return pause(state, `ctx-go paused: turn ${turn.outcome}`);
   }
-  if (turn.toolCount > 0) return { state, actions: [] };
+  if (turn.toolCount === 0 && !turn.pending && state.owedPrompt) {
+    const text = state.owedPrompt;
+    return prompt({ ...state, owedPrompt: null }, text, snap);
+  }
+  const hand = (step: Step): Step => {
+    if (turn.toolCount === 0) return step;
+    const kept = step.actions.find((action) => action.type === "prompt");
+    if (!kept || kept.type !== "prompt") return step;
+    return {
+      state: { ...step.state, owedPrompt: kept.text },
+      actions: step.actions.filter((action) => action.type !== "prompt"),
+    };
+  };
   const say = (next: GoState, text: string): Step => {
     const step = prompt(next, text, snap);
     if (turn.pending) return { state: step.state, actions: [] };
     return step;
   };
-  if (!destinationReady(state, snap)) {
-    if (state.phase !== "draft") {
-      if (turn.pending) return { state, actions: [] };
-      return draftAsk({ ...state, phase: "draft", approvedDestinationId: null, aimMet: false, projectDone: false }, snap);
-    }
-    const draft = twoLines(turn.text);
-    if (!draft) return pause(state, "ctx-go paused: draft made no progress");
-    return { state: { ...state, phase: "draft" }, actions: [{ type: "approve", text: draft }] };
-  }
   if (state.phase === "reconcile") {
     if (turn.pending) return { state, actions: [] };
     const blocked = blockedPause(state, snap);
@@ -385,60 +370,57 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
         actions: [{ type: "judge", claim: line, review: "impasse" }],
       };
     }
-    if (isStatusReport(turn.text)) return rejectStatus(state, snap);
-    if (snap.notBuiltOpen && !questionsOpen(snap)) return pause(state, NOT_BUILT);
-    return finishReconcile({ ...state, statusReports: 0 }, snap);
+    if (isStatusReport(turn.text)) return hand(rejectStatus(state, snap));
+    if (snap.notBuiltOpen && !questionsOpen(snap)) return hand(prompt({ ...state, phase: "reconcile" }, RECONCILE_PROMPT, snap));
+    return hand(finishReconcile({ ...state, statusReports: 0 }, snap));
   }
   if (state.phase === "outcomes") {
     if (turn.pending) return { state, actions: [] };
-    if (isStatusReport(turn.text)) return rejectStatus(state, snap);
+    if (isStatusReport(turn.text)) return hand(rejectStatus(state, snap));
     const asked = { ...state, outcomesAsked: true, statusReports: 0 };
-    if (questionsOpen(snap)) return workQuestions(asked, snap);
+    if (questionsOpen(snap)) return hand(workQuestions(asked, snap));
     const owedHeld = blockedPause(asked, snap);
     if (owedHeld) return owedHeld;
-    return prompt({ ...asked, phase: "project" }, PROJECT_CLAIM_PROMPT, snap);
+    return hand(prompt({ ...asked, phase: "project" }, PROJECT_CLAIM_PROMPT, snap));
   }
   const changed = fingerprint(snap) !== state.lastFingerprint;
   const held = blockedPause(state, snap);
   if (held) return held;
-  if (snap.notBuiltOpen && !questionsOpen(snap)) return pause(state, NOT_BUILT);
+  if (snap.notBuiltOpen && !questionsOpen(snap)) return hand(prompt({ ...state, phase: "reconcile" }, RECONCILE_PROMPT, snap));
   if (questionsOpen(snap)) {
-    if (isStatusReport(turn.text)) return rejectStatus({ ...state, phase: "questions" }, snap);
-    if (!changed && snap.claimedId) return pause(state, "ctx-go paused: no progress");
+    if (isStatusReport(turn.text)) return hand(rejectStatus({ ...state, phase: "questions" }, snap));
+    if (turn.toolCount === 0 && !changed && snap.claimedId) return pause(state, "ctx-go paused: no progress");
     if (turn.pending) return { state, actions: [] };
-    return workQuestions({ ...state, statusReports: 0 }, snap);
+    return hand(workQuestions({ ...state, statusReports: 0 }, snap));
   }
   if (state.aimMet && state.phase !== "work") {
     if (!state.outcomesAsked) {
       if (turn.pending) return { state, actions: [] };
-      return prompt({ ...state, phase: "outcomes" }, OUTCOMES_PROMPT, snap);
+      return hand(prompt({ ...state, phase: "outcomes" }, OUTCOMES_PROMPT, snap));
     }
     if (state.phase !== "project") {
       if (turn.pending) return { state, actions: [] };
-      return prompt({ ...state, phase: "project" }, PROJECT_CLAIM_PROMPT, snap);
+      return hand(prompt({ ...state, phase: "project" }, PROJECT_CLAIM_PROMPT, snap));
     }
     const projectClaim = turn.text.trim();
-    if (isStatusReport(projectClaim)) return rejectStatus({ ...state, phase: "project" }, snap);
+    if (isStatusReport(projectClaim)) return hand(rejectStatus({ ...state, phase: "project" }, snap));
     if (!projectClaim) return pause(state, "ctx-go paused: done-claim was empty");
-    if (!namesQuestionsFile(projectClaim)) {
-      return pause(state, "ctx-go paused: the project claim did not name first-questions.md");
-    }
     return { state: { ...state, lastClaim: projectClaim, statusReports: 0 }, actions: [{ type: "judge", claim: projectClaim }] };
   }
   if (state.phase !== "work" && state.phase !== "claim") {
     if (turn.pending) return { state, actions: [] };
-    return prompt({ ...state, phase: "work" }, workPrompt(snap.destinationText ?? ""), snap);
+    return hand(prompt({ ...state, phase: "work" }, workPrompt(snap.destinationText ?? ""), snap));
   }
   if (state.phase === "work") {
     if (turn.pending) return { state, actions: [] };
     if (reportsNoQuestions(turn.text)) return pause(state, "ctx-go paused: no progress");
-    if (isStatusReport(turn.text)) return rejectStatus(state, snap);
+    if (isStatusReport(turn.text)) return hand(rejectStatus(state, snap));
     const claimPhase = state.aimMet ? "project" : "claim";
     const claimText = state.aimMet ? PROJECT_CLAIM_PROMPT : CLAIM_PROMPT;
-    return prompt({ ...state, phase: claimPhase, statusReports: 0 }, claimText, snap);
+    return hand(prompt({ ...state, phase: claimPhase, statusReports: 0 }, claimText, snap));
   }
   const claim = turn.text.trim();
-  if (isStatusReport(claim)) return rejectStatus({ ...state, phase: state.aimMet ? "project" : "work" }, snap);
+  if (isStatusReport(claim)) return hand(rejectStatus({ ...state, phase: state.aimMet ? "project" : "work" }, snap));
   if (!claim) return pause(state, "ctx-go paused: done-claim was empty");
   return {
     state: { ...state, lastClaim: claim },
@@ -488,21 +470,20 @@ export function onJudge(
     );
   }
   if (result.done) {
-    const record = report("Pass", result.summary, state.lastClaim);
     return {
       state: {
         ...state,
-        armed: true,
+        armed: false,
         phase: "paused",
         hold: false,
-        awaitingAccept: true,
-        lastVerdict: result.summary,
+        awaitingAccept: false,
+        obligation: "",
+        lastVerdict: "",
         verdictKind: "none",
       },
       actions: [
-        { type: "notify", level: "info", message: "ctx-go waiting for Accept" },
-        { type: "accept", summary: result.summary },
-        { type: "record", text: record },
+        { type: "notify", level: "info", message: "ctx-go: the judge says this is done" },
+        { type: "record", text: `Pass: The judge says this is done.\nWorker: ${state.lastClaim}` },
       ],
     };
   }
@@ -530,53 +511,6 @@ export function onJudge(
     ? projectRejectionPrompt(snap.destinationText ?? "", summary)
     : rejectionPrompt(snap.destinationText ?? "", summary);
   return withRecord(prompt(next, text, snap), report("Fail", summary, state.lastClaim));
-}
-
-/** Accept is the only finish. The first accept marks the destination. The second marks the project. */
-export function onAccept(state: GoState, snap: Snap): Step {
-  if (!state.awaitingAccept) return { state, actions: [] };
-  const summary = state.lastVerdict;
-  const cleared = {
-    ...state,
-    awaitingAccept: false,
-    obligation: "",
-    lastVerdict: "",
-    verdictKind: "none" as const,
-    hold: false,
-  };
-  if (!state.aimMet) {
-    const accepted = { ...cleared, armed: true, aimMet: true, projectDone: false, outcomesAsked: false };
-    return questionsOpen(snap)
-      ? workQuestions(accepted, snap)
-      : prompt({ ...accepted, phase: "outcomes" }, OUTCOMES_PROMPT, snap);
-  }
-  return {
-    state: { ...freshState(), approvedDestinationId: state.approvedDestinationId, aimMet: true, projectDone: true },
-    actions: [{ type: "notify", level: "info", message: `ctx-go done\n${summary}` }],
-  };
-}
-
-/** An empty sentence is silence. Silence does not accept and does not clear the wait. */
-export function onNotDone(state: GoState, snap: Snap, sentence: string): Step {
-  const text = sentence.trim();
-  if (!state.awaitingAccept || !text) {
-    return { state, actions: [{ type: "accept", summary: state.lastVerdict }] };
-  }
-  const next = {
-    ...state,
-    awaitingAccept: false,
-    obligation: text,
-    armed: true,
-    projectDone: false,
-    phase: "work" as const,
-    verdictKind: "rejection" as const,
-    lastVerdict: text,
-    hold: false,
-  };
-  const base = state.aimMet
-    ? projectRejectionPrompt(snap.destinationText ?? "", text)
-    : rejectionPrompt(snap.destinationText ?? "", text);
-  return prompt(next, `${base}\nThe operator said this is not done: ${text}`, snap);
 }
 
 function resultLine(kind: "Pass" | "Fail", why: string): string {
@@ -628,11 +562,6 @@ function rejectStatus(state: GoState, snap: Snap): Step {
         ? rejectionPrompt(snap.destinationText ?? "", state.lastVerdict)
         : workPrompt(snap.destinationText ?? "");
   return prompt(next, `${text}\n${again}`, snap);
-}
-
-/** An absolute path. A relative path or a slash command does not name the file. */
-function namesQuestionsFile(claim: string): boolean {
-  return /(?:^|[\s`'"])\/\S*first-questions\.md\b/.test(claim);
 }
 
 function reportsNoQuestions(text: string): boolean {

@@ -61,6 +61,21 @@ describe("judge packet", () => {
     expect(parseVerdict(`verdict: done\noutcome: "Build the app." /tmp/app.ts no gap remains`, destination)).toMatchObject({
       done: true,
     });
+    expect(parseVerdict('verdict: done\noutcome: the app /tmp/app.ts builds', destination)).toMatchObject({
+      done: false,
+      summary: "an outcome line does not quote the destination",
+    });
+    const sentence = "A bound project is ready to work, and ctx-go does not ask the operator to approve a draft.";
+    const source = readFileSync(join(import.meta.dirname, "../src/state.ts"), "utf8");
+    expect(source).toContain(sentence);
+    const live = `The live CTX project is the destination. ${sentence}`;
+    const quoted = `outcome: "${sentence}" /home/bo/src/pi-toolbag/pi-ctx-go/src/state.ts onGo does not ask for a draft`;
+    expect(parseVerdict(`verdict: done\n${quoted}`, live)).toMatchObject({ done: true });
+    const paraphrase = "A bound project is ready to work. ctx-go does not ask the operator to approve a draft.";
+    expect(parseVerdict(`verdict: done\noutcome: "${paraphrase}" /home/bo/src/pi-toolbag/pi-ctx-go/src/state.ts onGo`, live)).toMatchObject({
+      done: false,
+      summary: "an outcome line does not quote the destination",
+    });
     const echoed = `verdict: done\n${outcome}`;
     expect(judgedDone(echoed, destination, "The cluster report is the product.")).toMatchObject({
       ok: true,

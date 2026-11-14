@@ -16,13 +16,10 @@ import { executeGet } from "./get.js";
 import { dropKeys, jsonResult } from "./result.js";
 import { executeZoom } from "./zoom.js";
 import {
-	ATTACH_GUIDELINE,
 	BIND_GUIDELINE,
 	CLAIM_GUIDELINE,
-	FINDING_GUIDELINE,
 	FRONTIER_GUIDELINE,
 	GET_GUIDELINE,
-	GRANT_GUIDELINE,
 	RECORD_GUIDELINE,
 	ZOOM_GUIDELINE,
 } from "./guidelines.js";
@@ -379,7 +376,6 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		label: "ctx grant",
 		description: "Hand one live question to a new session. Returns a project id and a token. Does not start that session.",
 		promptSnippet: "Grant one live ctx question to a new session",
-		promptGuidelines: [GRANT_GUIDELINE],
 		outputSchema: CTX_OUTPUT_SCHEMA,
 		namespace: CTX_NAMESPACE,
 		parameters: Type.Object({
@@ -410,7 +406,6 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		label: "ctx attach",
 		description: "Bind a fresh session to a granted question. Refuses a session that has ever been bound. Does not harvest.",
 		promptSnippet: "Attach this fresh session to a granted ctx question",
-		promptGuidelines: [ATTACH_GUIDELINE],
 		outputSchema: CTX_OUTPUT_SCHEMA,
 		namespace: CTX_NAMESPACE,
 		parameters: Type.Object({
@@ -441,7 +436,6 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		label: "ctx finding",
 		description: "File a finding on the granted question. Headline and body only. The server sets the type and the parent.",
 		promptSnippet: "File a ctx finding on the granted question",
-		promptGuidelines: [FINDING_GUIDELINE],
 		outputSchema: CTX_OUTPUT_SCHEMA,
 		namespace: CTX_NAMESPACE,
 		parameters: Type.Object({

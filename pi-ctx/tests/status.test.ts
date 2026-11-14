@@ -8,13 +8,10 @@ import { registerContextHook } from "../src/hooks/context-hook.js";
 import { applyStatusToSystem, statusLine } from "../src/render/status.js";
 import { Runtime } from "../src/runtime.js";
 import {
-	ATTACH_GUIDELINE,
 	BIND_GUIDELINE,
 	CLAIM_GUIDELINE,
-	FINDING_GUIDELINE,
 	FRONTIER_GUIDELINE,
 	GET_GUIDELINE,
-	GRANT_GUIDELINE,
 	RECORD_GUIDELINE,
 	ZOOM_GUIDELINE,
 } from "../src/tools/guidelines.js";
@@ -290,8 +287,9 @@ describe("ctx status line", () => {
 describe("ctx tool duties", () => {
 	it("names each tool and the status-line rule that calls it", () => {
 		expect(GET_GUIDELINE).toContain("ctx_get");
-		expect(GET_GUIDELINE).toContain("status line is absent");
-		expect(GET_GUIDELINE).toContain("not a user message");
+		expect(GET_GUIDELINE).toContain("that line is absent");
+		expect(GET_GUIDELINE).not.toContain("not a user message");
+		expect(GET_GUIDELINE).not.toContain("search");
 		expect(GET_GUIDELINE).toContain("once");
 		expect(ZOOM_GUIDELINE).toContain("ctx_zoom");
 		expect(FRONTIER_GUIDELINE).toContain("ctx_frontier");
@@ -300,21 +298,20 @@ describe("ctx tool duties", () => {
 		expect(CLAIM_GUIDELINE).toContain("ctx_claim");
 		expect(CLAIM_GUIDELINE).toContain("claim_not_live=1");
 		expect(CLAIM_GUIDELINE).toContain("claim_blocked=1");
-		expect(CLAIM_GUIDELINE).toContain("silent-swap");
+		expect(CLAIM_GUIDELINE).toContain("do not claim a different question");
+		expect(CLAIM_GUIDELINE).not.toContain("silent-swap");
 		expect(BIND_GUIDELINE).toContain("ctx_bind");
-		expect(BIND_GUIDELINE).toContain("never bind silently");
+		expect(BIND_GUIDELINE).toContain("do not call it to file or ratify notes");
+		expect(BIND_GUIDELINE).not.toContain("never bind silently");
+		expect(BIND_GUIDELINE).not.toContain("Mint law");
 		expect(RECORD_GUIDELINE).toContain("ctx_record");
-		expect(RECORD_GUIDELINE).toContain("Always keep the CTX records up to date. Always.");
+		expect(RECORD_GUIDELINE).toContain("before the turn ends");
 		expect(RECORD_GUIDELINE).toContain("does not open a dialog");
-		expect(RECORD_GUIDELINE).toContain("Narrowing applies_to does not shrink the list in gated-edge");
-		expect(RECORD_GUIDELINE).toContain("tell the user the constraint list is full");
+		expect(RECORD_GUIDELINE).toContain("does not become all");
 		expect(RECORD_GUIDELINE).toContain("turn notes");
-		expect(GRANT_GUIDELINE).toContain("ctx_grant");
-		expect(ATTACH_GUIDELINE).toContain("ctx_attach");
-		expect(FINDING_GUIDELINE).toContain("ctx_finding");
-		expect(FINDING_GUIDELINE).toContain("ctx_record");
-		expect(FINDING_GUIDELINE).toContain("ctx_bind");
-		expect(BIND_GUIDELINE).toContain("Mint law with ctx_record.");
+		expect(RECORD_GUIDELINE).not.toContain("Always keep the CTX records up to date");
+		expect(RECORD_GUIDELINE).not.toContain("Narrowing applies_to");
+		expect(RECORD_GUIDELINE).not.toContain("tell the user the constraint list is full");
 		const register = readFileSync(new URL("../src/tools/register.ts", import.meta.url), "utf8");
 		for (const name of [
 			"GET_GUIDELINE",
@@ -323,11 +320,11 @@ describe("ctx tool duties", () => {
 			"CLAIM_GUIDELINE",
 			"BIND_GUIDELINE",
 			"RECORD_GUIDELINE",
-			"GRANT_GUIDELINE",
-			"ATTACH_GUIDELINE",
-			"FINDING_GUIDELINE",
 		]) {
 			expect(register).toContain(`promptGuidelines: [${name}]`);
+		}
+		for (const name of ["GRANT_GUIDELINE", "ATTACH_GUIDELINE", "FINDING_GUIDELINE"]) {
+			expect(register).not.toContain(name);
 		}
 	});
 });

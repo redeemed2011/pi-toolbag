@@ -48,6 +48,8 @@ export function readClock(sessionFile: string): GoState {
   if (conflictStamp !== null && typeof conflictStamp !== "string") return freshState();
   const outcomesAsked = body.outcomesAsked === undefined ? false : body.outcomesAsked;
   if (typeof outcomesAsked !== "boolean") return freshState();
+  const owedPrompt = body.owedPrompt === undefined || body.owedPrompt === null ? null : body.owedPrompt;
+  if (owedPrompt !== null && typeof owedPrompt !== "string") return freshState();
   const conflictOpen = body.conflictOpen === undefined ? [] : body.conflictOpen;
   if (!Array.isArray(conflictOpen) || conflictOpen.some((line) => typeof line !== "string")) return freshState();
   return {
@@ -69,6 +71,7 @@ export function readClock(sessionFile: string): GoState {
     conflictStamp,
     conflictOpen,
     outcomesAsked,
+    owedPrompt,
     armed: false,
     hold: false,
   };
@@ -92,6 +95,7 @@ export function writeClock(sessionFile: string, state: GoState): void {
     conflictStamp: state.conflictStamp,
     conflictOpen: state.conflictOpen,
     outcomesAsked: state.outcomesAsked,
+    owedPrompt: state.owedPrompt,
     reconciledThrough: state.reconciledThrough,
     statusReports: state.statusReports,
     armed: false,

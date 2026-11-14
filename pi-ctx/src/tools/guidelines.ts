@@ -1,6 +1,6 @@
 /** Duties for the per-turn status line. The line is state; these say when to call. */
 export const GET_GUIDELINE =
-	"The ctx status line is system state, not a user message. If a turn's only new text is that line, do not treat it as the user speaking and do not start new work. If the ctx status line is absent, do not call ctx_get. If it is present and this thread has no constraint bodies yet, call ctx_get once with no id. Do not call it again. Do not use ctx_get to search.";
+	"If the ctx status line is the only new text in a turn, do not treat it as the user speaking and do not start work. If that line is absent, do not call ctx_get. If it is present and this thread has no constraint bodies yet, call ctx_get once with no id and do not call it again.";
 
 export const ZOOM_GUIDELINE =
 	"Use ctx_zoom only for an id already named in the thread when its body was not included.";
@@ -9,19 +9,10 @@ export const FRONTIER_GUIDELINE =
 	"If the ctx status line says claim_empty=1 and you are starting work, call ctx_frontier once. Do not dump the frontier into the reply or the inject.";
 
 export const CLAIM_GUIDELINE =
-	"If ctx_frontier shows a question you are about to do, claim it with ctx_claim. If none fits, leave the claim empty. If the status line says claim_not_live=1 or claim_blocked=1, close with ctx_claim before claiming another. Do not silent-swap a live claim; close first or ask the user to run /ctx claim.";
+	"If ctx_frontier shows a question you are about to do, claim it with ctx_claim. If none fits, do not claim a different question. claim_not_live=1 or claim_blocked=1 still occupies the slot; close with ctx_claim before a different claim.";
 
 export const BIND_GUIDELINE =
-	"Use ctx_bind when the user asked to create a ctx project or you propose one. Bind always requires HITL; never bind silently. Bind sets the project pointer only; it does not ask to ratify observer notes. Mint law with ctx_record.";
-
-export const GRANT_GUIDELINE =
-	"Use ctx_grant when this session is bound and you are handing one live question to a new session. It returns a project id and a token. It does not start the other session.";
-
-export const ATTACH_GUIDELINE =
-	"Use ctx_attach only in a session that has never been bound, with the project id and token from ctx_grant. It binds this session to that question. Do not call it to switch questions.";
-
-export const FINDING_GUIDELINE =
-	"A worker files results with ctx_finding, not ctx_record or ctx_bind, and claims only its granted question. ctx_finding takes a headline and a body. The server sets the type and the parent question.";
+	"Call ctx_bind only when the user asked to create a ctx project or you are proposing one; do not call it to file or ratify notes.";
 
 export const RECORD_GUIDELINE =
-	"Always keep the CTX records up to date. Always. When the session settles a decision, a constraint, or a question, record it with ctx_record before the turn ends. Do not leave it only in the chat. Use ctx_record for a constraint, decision, or question that should survive the next compaction. Do not record turn notes or observations. Never overwrite. Constraints require applies_to and directive. Missing applies_to refuses; it never defaults to all. live_conflict refuses in print; TUI selects which to supersede. When the constraint list is full, ctx_record returns the error to you and does not open a dialog. Resolve it by calling ctx_record again with supersedes and reason_class decision_change. Narrowing applies_to does not shrink the list in gated-edge. If you cannot resolve it, tell the user the constraint list is full. Evidence copies a file into the project blob store by hash, with size, producer, and expiry. It is not a constraint and does not count toward the gate. An expired file marks that support stale and does not retire the citing constraint. A filename in a body is not evidence. Point citation_target at the evidence id. Evidence cannot supersede or block.";
+	"When the session settles a decision, a constraint, or a question, mint it with ctx_record before the turn ends; compaction injects the project log, not the chat, so do not leave it only in the chat, and do not mint turn notes or observations. Omitted applies_to on a constraint is refused and does not become all. In print, live_conflict is an error with no dialog; the TUI selects which constraint to supersede. A constraint that fills the list returns error gate and does not open a dialog. A filename in a body is not evidence; point citation_target at the evidence id. Evidence does not count toward the gate and cannot supersede or block.";

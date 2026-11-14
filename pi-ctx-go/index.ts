@@ -1,5 +1,4 @@
 import type { ExtensionAPI, ExtensionContext, SessionBoundaryDraft } from "@earendil-works/pi-coding-agent";
-import { approveDestination } from "./src/approve.js";
 import { readClock, writeClock } from "./src/clock.js";
 import { runConflictRead } from "./src/conflict-read.js";
 import { unresolved } from "./src/conflicts.js";
@@ -9,21 +8,18 @@ import { closedQuestions, prepareClaim, readSnap, type BoundSnap } from "./src/s
 import { CTX_CLAIM } from "../pi-ctx/src/types.js";
 import {
   freshState,
-  onApproved,
   onConflictsTurn,
-  onDraftRejected,
   onGo,
   onImpasseJudge,
-  onAccept,
   onJudge,
-  onNotDone,
   onStop,
+  onIdleCompact,
   onTurn,
   type Action,
   type GoState,
   type Step,
 } from "./src/state.js";
-import { messageText, twoLines } from "./src/text.js";
+import { messageText } from "./src/text.js";
 import type { Entry } from "../pi-ctx/src/types.js";
 
 type GoCtx = ExtensionContext & {
@@ -47,8 +43,6 @@ type Continue = {
   continue?: true;
 };
 
-const YES = "Approve destination";
-const NO = "Ask for another draft";
 
 function branchOf(ctx: GoCtx): { branch: Entry[]; sessionId: string } {
   return {
@@ -115,22 +109,6 @@ export default function ctxGo(pi: ExtensionAPI): void {
     const file = goCtx.sessionManager.getSessionFile?.();
     state = file ? readClock(file) : freshState();
   });
-
-  async function settle(goCtx: GoCtx, step: Step, snap: BoundSnap): Promise<Step> {
-    const accept = step.actions.find((action) => action.type === "accept");
-    if (!accept || accept.type !== "accept" || !goCtx.hasUI) return step;
-    const picked = await goCtx.ui.select(`Accept this judge result?\n${accept.summary}`, ["Accept", "Not done"]);
-    const records = step.actions.filter((action) => action.type === "record");
-    if (picked === "Accept") {
-      const next = onAccept(step.state, snap);
-      return { state: next.state, actions: [...next.actions, ...records] };
-    }
-    if (picked !== "Not done") return step;
-    const sentence = await goCtx.ui.input("What is not done?", "One sentence");
-    if (!sentence?.trim()) return step;
-    const next = onNotDone(step.state, snap, sentence);
-    return { state: next.state, actions: [...next.actions, ...records] };
-  }
 
   function wroteClaim(ctx: GoCtx, actions: Action[]): boolean {
     const claim = actions.find((action) => action.type === "claim");
@@ -222,8 +200,7 @@ export default function ctxGo(pi: ExtensionAPI): void {
         }
         if (gated.actions.length > 0) return;
       }
-      const opened = onGo(state, snap);
-      const step = await settle(goCtx, opened, snap);
+      const step = onGo(state, snap);
       state = remember(goCtx, step.state);
       notify(goCtx, step.actions);
       if (!wroteClaim(goCtx, step.actions)) return;
@@ -231,6 +208,18 @@ export default function ctxGo(pi: ExtensionAPI): void {
       if (!next || next.type !== "prompt") return;
       pi.sendMessage({ customType: "ctx-go", content: next.text, display: true }, { triggerTurn: true });
     },
+  });
+
+  pi.on("session_compact", (event, ctx) => {
+    const goCtx = ctx as GoCtx;
+    if (goCtx.hasPendingMessages()) return;
+    const { branch, sessionId } = branchOf(goCtx);
+    const snap = readSnap(branch, sessionId);
+    const step = onIdleCompact(state, snap, { willRetry: event.willRetry });
+    state = remember(goCtx, step.state);
+    const next = step.actions.find((action) => action.type === "prompt");
+    if (!next || next.type !== "prompt") return;
+    pi.sendMessage({ customType: "ctx-go", content: next.text, display: true }, { triggerTurn: true });
   });
 
   pi.on("turn_end", async (event, ctx) => {
@@ -262,53 +251,16 @@ export default function ctxGo(pi: ExtensionAPI): void {
     notify(goCtx, step.actions);
     if (!wroteClaim(goCtx, step.actions)) return;
 
-    const approve = step.actions.find((action) => action.type === "approve");
-    if (approve && approve.type === "approve") {
-      if (!goCtx.hasUI || !snap.projectId) {
-        if (goCtx.hasUI) goCtx.ui.notify("ctx-go paused: cannot ask for destination approval", "warning");
-        return;
-      }
-      const shown = twoLines(approve.text);
-      const picked = await goCtx.ui.select(`Destination:\n${shown}`, [YES, NO]);
-      const fresh = readSnap(branchOf(goCtx).branch, sessionId);
-      if (picked !== YES) {
-        const rejected = onDraftRejected(state, fresh);
-        state = remember(goCtx, rejected.state);
-        if (goCtx.hasPendingMessages()) return;
-        return continued(event.entries, rejected.actions);
-      }
-      if (!fresh.projectId) {
-        if (goCtx.hasUI) goCtx.ui.notify("ctx-go paused: CTX is not bound", "error");
-        return;
-      }
-      const wrote = approveDestination({
-        projectId: fresh.projectId,
-        sessionId,
-        existing: fresh.records,
-        draft: shown,
-      });
-      if (!wrote.ok) {
-        if (goCtx.hasUI) goCtx.ui.notify(`ctx-go paused: ${wrote.error}`, "error");
-        return;
-      }
-      const after = readSnap(branchOf(goCtx).branch, sessionId);
-      const approved = onApproved(state, after, wrote.id);
-      state = remember(goCtx, approved.state);
-      if (goCtx.hasPendingMessages()) return;
-      return continued(event.entries, approved.actions);
-    }
-
     const judge = step.actions.find((action) => action.type === "judge");
     if (judge && judge.type === "judge") {
       const judged = judge.review === "impasse"
         ? await judgeImpasse(goCtx, snap, state, judge.claim, override)
         : await judgeNow(goCtx, snap, state, judge.claim, override);
-      const settled = await settle(goCtx, judged, snap);
-      state = remember(goCtx, settled.state);
-      notify(goCtx, settled.actions);
-      if (!wroteClaim(goCtx, settled.actions)) return;
+      state = remember(goCtx, judged.state);
+      notify(goCtx, judged.actions);
+      if (!wroteClaim(goCtx, judged.actions)) return;
       if (goCtx.hasPendingMessages()) return;
-      return continued(event.entries, settled.actions);
+      return continued(event.entries, judged.actions);
     }
 
     if (goCtx.hasPendingMessages()) return;

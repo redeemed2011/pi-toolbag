@@ -3,7 +3,6 @@ import { foldSession, frontierItems, resolveOccupancy } from "../../pi-ctx/src/f
 import { loadProjectLive } from "../../pi-ctx/src/store/project.js";
 import { applyClaim } from "../../pi-ctx/src/tools/claim.js";
 import type { Entry, JudgmentRecord, LiveSet } from "../../pi-ctx/src/types.js";
-import { twoLines } from "./text.js";
 import type { Snap } from "./state.js";
 
 export type BoundSnap = Snap & {
@@ -16,6 +15,20 @@ export type BoundSnap = Snap & {
 
 function saysNotBuilt(rec: JudgmentRecord): boolean {
   return /\bnot built\b/i.test(`${rec.headline}\n${rec.directive ?? ""}\n${rec.body}`);
+}
+
+const CONTEXT_TYPES = new Set(["constraint", "decision", "destination", "question", "out_of_scope", "fog"]);
+
+/** The live CTX project is the destination. */
+export function destinationContext(live: LiveSet): string {
+  return [...live.byId.values()]
+    .filter((rec) => live.live.has(rec.id) && CONTEXT_TYPES.has(rec.type))
+    .sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.id < b.id ? -1 : 1))
+    .map((rec) => {
+      const body = (rec.directive || rec.body || "").trim();
+      return body ? `${rec.type}: ${rec.headline}\n${body}` : `${rec.type}: ${rec.headline}`;
+    })
+    .join("\n\n");
 }
 
 /** A live not-built decision stays open until some question is recorded at or after it. */
@@ -48,7 +61,7 @@ export function readSnap(branch: Entry[], sessionId: string): BoundSnap {
   }
   const live = loadProjectLive(session.projectId);
   const destination = live.destinations[0];
-  const destinationText = destination ? twoLines(destination.directive || destination.body) : "";
+  const destinationText = destinationContext(live);
   const frontier = frontierItems(live, session.claimedId);
   const sessionTip = branch.length > 0 ? branch[branch.length - 1]?.id ?? null : null;
   const asks = live.questions.filter((q) => live.askOperator.has(q.id));

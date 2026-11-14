@@ -1,8 +1,3 @@
-export const DRAFT_PROMPT = [
-  "Reply with only the CTX destination, at most two lines.",
-  "Do not record it. The operator approves it through the extension.",
-].join("\n");
-
 export const QUESTION_PROMPT = [
   "The oldest open CTX question is claimed for this session.",
   "Work that question.",
@@ -80,8 +75,8 @@ export const RECONCILE_PROMPT = [
 
 export const OUTCOMES_PROMPT = [
   "The destination was accepted. The project is not done.",
-  "Read this project's first-questions.md.",
-  "Record each still-owed outcome as a CTX question.",
+  "Record each still-owed outcome from the CTX project as a question.",
+  "Do not read first-questions.md to find that work.",
   "Do not claim the project on this turn.",
 ].join("\n");
 
