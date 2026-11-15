@@ -3,6 +3,7 @@ import { foldLive } from "../src/fold.js";
 import { Runtime } from "../src/runtime.js";
 import { applyClaim } from "../src/tools/claim.js";
 import { executeFrontier, FRONTIER_CAP } from "../src/tools/frontier.js";
+import { executeSearch } from "../src/tools/search.js";
 import { defaultRetrieve, executeGet, RETRIEVE_HEADLINE_CAP } from "../src/tools/get.js";
 import { registerTools } from "../src/tools/register.js";
 import { dropKeys, jsonResult } from "../src/tools/result.js";
@@ -94,7 +95,7 @@ describe("get / zoom", () => {
 			} as never,
 			new Runtime(),
 		);
-		expect(names).toEqual(["ctx_get", "ctx_zoom", "ctx_frontier", "ctx_claim", "ctx_bind", "ctx_record", "ctx_grant", "ctx_attach", "ctx_finding"]);
+		expect(names).toEqual(["ctx_get", "ctx_zoom", "ctx_frontier", "ctx_search", "ctx_claim", "ctx_bind", "ctx_record", "ctx_grant", "ctx_attach", "ctx_finding"]);
 		expect(names).not.toContain("search_similar");
 	});
 
@@ -171,7 +172,7 @@ describe("tool results pi can replay", () => {
 			} as never,
 			new Runtime(),
 		);
-		const readers = new Set(["ctx_get", "ctx_zoom", "ctx_frontier"]);
+		const readers = new Set(["ctx_get", "ctx_zoom", "ctx_frontier", "ctx_search"]);
 		expect(tools.size).toBeGreaterThan(readers.size);
 		for (const tool of tools.values()) {
 			expect(tool.outputSchema).toMatchObject({ type: "object", additionalProperties: true });
@@ -201,6 +202,7 @@ describe("tool results pi can replay", () => {
 			["ctx_get", {}],
 			["ctx_zoom", { id: "missing" }],
 			["ctx_frontier", {}],
+			["ctx_search", { query: "note" }],
 			["ctx_claim", { action: "status" }],
 			["ctx_bind", {}],
 			["ctx_record", { type: "question", headline: "note" }],
@@ -234,6 +236,61 @@ describe("frontier", () => {
 		expect(got.items[0]?.id).toBe("q01");
 		expect(got.elided).toBe(1);
 		expect(got.claim_empty).toBe(0);
+	});
+});
+
+describe("search", () => {
+	it("returns a live body hit as id, type, and headline, and skips a superseded record", () => {
+		const folded = foldLive([
+			{
+				id: "old",
+				type: "decision",
+				ts: "2026-11-01T00:00:00.000Z",
+				session: "s",
+				headline: "old rule",
+				body: "communication between agents",
+			},
+			{
+				id: "rule",
+				type: "decision",
+				ts: "2026-11-02T00:00:00.000Z",
+				session: "s",
+				headline: "who may speak",
+				body: "Rules for communication between agents.",
+				supersedes: ["old"],
+			},
+		]);
+		const got = executeSearch({ enabled: true, bound: true, live: folded, query: "Communication  between agents" }) as {
+			items: Array<{ id: string; type: string; headline: string; body?: string }>;
+			elided: number;
+		};
+		expect(got.items).toEqual([{ id: "rule", type: "decision", headline: "who may speak" }]);
+		expect(got.items[0]?.body).toBeUndefined();
+		expect(got.elided).toBe(0);
+		expect(executeSearch({ enabled: true, bound: false, live: folded, query: "agents" })).toEqual({
+			error: "no project bound",
+		});
+		expect(executeSearch({ enabled: true, bound: true, live: folded, query: "  " })).toEqual({
+			error: "query required",
+		});
+	});
+
+	it("caps hits the way the frontier is capped", () => {
+		const records = Array.from({ length: FRONTIER_CAP + 2 }, (_, i) => ({
+			id: `d${String(i).padStart(2, "0")}`,
+			type: "decision" as const,
+			ts: `2026-11-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`,
+			session: "s",
+			headline: `topic ${i}`,
+			body: "shared topic",
+		}));
+		const got = executeSearch({ enabled: true, bound: true, live: foldLive(records), query: "shared topic" }) as {
+			items: Array<{ id: string }>;
+			elided: number;
+		};
+		expect(got.items).toHaveLength(FRONTIER_CAP);
+		expect(got.items[0]?.id).toBe("d00");
+		expect(got.elided).toBe(2);
 	});
 });
 

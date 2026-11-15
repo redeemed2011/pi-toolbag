@@ -12,6 +12,7 @@ import type { Runtime } from "../runtime.js";
 import { CTX_CLAIM, isReasonClass, type Entry } from "../types.js";
 import { applyClaim } from "./claim.js";
 import { executeFrontier } from "./frontier.js";
+import { executeSearch } from "./search.js";
 import { executeGet } from "./get.js";
 import { dropKeys, jsonResult } from "./result.js";
 import { executeZoom } from "./zoom.js";
@@ -20,6 +21,7 @@ import {
 	CLAIM_GUIDELINE,
 	FRONTIER_GUIDELINE,
 	GET_GUIDELINE,
+	SEARCH_GUIDELINE,
 	RECORD_GUIDELINE,
 	ZOOM_GUIDELINE,
 } from "./guidelines.js";
@@ -132,6 +134,31 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 					claimedId: fold.claimedId,
 					live: liveOf(runtime),
 					include_blocked: params.include_blocked,
+				}),
+			);
+		},
+	});
+
+	pi.registerTool({
+		name: "ctx_search",
+		label: "ctx search",
+		description: "Topic lookup over live records. Returns id, type, and headline. Cap 20; remainder in elided. Does not search observations.",
+		promptSnippet: "Search live ctx records by topic",
+		promptGuidelines: [SEARCH_GUIDELINE],
+		outputSchema: CTX_OUTPUT_SCHEMA,
+		namespace: CTX_NAMESPACE,
+		annotations: { readOnlyHint: true },
+		parameters: Type.Object({
+			query: Type.String({ description: "Short topic. Matches headline, directive, or body." }),
+		}),
+		async execute(_id: string, params: { query?: string }, _signal: AbortSignal | undefined, _onUpdate: unknown, ctx: ExtensionContext) {
+			const { fold } = sync(runtime, ctx);
+			return jsonResult(
+				executeSearch({
+					enabled: runtime.enabled,
+					bound: fold.bound,
+					live: liveOf(runtime),
+					query: params.query,
 				}),
 			);
 		},

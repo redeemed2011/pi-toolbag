@@ -8,6 +8,9 @@ export const ZOOM_GUIDELINE =
 export const FRONTIER_GUIDELINE =
 	"If the ctx status line says claim_empty=1 and you are starting work, call ctx_frontier once. Do not dump the frontier into the reply or the inject.";
 
+export const SEARCH_GUIDELINE =
+	"Use ctx_search for a topic that is not already a record id. It returns id, type, and headline. Use ctx_zoom for the body. Do not use ctx_get to search.";
+
 export const CLAIM_GUIDELINE =
 	"If ctx_frontier shows a question you are about to do, claim it with ctx_claim. If none fits, do not claim a different question. claim_not_live=1 or claim_blocked=1 still occupies the slot; close with ctx_claim before a different claim.";
 

@@ -13,6 +13,7 @@ import {
 	FRONTIER_GUIDELINE,
 	GET_GUIDELINE,
 	RECORD_GUIDELINE,
+	SEARCH_GUIDELINE,
 	ZOOM_GUIDELINE,
 } from "../src/tools/guidelines.js";
 import {
@@ -293,6 +294,9 @@ describe("ctx tool duties", () => {
 		expect(GET_GUIDELINE).toContain("once");
 		expect(ZOOM_GUIDELINE).toContain("ctx_zoom");
 		expect(FRONTIER_GUIDELINE).toContain("ctx_frontier");
+		expect(SEARCH_GUIDELINE).toContain("ctx_search");
+		expect(SEARCH_GUIDELINE).toContain("ctx_zoom");
+		expect(SEARCH_GUIDELINE).toContain("Do not use ctx_get to search");
 		expect(FRONTIER_GUIDELINE).toContain("claim_empty=1");
 		expect(FRONTIER_GUIDELINE).toContain("once");
 		expect(CLAIM_GUIDELINE).toContain("ctx_claim");
@@ -317,6 +321,7 @@ describe("ctx tool duties", () => {
 			"GET_GUIDELINE",
 			"ZOOM_GUIDELINE",
 			"FRONTIER_GUIDELINE",
+			"SEARCH_GUIDELINE",
 			"CLAIM_GUIDELINE",
 			"BIND_GUIDELINE",
 			"RECORD_GUIDELINE",
