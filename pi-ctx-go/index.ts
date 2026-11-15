@@ -19,6 +19,7 @@ import {
   type GoState,
   type Step,
 } from "./src/state.js";
+import { settleBarePrompt } from "./src/prompt-delivery.js";
 import { messageText } from "./src/text.js";
 import type { Entry } from "../pi-ctx/src/types.js";
 
@@ -108,6 +109,18 @@ export default function ctxGo(pi: ExtensionAPI): void {
     const goCtx = ctx as GoCtx;
     const file = goCtx.sessionManager.getSessionFile?.();
     state = file ? readClock(file) : freshState();
+  });
+
+  pi.on("input", async (event, ctx) => {
+    const settled = await settleBarePrompt(
+      { idle: ctx.isIdle(), streamingBehavior: event.streamingBehavior, text: event.text },
+      async (text) => {
+        const images = event.images ?? [];
+        const content = images.length > 0 ? [{ type: "text" as const, text }, ...images] : text;
+        await pi.sendUserMessage(content, { deliverAs: "followUp", expandPromptTemplates: true });
+      },
+    );
+    return settled === "handled" ? { action: "handled" } : { action: "continue" };
   });
 
   function wroteClaim(ctx: GoCtx, actions: Action[]): boolean {
