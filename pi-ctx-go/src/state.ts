@@ -11,6 +11,7 @@ import {
   rejectionPrompt,
   workPrompt,
 } from "./prompts.js";
+import { cancelReason, messageText } from "./text.js";
 export type GoPhase = "idle" | "draft" | "reconcile" | "conflicts" | "questions" | "work" | "claim" | "outcomes" | "project" | "paused";
 
 export type VerdictKind = "none" | "rejection" | "error";
@@ -69,7 +70,18 @@ export type TurnView = {
   toolCount: number;
   pending: boolean;
   text: string;
+  /** Why a turn failed or was aborted. Empty when the provider gave no reason. */
+  reason?: string;
 };
+
+export function viewTurn(
+  message: unknown,
+  outcome: TurnView["outcome"],
+  toolCount: number,
+  pending: boolean,
+): TurnView {
+  return { outcome, toolCount, pending, text: messageText(message), reason: cancelReason(message) };
+}
 
 export type Action =
   | { type: "notify"; level: "info" | "warning" | "error"; message: string }
@@ -276,7 +288,7 @@ export function onConflictRead(state: GoState, stamp: string, read: ConflictRead
 /** The agent has had a turn. Settled lines continue the loop. An unchanged list is sent back once, then the loop pauses. */
 export function onConflictsTurn(state: GoState, snap: Snap, turn: TurnView, still: string[]): Step {
   if (!state.armed || !snap.bound) return { state, actions: [] };
-  if (turn.outcome !== "completed") return pause(state, `ctx-go paused: turn ${turn.outcome}`);
+  if (turn.outcome !== "completed") return stopTurn(state, turn);
   if (turn.pending) return { state, actions: [] };
   if (still.length === 0) return onGo({ ...state, conflictOpen: [], statusReports: 0 }, snap);
   const same = still.join("\n") === state.conflictOpen.join("\n");
@@ -299,6 +311,14 @@ function pause(state: GoState, message: string, hard = false): Step {
     state: { ...state, phase: hard ? "paused" : state.phase, hold: !hard },
     actions: [{ type: "notify", level: "warning", message }],
   };
+}
+
+/** A failed or aborted turn stops here, and the session keeps the reason. */
+function stopTurn(state: GoState, turn: TurnView): Step {
+  const why = turn.reason?.trim() ?? "";
+  const message = why ? `ctx-go paused: turn ${turn.outcome}: ${why}` : `ctx-go paused: turn ${turn.outcome}`;
+  const step = pause(state, message);
+  return { state: step.state, actions: [...step.actions, { type: "record", text: message }] };
 }
 
 function claimBlocked(snap: Snap): boolean {
@@ -337,9 +357,7 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
   if (!state.armed || !snap.bound) return { state, actions: [] };
   if (state.phase === "paused") return { state, actions: [] };
   if (state.hold) state = { ...state, hold: false };
-  if (turn.outcome !== "completed") {
-    return pause(state, `ctx-go paused: turn ${turn.outcome}`);
-  }
+  if (turn.outcome !== "completed") return stopTurn(state, turn);
   if (turn.toolCount === 0 && !turn.pending && state.owedPrompt) {
     const text = state.owedPrompt;
     return prompt({ ...state, owedPrompt: null }, text, snap);

@@ -15,12 +15,12 @@ import {
   onStop,
   onIdleCompact,
   onTurn,
+  viewTurn,
   type Action,
   type GoState,
   type Step,
 } from "./src/state.js";
 import { settleBarePrompt } from "./src/prompt-delivery.js";
-import { messageText } from "./src/text.js";
 import type { Entry } from "../pi-ctx/src/types.js";
 
 type GoCtx = ExtensionContext & {
@@ -242,24 +242,23 @@ export default function ctxGo(pi: ExtensionAPI): void {
     const snap = readSnap(branch, sessionId);
     if (state.phase === "conflicts") {
       const still = snap.live ? unresolved(state.conflictOpen, snap.live) : state.conflictOpen;
-      const step = onConflictsTurn(state, snap, {
-        outcome: event.outcome,
-        toolCount: event.toolResults.length,
-        pending: goCtx.hasPendingMessages(),
-        text: messageText(event.message),
-      }, still);
+      const step = onConflictsTurn(
+        state,
+        snap,
+        viewTurn(event.message, event.outcome, event.toolResults.length, goCtx.hasPendingMessages()),
+        still,
+      );
       state = remember(goCtx, step.state);
       notify(goCtx, step.actions);
       if (!wroteClaim(goCtx, step.actions)) return;
       if (goCtx.hasPendingMessages()) return;
       return continued(event.entries, step.actions);
     }
-    const step = onTurn(state, snap, {
-      outcome: event.outcome,
-      toolCount: event.toolResults.length,
-      pending: goCtx.hasPendingMessages(),
-      text: messageText(event.message),
-    });
+    const step = onTurn(
+      state,
+      snap,
+      viewTurn(event.message, event.outcome, event.toolResults.length, goCtx.hasPendingMessages()),
+    );
     state = remember(goCtx, step.state);
     notify(goCtx, step.actions);
     if (!wroteClaim(goCtx, step.actions)) return;

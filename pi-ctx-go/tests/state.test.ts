@@ -15,7 +15,7 @@ import {
   rejectionPrompt,
   workPrompt,
 } from "../src/prompts.js";
-import { freshState, onApproved, onGo, onIdleCompact, onImpasseJudge, onJudge, onStop, onTurn, type Snap } from "../src/state.js";
+import { freshState, onApproved, onGo, onIdleCompact, onImpasseJudge, onJudge, onStop, onTurn, viewTurn, type Snap } from "../src/state.js";
 
 function snap(partial: Partial<Snap> = {}): Snap {
   return {
@@ -38,6 +38,20 @@ describe("ctx-go loop", () => {
     expect(CLAIM_PROMPT).toContain("relative to this session");
     expect(PROJECT_CLAIM_PROMPT).toContain("full path");
     expect(PROJECT_CLAIM_PROMPT).toContain("slash command is not a path");
+  });
+
+  it("tells why a failed turn stopped", () => {
+    const usage =
+      "You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.";
+    const message = {
+      errorMessage: `400 {"type":"error","error":{"type":"invalid_request_error","message":"${usage}"},"request_id":"req_1"}`,
+    };
+    const started = onGo(freshState(), snap());
+    const stopped = onTurn(started.state, snap(), viewTurn(message, "error", 0, false));
+    const told = `ctx-go paused: turn error: ${usage}`;
+    expect(stopped.actions).toContainEqual({ type: "notify", level: "warning", message: told });
+    expect(stopped.actions).toContainEqual({ type: "record", text: told });
+    expect(stopped.actions.some((action) => action.type === "judge")).toBe(false);
   });
 
   it("does nothing until CTX is bound", () => {
