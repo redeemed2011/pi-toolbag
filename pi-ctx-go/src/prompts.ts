@@ -4,6 +4,7 @@ export const QUESTION_PROMPT = [
   "Settle it only by recording a later CTX record that supersedes it.",
   "Closing the claim does not settle it. Do not supersede a question marked for the operator.",
   "Do not stop because the question was unclaimed.",
+  "If you cannot settle it, start a line with Impasse: and name what is missing. A judge reviews that.",
   "Do not stop this loop.",
   "Do not say you are checking. A report of what is in place is not the work.",
 ].join("\n");

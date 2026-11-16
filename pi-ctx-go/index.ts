@@ -126,7 +126,11 @@ export default function ctxGo(pi: ExtensionAPI): void {
   function wroteClaim(ctx: GoCtx, actions: Action[]): boolean {
     const claim = actions.find((action) => action.type === "claim");
     if (!claim || claim.type !== "claim") return true;
-    const { branch, sessionId } = branchOf(ctx);
+    let { branch, sessionId } = branchOf(ctx);
+    if (claim.release) {
+      pi.appendEntry(CTX_CLAIM, { claimed_question_id: null });
+      branch = [...branch, { type: "custom", id: "ctx-go-release", customType: CTX_CLAIM, data: { claimed_question_id: null } }];
+    }
     const wrote = prepareClaim(branch, sessionId, ctx.cwd, claim.questionId);
     if (!wrote.ok) {
       state = remember(ctx, { ...state, phase: "paused", hold: false });
@@ -289,6 +293,14 @@ function impasseOpen(snap: BoundSnap): string {
   return lines.join("\n");
 }
 
+/** A question impasse carries that question's text, so the judge reads what the worker could not settle. */
+function impasseClaim(snap: BoundSnap, state: GoState, claim: string): string {
+  const id = state.impasseQuestion;
+  const question = id ? snap.live?.byId.get(id) : undefined;
+  if (!question) return claim;
+  return `${claim}\n\nQuestion ${question.id}: ${question.headline}\n${question.body}`;
+}
+
 async function judgeImpasse(ctx: GoCtx, snap: BoundSnap, state: GoState, claim: string, override: JudgeOverride | null) {
   if (!snap.live) return onImpasseJudge(state, snap, { ok: false, error: "not bound" });
   const packet = buildImpassePacket({
@@ -296,7 +308,7 @@ async function judgeImpasse(ctx: GoCtx, snap: BoundSnap, state: GoState, claim: 
     constraints: snap.live.constraints
       .filter((item) => snap.live?.live.has(item.id))
       .map((item) => ({ headline: item.headline, body: item.directive || item.body })),
-    claim,
+    claim: impasseClaim(snap, state, claim),
     open: impasseOpen(snap),
   });
   if (!packet.ok) return onImpasseJudge(state, snap, packet);

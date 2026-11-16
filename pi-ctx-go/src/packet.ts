@@ -157,7 +157,7 @@ export function buildImpassePacket(input: {
   const constraints = input.constraints.map((item) => `${item.headline}: ${item.body}`).join("\n") || "none";
   const text = [
     "Judge this impasse.",
-    "The worker says this item cannot be recorded.",
+    "The worker says this item cannot be recorded, or this question cannot be settled.",
     "If the worker missed a way through, reply: way through: and a one-line summary.",
     "If there is no missed work, reply: no way through: and the reason.",
     "Do not ask the operator.",

@@ -46,6 +46,12 @@ export type GoState = {
   outcomesAsked: boolean;
   /** Prompt a tool turn produced. Pi clears that continue. The text-only stop sends it. */
   owedPrompt: string | null;
+  /** Unmarked questions the impasse judge agreed the worker cannot settle. Set aside for this run only. */
+  stuck: { id: string; why: string }[];
+  /** The claimed question the worker named an impasse on. Null for a reconcile impasse. */
+  impasseQuestion: string | null;
+  /** Questions the impasse judge already gave a way through in this run. */
+  wayThrough: string[];
 };
 
 export type BlockedQuestion = { id: string; headline: string; blockers: string[] };
@@ -63,6 +69,8 @@ export type Snap = {
   sessionTip?: string | null;
   /** A live decision says "not built" and no question was recorded at or after it. */
   notBuiltOpen?: boolean;
+  /** Live questions set aside this run because the worker cannot settle them. */
+  stuckIds?: string[];
 };
 
 export type TurnView = {
@@ -87,7 +95,7 @@ export type Action =
   | { type: "notify"; level: "info" | "warning" | "error"; message: string }
   | { type: "prompt"; text: string; display?: boolean }
   | { type: "judge"; claim: string; review?: "impasse" }
-  | { type: "claim"; questionId: string }
+  | { type: "claim"; questionId: string; release?: boolean }
   | { type: "record"; text: string };
 
 export type Step = { state: GoState; actions: Action[] };
@@ -115,7 +123,22 @@ export function freshState(): GoState {
     conflictOpen: [],
     outcomesAsked: false,
     owedPrompt: null,
+    stuck: [],
+    impasseQuestion: null,
+    wayThrough: [],
   };
+}
+
+/** Take the set-aside questions off the frontier. A superseded one drops out. */
+function aside(state: GoState, snap: Snap): Snap {
+  if (state.stuck.length === 0) return snap;
+  const ids = new Set(state.stuck.map((item) => item.id));
+  const live = [...ids].filter((id) => snap.frontierIds.includes(id) || snap.claimedId === id);
+  return { ...snap, frontierIds: snap.frontierIds.filter((id) => !ids.has(id)), stuckIds: live };
+}
+
+function setAside(snap: Snap, id: string | null): boolean {
+  return id !== null && (snap.askIds.includes(id) || (snap.stuckIds ?? []).includes(id));
 }
 
 export function fingerprint(snap: Snap): string {
@@ -171,6 +194,9 @@ export function onGo(state: GoState, snap: Snap): Step {
     productStamp: state.phase === "paused" ? null : state.productStamp,
     priorVerdict: state.phase === "paused" ? "" : state.priorVerdict,
     phase: "questions",
+    stuck: [],
+    impasseQuestion: null,
+    wayThrough: [],
   };
   // The live CTX project is the destination. A bound project is ready to work, and ctx-go does not ask the operator to approve a draft.
   if (!alreadyReconciled(state, snap)) return prompt({ ...next, phase: "reconcile" }, RECONCILE_PROMPT, snap);
@@ -218,14 +244,28 @@ function workFrom(state: GoState, snap: Snap): Step {
   return workQuestions(state, snap);
 }
 
+function heldSuffix(state: GoState, snap: Snap): string {
+  const held = snap.askIds.map((id, i) => `${id} ${snap.askHeadlines[i] ?? ""}`.trim());
+  const stuck = state.stuck
+    .filter((item) => (snap.stuckIds ?? []).includes(item.id))
+    .map((item) => `${item.id} ${item.why}`);
+  const parts = [
+    held.length ? `\nHeld for the operator. Do not work these:\n${held.join("\n")}` : "",
+    stuck.length ? `\nSet aside, the worker cannot settle these. Do not work these:\n${stuck.join("\n")}` : "",
+  ];
+  return parts.join("");
+}
+
 function workQuestions(state: GoState, snap: Snap): Step {
-  const questionId = snap.claimedId ? null : (snap.frontierIds[0] ?? null);
+  const claimedHeld = setAside(snap, snap.claimedId);
+  const questionId = !snap.claimedId || claimedHeld ? (snap.frontierIds[0] ?? null) : null;
   const seen = questionId
     ? { ...snap, claimedId: questionId, frontierIds: snap.frontierIds.filter((id) => id !== questionId) }
     : snap;
-  const step = prompt({ ...state, phase: "questions" }, QUESTION_PROMPT, seen);
+  const step = prompt({ ...state, phase: "questions" }, `${QUESTION_PROMPT}${heldSuffix(state, snap)}`, seen);
   if (!questionId) return step;
-  return { state: step.state, actions: [{ type: "claim", questionId }, ...step.actions] };
+  const claim = claimedHeld ? { type: "claim" as const, questionId, release: true } : { type: "claim" as const, questionId };
+  return { state: step.state, actions: [claim, ...step.actions] };
 }
 
 function namedImpasse(text: string): string | null {
@@ -327,11 +367,12 @@ function claimBlocked(snap: Snap): boolean {
 
 function questionsOpen(snap: Snap): boolean {
   if (snap.frontierIds.length > 0) return true;
-  return snap.claimedId !== null && !snap.askIds.includes(snap.claimedId) && !claimBlocked(snap);
+  return snap.claimedId !== null && !setAside(snap, snap.claimedId) && !claimBlocked(snap);
 }
 
 /** The tool-turn prompt was never delivered. An idle compaction sends it. A retry and a real hold do not. */
-export function onIdleCompact(state: GoState, snap: Snap, compact: { willRetry: boolean }): Step {
+export function onIdleCompact(state: GoState, raw: Snap, compact: { willRetry: boolean }): Step {
+  const snap = aside(state, raw);
   if (compact.willRetry || !state.armed || state.hold || state.phase === "paused" || !snap.bound) return { state, actions: [] };
   if (!state.owedPrompt || !questionsOpen(snap)) return { state, actions: [] };
   const text = state.owedPrompt;
@@ -343,8 +384,19 @@ function askPause(state: GoState, snap: Snap): Step {
   return pause(state, `Ask the operator:\n${lines.join("\n")}`);
 }
 
+/** Only set-aside questions are left. Name each one and the one next action. */
+function stuckPause(state: GoState, snap: Snap): Step {
+  const live = state.stuck.filter((item) => (snap.stuckIds ?? []).includes(item.id));
+  const lines = live.map((item) => `${item.id} ${item.why}`);
+  return pause(
+    state,
+    `ctx-go paused: the worker cannot settle these questions:\n${lines.join("\n")}\nAnswer them in a new prompt, then run /ctx-go.`,
+  );
+}
+
 function blockedPause(state: GoState, snap: Snap): Step | null {
-  if (snap.askIds.length > 0) return askPause(state, snap);
+  if (snap.askIds.length > 0 && !questionsOpen(snap)) return askPause(state, snap);
+  if ((snap.stuckIds ?? []).length > 0 && !questionsOpen(snap)) return stuckPause(state, snap);
   if (questionsOpen(snap)) return null;
   if (snap.blocked.length > 0) {
     const lines = snap.blocked.map((item) => `${item.id} ${item.headline} blocked by ${item.blockers.join(", ")}`);
@@ -353,7 +405,8 @@ function blockedPause(state: GoState, snap: Snap): Step | null {
   return null;
 }
 
-export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
+export function onTurn(state: GoState, raw: Snap, turn: TurnView): Step {
+  const snap = aside(state, raw);
   if (!state.armed || !snap.bound) return { state, actions: [] };
   if (state.phase === "paused") return { state, actions: [] };
   if (state.hold) state = { ...state, hold: false };
@@ -406,6 +459,8 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
   if (held) return held;
   if (snap.notBuiltOpen && !questionsOpen(snap)) return hand(prompt({ ...state, phase: "reconcile" }, RECONCILE_PROMPT, snap));
   if (questionsOpen(snap)) {
+    const stuckOn = turn.pending ? null : questionImpasse(state, snap, turn.text);
+    if (stuckOn) return stuckOn;
     if (isStatusReport(turn.text)) return hand(rejectStatus({ ...state, phase: "questions" }, snap));
     if (turn.toolCount === 0 && !changed && snap.claimedId) return pause(state, "ctx-go paused: no progress");
     if (turn.pending) return { state, actions: [] };
@@ -449,9 +504,26 @@ export function onTurn(state: GoState, snap: Snap, turn: TurnView): Step {
 /** The judge already reviewed the impasse. A way through continues. Agreement pauses. An error pauses and is not agreement. */
 export function onImpasseJudge(
   state: GoState,
-  snap: Snap,
+  raw: Snap,
   result: { ok: true; through: boolean; summary: string } | { ok: false; error: string },
 ): Step {
+  const snap = aside(state, raw);
+  const questionId = state.impasseQuestion;
+  if (questionId) {
+    const cleared = { ...state, impasseQuestion: null };
+    if (!result.ok) {
+      return pause({ ...cleared, lastVerdict: result.error, verdictKind: "error" }, `ctx-go paused: ${result.error}`);
+    }
+    if (result.through) {
+      const summary = result.summary.trim() || "a way through";
+      return prompt(
+        { ...cleared, phase: "questions", wayThrough: [...cleared.wayThrough, questionId] },
+        `${QUESTION_PROMPT}${heldSuffix(cleared, snap)}\nThe judge found a way through:\n${summary}\nDo that now.`,
+        snap,
+      );
+    }
+    return setQuestionAside(cleared, raw, questionId, result.summary.trim() || state.lastClaim);
+  }
   if (!result.ok) {
     return pause(
       { ...state, lastVerdict: result.error, verdictKind: "error" },
@@ -471,6 +543,28 @@ export function onImpasseJudge(
     { ...state, lastVerdict: reason, verdictKind: "none" },
     `ctx-go paused: ${reason}`,
   );
+}
+
+/** The worker named an impasse on the claimed question. The judge reviews it once. A second impasse after a way through sets it aside. */
+function questionImpasse(state: GoState, snap: Snap, text: string): Step | null {
+  const id = snap.claimedId;
+  if (!id || setAside(snap, id) || claimBlocked(snap)) return null;
+  const reason = namedImpasse(text);
+  if (!reason) return null;
+  const line = text.split("\n").map((item) => item.trim()).find((item) => item.toLowerCase().startsWith("impasse:")) ?? `Impasse: ${reason}`;
+  if (state.wayThrough.includes(id)) return setQuestionAside(state, snap, id, reason);
+  return {
+    state: { ...state, lastClaim: line, impasseQuestion: id },
+    actions: [{ type: "judge", claim: `Question ${id}\n${line}`, review: "impasse" }],
+  };
+}
+
+function setQuestionAside(state: GoState, raw: Snap, id: string, why: string): Step {
+  const next = { ...state, stuck: [...state.stuck.filter((item) => item.id !== id), { id, why }], statusReports: 0 };
+  const snap = aside(next, raw);
+  const notice: Action = { type: "notify", level: "info", message: `ctx-go set aside ${id}: ${why}` };
+  const step = questionsOpen(snap) ? workQuestions(next, snap) : blockedPause(next, snap) ?? stuckPause(next, snap);
+  return { state: step.state, actions: [notice, ...step.actions] };
 }
 
 const JUDGE_CAP = 10;

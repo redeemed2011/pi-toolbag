@@ -615,6 +615,75 @@ describe("ctx-go loop", () => {
     expect(queuedDraft.state.approvedDestinationId).toBe("d1");
   });
 
+  it("a question held for the operator does not block the next one", () => {
+    const open = snap({
+      sessionTip: "tip",
+      frontierIds: ["q2"],
+      claimedId: "q9",
+      askIds: ["q9"],
+      askHeadlines: ["Operator: does apple-pi now work as the interface for doing work?"],
+    });
+    const step = onGo({ ...freshState(), reconciledThrough: "tip" }, open);
+    expect(step.actions.some((action) => action.type === "notify")).toBe(false);
+    expect(step.actions[0]).toEqual({ type: "claim", questionId: "q2", release: true });
+    const prompt = String((step.actions[1] as { text: string }).text);
+    expect(prompt).toContain("Held for the operator");
+    expect(prompt).toContain("q9");
+    const only = onTurn(
+      step.state,
+      snap({
+        frontierIds: [],
+        claimedId: "q9",
+        askIds: ["q9"],
+        askHeadlines: ["Operator: does apple-pi now work as the interface for doing work?"],
+      }),
+      doneTurn,
+    );
+    expect(String((only.actions[0] as { message: string }).message)).toContain("Ask the operator");
+    expect(only.actions.some((action) => action.type === "prompt")).toBe(false);
+  });
+
+  it("an unmarked question the worker cannot settle is set aside, and the next one is worked", () => {
+    const stuckText = "Impasse: only the operator can say whether apple-pi works for doing work.";
+    const open = snap({ sessionTip: "tip", frontierIds: ["q2"], claimedId: "q1" });
+    const go = onGo({ ...freshState(), reconciledThrough: "tip" }, open);
+    const named = onTurn(go.state, open, { ...doneTurn, text: stuckText });
+    expect(named.actions).toEqual([{ type: "judge", claim: `Question q1\n${stuckText}`, review: "impasse" }]);
+    expect(named.state.impasseQuestion).toBe("q1");
+
+    const through = onImpasseJudge(named.state, open, { ok: true, through: true, summary: "read the transcript" });
+    expect(through.actions[0]).toMatchObject({ type: "prompt" });
+    expect(String((through.actions[0] as { text: string }).text)).toContain("read the transcript");
+    expect(through.state.impasseQuestion).toBeNull();
+
+    const none = onImpasseJudge(named.state, open, { ok: true, through: false, summary: "needs the operator's word" });
+    expect(none.state.stuck).toEqual([{ id: "q1", why: "needs the operator's word" }]);
+    expect(none.actions[1]).toEqual({ type: "claim", questionId: "q2", release: true });
+    const next = String((none.actions[2] as { text: string }).text);
+    expect(next).toContain("Set aside");
+    expect(next).toContain("q1");
+
+    const after = onTurn(none.state, snap({ frontierIds: ["q1"], claimedId: null }), doneTurn);
+    expect(after.actions.some((action) => action.type === "claim")).toBe(false);
+    const message = String((after.actions[0] as { message: string }).message);
+    expect(message).toContain("cannot settle");
+    expect(message).toContain("q1");
+
+    const again = onGo(after.state, open);
+    expect(again.state.stuck).toEqual([]);
+  });
+
+  it("a second impasse on a question after a way through sets it aside without the judge", () => {
+    const open = snap({ sessionTip: "tip", frontierIds: ["q2"], claimedId: "q1" });
+    const go = onGo({ ...freshState(), reconciledThrough: "tip" }, open);
+    const named = onTurn(go.state, open, { ...doneTurn, text: "Impasse: no data" });
+    const through = onImpasseJudge(named.state, open, { ok: true, through: true, summary: "look again" });
+    const twice = onTurn(through.state, open, { ...doneTurn, text: "Impasse: still no data" });
+    expect(twice.actions.some((action) => action.type === "judge")).toBe(false);
+    expect(twice.state.stuck.map((item) => item.id)).toEqual(["q1"]);
+    expect(twice.actions).toContainEqual({ type: "claim", questionId: "q2", release: true });
+  });
+
   it("pauses a marked claim and names a blocked question", () => {
     const started = onApproved({ ...freshState(), armed: true }, snap(), "d1");
     const marked = onTurn(
@@ -622,7 +691,8 @@ describe("ctx-go loop", () => {
       snap({ frontierIds: ["q2"], claimedId: "q9", askIds: ["q9"], askHeadlines: ["confirm"] }),
       doneTurn,
     );
-    expect(marked.actions[0]).toMatchObject({ type: "notify" });
+    expect(marked.actions[0]).toEqual({ type: "claim", questionId: "q2", release: true });
+    expect(String((marked.actions[1] as { text: string }).text)).toContain("q9");
     const blocked = onTurn(
       started.state,
       snap({
@@ -643,7 +713,8 @@ describe("ctx-go loop", () => {
       snap({ askIds: ["q9"], askHeadlines: ["confirm"] }),
       doneTurn,
     );
-    expect(String((markedEarly.actions[0] as { message: string }).message)).toContain("q9");
+    expect(markedEarly.actions[0]).toEqual({ type: "claim", questionId: "q1" });
+    expect(String((markedEarly.actions[1] as { text: string }).text)).toContain("q9");
   });
 
   it("sends the worker back to record a question for a not-built decision", () => {
