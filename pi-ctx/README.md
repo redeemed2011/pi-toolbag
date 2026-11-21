@@ -68,6 +68,7 @@ bash scripts/check-sandbox.sh
 | `/ctx status` | Bound?, occupancy, claim, GATE flags, observer inflight |
 | `/ctx occupancy` | `gated-edge` \| `claim-strip` (print refuses a switch with a reason; TUI confirms if target would `gate=1`) |
 | `/ctx bind` / `/ctx unbind` | Project law: name HITL, confirm; bind-consent nested harvest; no observation-promotion quiz |
+| `/ctx rename <name>` | Renames the bound project after a confirm. Its folder moves to the new id, and the old id stays in `project.json` `aliases`, so every session still bound to the old id reads and writes the renamed project. Records are not rewritten. |
 | `/ctx claim` | HITL claim / re-claim / close |
 
 Named tools: `ctx_get`, `ctx_zoom`, `ctx_frontier`, `ctx_claim`, `ctx_bind`, `ctx_record`. Print mode refuses HITL bind (no silent bind). Mint GATE overflow: no dialog; `"gate"` returns to the agent, which resolves it or tells the user. Mint `live_conflict`: print refuses; TUI `select` which to supersede.

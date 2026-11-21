@@ -1,5 +1,6 @@
 import { type Config, DEFAULTS, loadConfig } from "./config.js";
 import { foldLive, foldSession } from "./fold.js";
+import { resolveProjectId } from "./store/paths.js";
 import { loadProjectRecords } from "./store/project.js";
 import type { Entry, JudgmentRecord, LiveSet, Occupancy, SessionFold } from "./types.js";
 
@@ -52,6 +53,7 @@ export class Runtime {
 			return;
 		}
 		try {
+			this.projectId = resolveProjectId(this.projectId);
 			this.projectRecords = loadProjectRecords(this.projectId);
 			this.projectLive = foldLive(this.projectRecords);
 		} catch {

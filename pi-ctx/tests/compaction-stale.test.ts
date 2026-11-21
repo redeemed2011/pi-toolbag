@@ -81,6 +81,9 @@ function install(
 		settle(event: unknown = {}) {
 			return handlers.get("agent_settled")?.(event, ui.ctx);
 		},
+		compacted(event: unknown = { type: "session_compact", reason: "threshold", fromExtension: true, willRetry: false }) {
+			return handlers.get("session_compact")?.(event, ui.ctx);
+		},
 	};
 }
 
@@ -150,6 +153,52 @@ describe("/ctx compact", () => {
 		expect(ui.reads()).toBe(0);
 		expect(ui.notes).toContain("ctx: compaction complete");
 		expect(ui.notes).toContain("ctx: boom");
+	});
+});
+
+describe("a compaction that already ran", () => {
+	it("does not compact again at settle after Pi's own compaction ran mid-run", async () => {
+		const runtime = new Runtime();
+		const armed = install(runtime);
+		armed.turn({ toolResults: [{}] });
+		expect(runtime.compactInFlight).toBe(true);
+		armed.compacted();
+		await armed.settle();
+		expect(armed.ui.compacts()).toBe(0);
+		expect(runtime.compactInFlight).toBe(false);
+		expect(armed.ui.notes).toEqual([]);
+	});
+
+	it("does not compact at settle when the context is no longer over the threshold", async () => {
+		const runtime = new Runtime();
+		const armed = install(runtime);
+		armed.turn({ toolResults: [{}] });
+		armed.ui.ctx.getContextUsage = () => ({ tokens: 56_000 });
+		await armed.settle();
+		expect(armed.ui.compacts()).toBe(0);
+		expect(runtime.compactInFlight).toBe(false);
+	});
+
+	it("does not report Pi's refusal as a ctx error", async () => {
+		const runtime = new Runtime();
+		const armed = install(runtime);
+		armed.turn({ toolResults: [{}] });
+		const pending = armed.settle();
+		armed.ui.callbacks().onError?.({ message: "Nothing to compact (session too small)" });
+		await pending;
+		expect(armed.ui.notes.some((line) => line.includes("Nothing to compact"))).toBe(false);
+	});
+
+	it("keeps its own arm while its own compaction runs", async () => {
+		const runtime = new Runtime();
+		const armed = install(runtime);
+		armed.turn({ toolResults: [{}] });
+		const pending = armed.settle();
+		armed.compacted();
+		expect(runtime.compactInFlight).toBe(true);
+		armed.ui.callbacks().onComplete?.();
+		await pending;
+		expect(runtime.compactInFlight).toBe(false);
 	});
 });
 

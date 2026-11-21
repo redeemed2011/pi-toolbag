@@ -10,6 +10,7 @@ import { publishRuntimeBoundStatus, statusSink } from "../render/bound-status.js
 import { runAskFlow } from "./ask.js";
 import { runBindFlow, runUnbind } from "./bind.js";
 import { runClaimFlow } from "./claim.js";
+import { runRenameFlow } from "./rename.js";
 import { occupancyStatusLine, runOccupancyFlow } from "./occupancy.js";
 
 export function registerCtxCommand(pi: ExtensionAPI, runtime: Runtime): void {
@@ -38,7 +39,7 @@ export function registerCtxCommand(pi: ExtensionAPI, runtime: Runtime): void {
 
 	pi.registerCommand("ctx", {
 		description:
-			"ctx memory: on | off | status | compact | occupancy [gated-edge|claim-strip] | bind | unbind | claim",
+			"ctx memory: on | off | status | compact | occupancy [gated-edge|claim-strip] | bind | unbind | rename <name> | claim",
 		handler: async (args: string, ctx: any) => {
 			const parts = (args ?? "").trim().split(/\s+/).filter(Boolean);
 			const cmd = (parts[0] || "status").toLowerCase();
@@ -104,6 +105,12 @@ export function registerCtxCommand(pi: ExtensionAPI, runtime: Runtime): void {
 
 			if (cmd === "unbind") {
 				const result = runUnbind({ pi, runtime, hitl, status: setStatus });
+				if (!result.ok && ctx.hasUI) ctx.ui.notify(result.error, "warning");
+				return;
+			}
+
+			if (cmd === "rename") {
+				const result = await runRenameFlow({ pi, runtime, hitl, name: parts.slice(1).join(" "), status: setStatus });
 				if (!result.ok && ctx.hasUI) ctx.ui.notify(result.error, "warning");
 				return;
 			}

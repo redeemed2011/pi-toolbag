@@ -1,3 +1,4 @@
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -12,8 +13,32 @@ export function projectsDir(home = ctxHome()): string {
 	return join(home, "projects");
 }
 
+/**
+ * A renamed project lists its old ids in project.json "aliases". A session bound
+ * to an old id still reads and writes the renamed project.
+ */
+export function resolveProjectId(projectId: string, home = ctxHome()): string {
+	const root = projectsDir(home);
+	if (existsSync(join(root, projectId, "project.json"))) return projectId;
+	let names: string[];
+	try {
+		names = readdirSync(root);
+	} catch {
+		return projectId;
+	}
+	for (const name of names) {
+		try {
+			const raw = JSON.parse(readFileSync(join(root, name, "project.json"), "utf-8")) as { id?: unknown; aliases?: unknown };
+			if (typeof raw.id === "string" && Array.isArray(raw.aliases) && raw.aliases.includes(projectId)) return raw.id;
+		} catch {
+			// not a project
+		}
+	}
+	return projectId;
+}
+
 export function projectDir(projectId: string, home = ctxHome()): string {
-	return join(projectsDir(home), projectId);
+	return join(projectsDir(home), resolveProjectId(projectId, home));
 }
 
 export function projectMetaPath(projectId: string, home = ctxHome()): string {

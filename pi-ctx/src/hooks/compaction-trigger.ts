@@ -33,7 +33,19 @@ function compactWillAbortRun(ctx: { isIdle?: () => boolean }): boolean {
 	return typeof ctx.isIdle === "function" && !ctx.isIdle();
 }
 
+/** Pi refuses these. The context already shrank, so ctx has nothing to report. */
+const NOTHING_TO_COMPACT = new Set(["Compaction cancelled", "Nothing to compact (session too small)", "Already compacted"]);
+
 export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): void {
+	let compacting = false;
+
+	// Pi's own threshold or overflow compaction ran after ctx armed. That compaction met the need.
+	pi.on("session_compact", () => {
+		if (compacting || !runtime.compactInFlight) return;
+		runtime.compactInFlight = false;
+		runtime.compactResume = false;
+	});
+
 	pi.on("turn_end", (event: any, ctx: any) => {
 		if (!runtime.enabled || runtime.config.passive) return;
 		if (runtime.compactInFlight) return;
@@ -64,11 +76,19 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 			return;
 		}
 
+		// Pressure was read at turn_end. Read it again: a later compaction may already have freed the space.
+		if (!contextPressureTokens(ctx, runtime.config.compactAtContextTokens, runtime.sessionId).due) {
+			runtime.compactInFlight = false;
+			runtime.compactResume = false;
+			return;
+		}
+
 		const notify = notifyFrom(ctx);
 		const shouldResume = runtime.config.resumeAfterMidRunCompaction && compactWillAbortRun(ctx);
 		runtime.compactResume = shouldResume;
 		notify?.("ctx: context threshold reached — compacting…", "info");
 
+		compacting = true;
 		try {
 			await new Promise<void>((resolve) => {
 				ctx.compact({
@@ -95,7 +115,7 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 					onError: (error: { message: string }) => {
 						runtime.compactResume = false;
 						runtime.compactInFlight = false;
-						if (error.message !== "Compaction cancelled") {
+						if (!NOTHING_TO_COMPACT.has(error.message)) {
 							notify?.(`ctx: ${error.message}`, "error");
 						}
 						resolve();
@@ -107,6 +127,8 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 			runtime.compactInFlight = false;
 			const msg = error instanceof Error ? error.message : String(error);
 			notify?.(`ctx: ${msg}`, "error");
+		} finally {
+			compacting = false;
 		}
 	});
 }
