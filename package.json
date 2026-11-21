@@ -13,11 +13,12 @@
     "pi-foundations",
     "pi-stream-stall",
     "pi-tool-groups",
-    "pi-ctx-go"
+    "pi-ctx-go",
+    "pi-engineering-lead"
   ],
   "scripts": {
-    "test": "cd pi-ctx && node ../node_modules/vitest/vitest.mjs run && cd ../pi-fallback-lib && node ../node_modules/vitest/vitest.mjs run && cd ../pi-auto-fallback && node ../node_modules/vitest/vitest.mjs run && cd ../pi-foundations && node ../node_modules/vitest/vitest.mjs run && cd ../pi-stream-stall && node ../node_modules/vitest/vitest.mjs run && cd ../pi-tool-groups && npm test && cd ../pi-ctx-go && node ../node_modules/vitest/vitest.mjs run",
-    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p pi-ctx && node node_modules/typescript/bin/tsc --noEmit -p pi-fallback-lib && node node_modules/typescript/bin/tsc --noEmit -p pi-auto-fallback && node node_modules/typescript/bin/tsc --noEmit -p pi-foundations && node node_modules/typescript/bin/tsc --noEmit -p pi-stream-stall && node node_modules/typescript/bin/tsc --noEmit -p pi-tool-groups && node node_modules/typescript/bin/tsc --noEmit -p pi-ctx-go"
+    "test": "cd pi-ctx && node ../node_modules/vitest/vitest.mjs run && cd ../pi-fallback-lib && node ../node_modules/vitest/vitest.mjs run && cd ../pi-auto-fallback && node ../node_modules/vitest/vitest.mjs run && cd ../pi-foundations && node ../node_modules/vitest/vitest.mjs run && cd ../pi-stream-stall && node ../node_modules/vitest/vitest.mjs run && cd ../pi-tool-groups && npm test && cd ../pi-ctx-go && node ../node_modules/vitest/vitest.mjs run && cd ../pi-engineering-lead && node ../node_modules/vitest/vitest.mjs run",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p pi-ctx && node node_modules/typescript/bin/tsc --noEmit -p pi-fallback-lib && node node_modules/typescript/bin/tsc --noEmit -p pi-auto-fallback && node node_modules/typescript/bin/tsc --noEmit -p pi-foundations && node node_modules/typescript/bin/tsc --noEmit -p pi-stream-stall && node node_modules/typescript/bin/tsc --noEmit -p pi-tool-groups && node node_modules/typescript/bin/tsc --noEmit -p pi-ctx-go && node node_modules/typescript/bin/tsc --noEmit -p pi-engineering-lead"
   },
   "pi": {
     "extensions": [
@@ -26,7 +27,8 @@
       "./pi-foundations/index.ts",
       "./pi-stream-stall/index.ts",
       "./pi-tool-groups/index.ts",
-      "./pi-ctx-go/index.ts"
+      "./pi-ctx-go/index.ts",
+      "./pi-engineering-lead/index.ts"
     ],
     "skills": [
       "./pi-foundations/skills"
