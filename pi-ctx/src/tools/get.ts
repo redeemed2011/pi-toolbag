@@ -32,13 +32,39 @@ function supportExpired(
 	return evidenceExpired(target.expires_at, now);
 }
 
+export const SHORT_ID_MIN = 8;
+
+function resolveId(
+	raw: string,
+	live: LiveSet,
+	records: JudgmentRecord[],
+	observations: Observation[],
+): { id: string } | { error: string; candidates?: string[] } {
+	const exact = raw.trim();
+	if (live.byId.has(exact) || records.some((r) => r.id === exact) || observations.some((o) => o.id === exact)) return { id: exact };
+	const id = exact.toLowerCase();
+	if (id.length < SHORT_ID_MIN || !/^[0-9a-f-]+$/.test(id)) return { error: "not_found" };
+	const matches = new Set<string>();
+	for (const r of records) if (r.id.startsWith(id)) matches.add(r.id);
+	for (const key of live.byId.keys()) if (key.startsWith(id)) matches.add(key);
+	for (const o of observations) if (o.id.startsWith(id)) matches.add(o.id);
+	if (matches.size === 1) return { id: [...matches][0] as string };
+	if (matches.size > 1) return { error: "ambiguous", candidates: [...matches].sort() };
+	return { error: "not_found" };
+}
+
 export function lookupRecord(
-	id: string,
+	rawId: string,
 	live: LiveSet,
 	records: JudgmentRecord[],
 	observations: Observation[],
 	now = Date.now(),
 ): Record<string, unknown> {
+	const resolved = resolveId(rawId, live, records, observations);
+	if ("error" in resolved) {
+		return resolved.candidates ? { error: resolved.error, id: rawId, candidates: resolved.candidates } : { error: resolved.error, id: rawId };
+	}
+	const id = resolved.id;
 	const rec = live.byId.get(id) ?? records.find((r) => r.id === id);
 	if (rec) {
 		const view: Record<string, unknown> = {

@@ -58,7 +58,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		namespace: CTX_NAMESPACE,
 		annotations: { readOnlyHint: true },
 		parameters: Type.Object({
-			id: Type.Optional(Type.String({ description: "Record id. Omit for default retrieve." })),
+			id: Type.Optional(Type.String({ description: "Record id, or its first 8 or more characters. Omit for default retrieve." })),
 		}),
 		prepareArguments(args: unknown) {
 			return dropKeys<{ id?: string }>(args, ["q", "similar", "related", "search"]);
@@ -91,7 +91,7 @@ export function registerTools(pi: ExtensionAPI, runtime: Runtime): void {
 		namespace: CTX_NAMESPACE,
 		annotations: { readOnlyHint: true },
 		parameters: Type.Object({
-			id: Type.String({ description: "Record id" }),
+			id: Type.String({ description: "Record id, or its first 8 or more characters" }),
 		}),
 		async execute(_id: string, params: { id: string }, _signal: AbortSignal | undefined, _onUpdate: unknown, ctx: ExtensionContext) {
 			const { fold } = sync(runtime, ctx);
