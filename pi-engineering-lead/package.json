@@ -1,0 +1,25 @@
+{
+  "name": "pi-engineering-lead",
+  "version": "0.1.0",
+  "description": "Pi extension: messages with Engineering Lead (bb-file's Grok Bot). Incoming messages arrive in the session without touching the editor.",
+  "type": "module",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "test": "node ../node_modules/vitest/vitest.mjs run",
+    "typecheck": "node ../node_modules/typescript/bin/tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^1.2.0",
+    "@earendil-works/pi-coding-agent": "^1.2.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.5"
+  }
+}
