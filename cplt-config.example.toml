@@ -51,6 +51,12 @@ pass_env = [
   "HERDR_WORKSPACE_ID",
 ]
 yes = true
+# Brazos tests run a real server and browser on random localhost ports, and
+# deploy checks reach the live Brazos on 4737. Extra repos (exec for their
+# builds and tests) are per launch repo: cplt config set --local sandbox.repo_dirs.
+allow_localhost_any = true
+# Playwright's browsers in ~/.cache/ms-playwright, for the Brazos browser tests.
+allow_cache_exec = ["ms-playwright"]
 # scratch_dir = true   # default; go test / node-gyp temp exec
 
 # Soft command guards (PATH wrappers — keep server-side branch protection too)
