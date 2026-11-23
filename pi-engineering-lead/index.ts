@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, SessionBoundaryDraft } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { bridgeBinary, runner, send, type Runner, type SendParams } from "./src/bridge.js";
@@ -8,16 +8,36 @@ export const CUSTOM_TYPE = "engineering-lead";
 const POLL_MS = Number(process.env.PI_ENGINEERING_LEAD_POLL_MS) || 3000;
 const MISSING = "The dev-agent-bridge program is not installed (~/.cargo/bin/dev-agent-bridge, or DEV_AGENT_BRIDGE_BIN). Nothing was sent.";
 
-/** Hand one Engineering Lead message to the session. It never touches the editor. A busy agent gets it as a follow-up; an idle one starts a turn. */
-export function deliver(pi: ExtensionAPI, message: Incoming): void {
-  pi.sendMessage(
-    { customType: CUSTOM_TYPE, content: message.text, display: true, details: { id: message.id, kind: message.kind, topic: message.topic } },
-    { deliverAs: "followUp", triggerTurn: true },
-  );
+/** One session message for every Engineering Lead message taken together, so none waits behind another in memory. */
+export function framed(messages: Incoming[]): { customType: string; content: string; display: true; details: unknown } {
+  return {
+    customType: CUSTOM_TYPE,
+    content: messages.map((message) => message.text).join("\n\n"),
+    display: true,
+    details: { id: messages[0]?.id, ids: messages.map((message) => message.id), messages: messages.map(({ id, kind, topic }) => ({ id, kind, topic })) },
+  };
+}
+
+/** Hand Engineering Lead messages to an idle session: they start a turn. It never touches the editor. */
+export function deliver(pi: ExtensionAPI, messages: Incoming[]): void {
+  if (messages.length === 0) return;
+  pi.sendMessage(framed(messages), { deliverAs: "followUp", triggerTurn: true });
+}
+
+type TurnEnd = {
+  entries: SessionBoundaryDraft[];
+  toolResults: unknown[];
+  message: { role?: string; stopReason?: string };
+};
+
+/** A turn whose assistant finished with no tool call has done its work; anything else is still working or was cut off. */
+export function workDone(event: TurnEnd): boolean {
+  return event.toolResults.length === 0 && event.message.role === "assistant" && event.message.stopReason === "stop";
 }
 
 export default function engineeringLead(pi: ExtensionAPI): void {
   let listener: Listener | undefined;
+  let live: ExtensionContext | undefined;
   let run: Runner | undefined;
   const binary = () => {
     const path = bridgeBinary();
@@ -26,15 +46,31 @@ export default function engineeringLead(pi: ExtensionAPI): void {
 
   const startListening = (ctx: ExtensionContext) => {
     const bridge = binary();
+    live = ctx;
     if (!bridge || !ctx.hasUI || listener) return;
     listener = new Listener(bridge, ctx.sessionManager.getSessionId(), ctx.cwd, {
-      deliver: (message) => deliver(pi, message),
+      deliver: (messages) => deliver(pi, messages),
       warn: (text) => ctx.ui.notify(text, "warning"),
+      ready: () => {
+        const now = live ?? ctx;
+        return now.isIdle() && !now.hasPendingMessages();
+      },
     });
     listener.start(POLL_MS);
   };
 
   pi.on("session_start", (_event, ctx) => startListening(ctx));
+  // A message waits in the inbox while the agent works. When a turn ends with its work done, it joins
+  // the session as an entry written at that boundary, and the agent continues on it.
+  pi.on("turn_end", async (event, ctx) => {
+    live = ctx;
+    const turn = event as unknown as TurnEnd;
+    if (!listener || !workDone(turn)) return;
+    const messages = await listener.take();
+    if (messages.length === 0) return;
+    return { entries: [...turn.entries, { type: "custom_message", ...framed(messages) }], continue: true };
+  });
+
   pi.on("session_shutdown", async () => {
     const stopping = listener;
     listener = undefined;

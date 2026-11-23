@@ -14,6 +14,7 @@ Build with `cargo install`, not from a copy under `~/src`: inside cplt, programs
 |---|---|
 | `send --kind ask\|reply\|note --topic T (--body B \| --body-file F\|-) [--reply-to ID] [--ctx ID]... [--commit SHA] [--file F] [--id ID] [--dry-run]` | POST one message to Engineering Lead's webhook. |
 | `take --session S [--cwd D]` | JSON: the new inbox messages for this session. Only the session holding the lease gets them. |
+| `take --session S [--cwd D] --hold` | Renew the lease and take nothing. A busy session uses it so its messages wait in the inbox until its work is done. |
 | `listen --session S [--cwd D]` | Make this session the one that receives messages. |
 | `release --session S` | Give up the lease if this session holds it. |
 | `status` | JSON: the listener, the owner, the inbox, and how many messages wait. |

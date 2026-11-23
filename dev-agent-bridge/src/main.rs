@@ -47,6 +47,9 @@ enum Command {
         session: String,
         #[arg(long, default_value = "")]
         cwd: String,
+        /// Keep the lease without taking any message: for a session that is busy and will take them when its work is done.
+        #[arg(long)]
+        hold: bool,
     },
     /// Make this session the one that receives Engineering Lead's messages.
     Listen {
@@ -70,7 +73,10 @@ fn run(cli: Cli) -> Result<String, BridgeError> {
         Command::Send { kind, topic, body, body_file, reply_to, ctx, commit, file, id, dry_run } => {
             send::run(&env, send::SendArgs { kind, topic, body, body_file, reply_to, ctx, commit, file, id, dry_run })
         }
-        Command::Take { session, cwd } => Ok(serde_json::to_string(&inbox::take(&env, &session, &cwd)?).unwrap_or_default()),
+        Command::Take { session, cwd, hold } => {
+            let taken = if hold { inbox::hold(&env, &session, &cwd)? } else { inbox::take(&env, &session, &cwd)? };
+            Ok(serde_json::to_string(&taken).unwrap_or_default())
+        }
         Command::Listen { session, cwd } => inbox::listen(&env, &session, &cwd),
         Command::Release { session } => inbox::release(&env, &session),
         Command::Status => Ok(inbox::status(&env)?.to_string()),

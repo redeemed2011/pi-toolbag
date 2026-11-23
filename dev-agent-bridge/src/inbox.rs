@@ -142,6 +142,19 @@ fn age_s(path: &Path, now: f64) -> f64 {
         .unwrap_or(f64::MAX)
 }
 
+/// Renew the lease for a busy session and take nothing, so its messages wait in the inbox, not in the session's memory.
+pub fn hold(env: &Env, session: &str, cwd: &str) -> Result<Taken> {
+    let p = paths(env)?;
+    let now = now_ts();
+    let lease = read_json::<Lease>(&p.lease);
+    let owner = read_json::<Owner>(&p.owner);
+    if !may_hold(lease.as_ref(), owner.as_ref(), session, now) {
+        return Ok(Taken { listener: false, holder: lease, messages: Vec::new(), rejected: Vec::new() });
+    }
+    save_json(&p.lease, &Lease { session: session.to_string(), cwd: cwd.to_string(), heartbeat: now })?;
+    Ok(Taken { listener: true, holder: None, messages: Vec::new(), rejected: Vec::new() })
+}
+
 pub fn take(env: &Env, session: &str, cwd: &str) -> Result<Taken> {
     let p = paths(env)?;
     let now = now_ts();
@@ -265,6 +278,26 @@ mod tests {
         let taken = take(&env, "s1", "/w").unwrap();
         assert!(taken.messages.is_empty());
         assert!(taken.rejected[0].reason.contains("does not match"));
+    }
+
+    #[test]
+    fn hold_keeps_the_lease_and_leaves_every_message_waiting() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = env(dir.path());
+        drop_message(dir.path(), A, "note", "while busy");
+        let held = hold(&env, "s1", "/w").unwrap();
+        assert!(held.listener);
+        assert!(held.messages.is_empty());
+        assert!(!dir.path().join("log.jsonl").exists(), "holding logs no delivery");
+        assert_eq!(status(&env).unwrap()["waiting"], 1);
+        assert!(!take(&env, "s2", "/x").unwrap().listener, "the held lease keeps another session out");
+        assert!(!hold(&env, "s2", "/x").unwrap().listener);
+        let p = paths(&env).unwrap();
+        save_json(&p.lease, &Lease { session: "s1".into(), cwd: "/w".into(), heartbeat: now_ts() - LEASE_S - 1.0 }).unwrap();
+        assert!(hold(&env, "s1", "/w").unwrap().listener, "a renewed hold refreshes a stale lease");
+        assert!(!take(&env, "s2", "/x").unwrap().listener);
+        let taken = take(&env, "s1", "/w").unwrap();
+        assert_eq!(taken.messages.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), vec![A]);
     }
 
     #[test]

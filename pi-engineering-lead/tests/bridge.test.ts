@@ -35,9 +35,9 @@ describe.skipIf(!installed)("with the installed dev-agent-bridge", () => {
     const run = runner(installed!, env);
     const got: Incoming[] = [];
     const warnings: string[] = [];
-    const first = new Listener(run, "s1", "/w", { deliver: (m) => got.push(m), warn: (w) => warnings.push(w) });
+    const first = new Listener(run, "s1", "/w", { deliver: (m) => got.push(...m), warn: (w) => warnings.push(w), ready: () => true });
     const other: Incoming[] = [];
-    const second = new Listener(run, "s2", "/x", { deliver: (m) => other.push(m), warn: () => {} });
+    const second = new Listener(run, "s2", "/x", { deliver: (m) => other.push(...m), warn: () => {}, ready: () => true });
     drop(A, "ask", "Is the deploy done?");
     expect((await first.poll())?.listener).toBe(true);
     expect((await second.poll())?.listener).toBe(false);
@@ -52,6 +52,25 @@ describe.skipIf(!installed)("with the installed dev-agent-bridge", () => {
     expect(taken?.messages.map((m) => m.id)).toEqual([B]);
     expect(other.map((m) => m.id)).toEqual([B]);
     expect(warnings).toEqual([]);
+  });
+
+  it("while the session is busy the listener keeps its lease and takes nothing, so the message waits in the inbox", async () => {
+    const { env, drop } = sandbox();
+    const run = runner(installed!, env);
+    let ready = false;
+    const got: Incoming[][] = [];
+    const busy = new Listener(run, "s1", "/w", { deliver: (m) => got.push(m), warn: () => {}, ready: () => ready });
+    const other = new Listener(run, "s2", "/x", { deliver: () => {}, warn: () => {}, ready: () => true });
+    drop(A, "ask", "first");
+    drop(B, "note", "second");
+    expect((await busy.poll())?.listener).toBe(true);
+    expect(got).toEqual([]);
+    expect(JSON.parse((await run(["status"])).stdout).waiting).toBe(2);
+    expect((await other.poll())?.listener, "a busy holder keeps another session out").toBe(false);
+    ready = true;
+    await busy.poll();
+    expect(got.map((batch) => batch.map((m) => m.id))).toEqual([[A, B]]);
+    expect(JSON.parse((await run(["status"])).stdout).waiting).toBe(0);
   });
 
   it("a send that cannot go out explains why and names the next step", async () => {
@@ -102,7 +121,71 @@ describe("the pi extension", () => {
     return { pi, handlers, sent, tools };
   }
 
-  it.skipIf(!installed)("an arriving message goes to sendMessage as a follow-up that may start a turn, and never through the editor", async () => {
+  function harness(idle: () => boolean) {
+    const { dir, env, drop } = sandbox();
+    Object.assign(process.env, { ...env, DEV_AGENT_BRIDGE_BIN: installed, PI_ENGINEERING_LEAD_POLL_MS: "50" });
+    const fake = fakePi();
+    const ctx = {
+      hasUI: true,
+      cwd: dir,
+      ui: { notify: () => {} },
+      sessionManager: { getSessionId: () => "live" },
+      isIdle: idle,
+      hasPendingMessages: () => false,
+    };
+    engineeringLead(fake.pi as never);
+    fake.handlers.session_start!({}, ctx);
+    const status = async () => JSON.parse((await runner(installed!, env)(["status"])).stdout) as { waiting: number; listener: { session: string } | null };
+    const turnEnd = (stopReason: string, toolResults: unknown[] = []) =>
+      fake.handlers.turn_end!({ entries: [], toolResults, message: { role: "assistant", stopReason } }, ctx) as Promise<{ entries: { type: string; customType: string; content: string }[]; continue: boolean } | undefined>;
+    return { ...fake, dir, drop, status, turnEnd, ctx };
+  }
+
+  const settle = (ms = 400) => new Promise((r) => setTimeout(r, ms));
+
+  it.skipIf(!installed)("a message that arrives mid-turn waits in the inbox, not in memory, and joins the session when the turn's work is done", async () => {
+    const { handlers, sent, drop, status, turnEnd } = harness(() => false);
+    try {
+      drop(A, "ask", "is the deploy done?");
+      await settle();
+      expect(sent, "nothing is handed to pi while it works").toEqual([]);
+      expect((await status()).waiting).toBe(1);
+      expect((await status()).listener?.session, "the busy session keeps the lease").toBe("live");
+      expect(await turnEnd("toolUse", [{}]), "a turn with tool calls is still working").toBeUndefined();
+      expect(await turnEnd("aborted"), "an aborted turn does not take it").toBeUndefined();
+      expect(await turnEnd("error")).toBeUndefined();
+      expect((await status()).waiting).toBe(1);
+      drop(B, "note", "and the second");
+      const done = await turnEnd("stop");
+      expect(done?.continue).toBe(true);
+      expect(done?.entries).toHaveLength(1);
+      expect(done?.entries[0]!.type).toBe("custom_message");
+      expect(done?.entries[0]!.customType).toBe(CUSTOM_TYPE);
+      expect(done?.entries[0]!.content).toContain("is the deploy done?");
+      expect(done?.entries[0]!.content).toContain("and the second");
+      expect((await status()).waiting).toBe(0);
+      expect(sent).toEqual([]);
+    } finally {
+      await handlers.session_shutdown!({}, {});
+    }
+  });
+
+  it.skipIf(!installed)("an idle session gets every waiting message in one message that starts a turn", async () => {
+    const { handlers, sent, drop } = harness(() => true);
+    try {
+      drop(A, "note", "one");
+      drop(B, "note", "two");
+      for (let i = 0; i < 100 && sent.length === 0; i++) await settle(50);
+      await settle(200);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]!.message.content).toContain("one");
+      expect(sent[0]!.message.content).toContain("two");
+    } finally {
+      await handlers.session_shutdown!({}, {});
+    }
+  });
+
+  it.skipIf(!installed)("an idle message goes to sendMessage and may start a turn, and never through the editor", async () => {
     const { dir, env, drop } = sandbox();
     Object.assign(process.env, { ...env, DEV_AGENT_BRIDGE_BIN: installed, PI_ENGINEERING_LEAD_POLL_MS: "50" });
     const { pi, handlers, sent } = fakePi();
@@ -111,7 +194,7 @@ describe("the pi extension", () => {
       get: (target, key) => (key === "notify" ? target.notify : () => (editorTouched = true)),
     });
     engineeringLead(pi as never);
-    handlers.session_start!({}, { hasUI: true, cwd: dir, ui, sessionManager: { getSessionId: () => "live" } });
+    handlers.session_start!({}, { hasUI: true, cwd: dir, ui, sessionManager: { getSessionId: () => "live" }, isIdle: () => true, hasPendingMessages: () => false });
     drop(A, "note", "hello from bb-file");
     for (let i = 0; i < 100 && sent.length === 0; i++) await new Promise((r) => setTimeout(r, 50));
     await handlers.session_shutdown!({}, {});
