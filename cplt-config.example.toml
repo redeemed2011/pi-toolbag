@@ -28,6 +28,7 @@ read = ["/", "~/.pi/web-search.json"]
 write = [
   "/home/bo/.pi/grok-cli",
   "/home/bo/.pi/ctx",
+  "/home/bo/.brazos/ctx/projects/brazos",
   "/home/bo/ResilioSync/Obsidian/My Notes",
   "~/src",
 ]
@@ -38,6 +39,8 @@ socket = ["~/.config/herdr/herdr.sock", "/run/user/1000/pulse/native"]
 [deny]
 # Global path denials (optional). Prefer repo [deny] for project secrets.
 # paths = []
+# ctx-sync's push key for ctx-store. Only the ctx-sync job, outside cplt, uses it.
+paths = ["~/.ssh/ctx-sync"]
 
 [sandbox]
 agent = "pi"
