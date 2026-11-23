@@ -3,13 +3,14 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import engineeringLead, { CUSTOM_TYPE } from "../index.js";
+import engineeringLead, { CUSTOM_TYPE, MID_WORK } from "../index.js";
 import { bridgeBinary, runner, send, sendArgs } from "../src/bridge.js";
 import { Listener, type Incoming } from "../src/listener.js";
 
 const installed = bridgeBinary({}, homedir());
 const A = "aaaaaaaa-3899-4f2d-b1d3-f76908734e5b";
 const B = "bbbbbbbb-3899-4f2d-b1d3-f76908734e5b";
+const C = "cccccccc-3899-4f2d-b1d3-f76908734e5b";
 
 function sandbox() {
   const dir = mkdtempSync(join(tmpdir(), "pi-el-"));
@@ -143,7 +144,7 @@ describe("the pi extension", () => {
 
   const settle = (ms = 400) => new Promise((r) => setTimeout(r, ms));
 
-  it.skipIf(!installed)("a message that arrives mid-turn waits in the inbox, not in memory, and joins the session when the turn's work is done", async () => {
+  it.skipIf(!installed)("a message that arrives mid-turn waits in the inbox, not in memory, and joins the session at the next completed turn, even one with tool calls", async () => {
     const { handlers, sent, drop, status, turnEnd } = harness(() => false);
     try {
       drop(A, "ask", "is the deploy done?");
@@ -151,18 +152,25 @@ describe("the pi extension", () => {
       expect(sent, "nothing is handed to pi while it works").toEqual([]);
       expect((await status()).waiting).toBe(1);
       expect((await status()).listener?.session, "the busy session keeps the lease").toBe("live");
-      expect(await turnEnd("toolUse", [{}]), "a turn with tool calls is still working").toBeUndefined();
       expect(await turnEnd("aborted"), "an aborted turn does not take it").toBeUndefined();
-      expect(await turnEnd("error")).toBeUndefined();
+      expect(await turnEnd("error"), "an errored turn does not take it").toBeUndefined();
       expect((await status()).waiting).toBe(1);
       drop(B, "note", "and the second");
+      const mid = await turnEnd("toolUse", [{}]);
+      expect(mid?.entries, "a turn whose tool calls returned is a boundary: both join before the next model call").toHaveLength(1);
+      expect(mid?.entries[0]!.content).toContain("is the deploy done?");
+      expect(mid?.entries[0]!.content).toContain("and the second");
+      expect(mid?.entries[0]!.content.endsWith(MID_WORK), "mid-work it says to carry on with the work").toBe(true);
+      expect((await status()).waiting).toBe(0);
+      expect(await turnEnd("toolUse", [{}]), "a delivered message is not delivered again").toBeUndefined();
+      drop(C, "ask", "third");
       const done = await turnEnd("stop");
       expect(done?.continue).toBe(true);
       expect(done?.entries).toHaveLength(1);
       expect(done?.entries[0]!.type).toBe("custom_message");
       expect(done?.entries[0]!.customType).toBe(CUSTOM_TYPE);
-      expect(done?.entries[0]!.content).toContain("is the deploy done?");
-      expect(done?.entries[0]!.content).toContain("and the second");
+      expect(done?.entries[0]!.content).toContain("third");
+      expect(done?.entries[0]!.content).not.toContain(MID_WORK);
       expect((await status()).waiting).toBe(0);
       expect(sent).toEqual([]);
     } finally {

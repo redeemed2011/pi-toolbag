@@ -9,10 +9,12 @@ const POLL_MS = Number(process.env.PI_ENGINEERING_LEAD_POLL_MS) || 3000;
 const MISSING = "The dev-agent-bridge program is not installed (~/.cargo/bin/dev-agent-bridge, or DEV_AGENT_BRIDGE_BIN). Nothing was sent.";
 
 /** One session message for every Engineering Lead message taken together, so none waits behind another in memory. */
-export function framed(messages: Incoming[]): { customType: string; content: string; display: true; details: unknown } {
+export const MID_WORK = "This arrived between your tool calls. Handle it, then carry on with the work you were doing.";
+
+export function framed(messages: Incoming[], midWork = false): { customType: string; content: string; display: true; details: unknown } {
   return {
     customType: CUSTOM_TYPE,
-    content: messages.map((message) => message.text).join("\n\n"),
+    content: [...messages.map((message) => message.text), ...(midWork ? [MID_WORK] : [])].join("\n\n"),
     display: true,
     details: { id: messages[0]?.id, ids: messages.map((message) => message.id), messages: messages.map(({ id, kind, topic }) => ({ id, kind, topic })) },
   };
@@ -30,9 +32,12 @@ type TurnEnd = {
   message: { role?: string; stopReason?: string };
 };
 
-/** A turn whose assistant finished with no tool call has done its work; anything else is still working or was cut off. */
-export function workDone(event: TurnEnd): boolean {
-  return event.toolResults.length === 0 && event.message.role === "assistant" && event.message.stopReason === "stop";
+/**
+ * A turn that completed is a boundary a message may join: the assistant either finished or its tool calls
+ * all returned. An aborted or errored turn is not; the message stays in the inbox.
+ */
+export function boundary(event: TurnEnd): boolean {
+  return event.message.role === "assistant" && (event.message.stopReason === "stop" || event.message.stopReason === "toolUse");
 }
 
 export default function engineeringLead(pi: ExtensionAPI): void {
@@ -60,15 +65,16 @@ export default function engineeringLead(pi: ExtensionAPI): void {
   };
 
   pi.on("session_start", (_event, ctx) => startListening(ctx));
-  // A message waits in the inbox while the agent works. When a turn ends with its work done, it joins
-  // the session as an entry written at that boundary, and the agent continues on it.
+  // A message waits in the inbox while a model call or a tool runs. At the next completed turn, it joins
+  // the session as an entry written at that boundary, so the agent sees it before its next model call,
+  // even in the middle of a long run of tool calls. A finished turn continues on it.
   pi.on("turn_end", async (event, ctx) => {
     live = ctx;
     const turn = event as unknown as TurnEnd;
-    if (!listener || !workDone(turn)) return;
+    if (!listener || !boundary(turn)) return;
     const messages = await listener.take();
     if (messages.length === 0) return;
-    return { entries: [...turn.entries, { type: "custom_message", ...framed(messages) }], continue: true };
+    return { entries: [...turn.entries, { type: "custom_message", ...framed(messages, turn.message.stopReason === "toolUse") }], continue: true };
   });
 
   pi.on("session_shutdown", async () => {

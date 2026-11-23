@@ -1,13 +1,14 @@
 #!/bin/bash
-# Proof: an Engineering Lead message that arrives while the agent is mid-turn waits in the inbox,
-# does not interrupt the running tool or the turn, and joins the session only after that work is done.
+# Proof: an Engineering Lead message that arrives while a tool runs waits in the inbox, does not
+# interrupt that tool, and joins the session at the next turn boundary, before the agent's next model
+# call, in the middle of a run of tool calls, not only when the whole run is done.
 set -u
 D=$(mktemp -d /tmp/el-busy-XXXX); mkdir -p $D/inbox $D/sessions $D/cwd
 REALPI=/home/bo/.nvm/versions/node/v24.21.0/bin/pi
 S=elbusy$$
 tmux new-session -d -s $S -x 160 -y 45 -c $D/cwd "env DEV_AGENT_BRIDGE_INBOX=$D/inbox DEV_AGENT_BRIDGE_STATE=$D/state DEV_AGENT_BRIDGE_LOG=$D/log.jsonl DEV_AGENT_BRIDGE_SECRETS=$D/none.json PI_ENGINEERING_LEAD_POLL_MS=1000 $REALPI -ne -ns -e /home/bo/src/pi-toolbag/pi-engineering-lead/index.ts --session-dir $D/sessions --model anthropic/claude-haiku-4-5 ; sleep 600"
 sleep 8
-tmux send-keys -t $S -l "Run this one bash command exactly: sleep 20; echo SLEPT. Then reply with exactly the word FINISHED and nothing else."
+tmux send-keys -t $S -l "Run this bash command exactly: sleep 20; echo SLEPT. After it returns, run this second bash command exactly: echo SECOND. Then reply with exactly the word FINISHED and nothing else."
 tmux send-keys -t $S Enter
 sleep 8
 ID=$(python3 -c 'import uuid;print(uuid.uuid4())')
