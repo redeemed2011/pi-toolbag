@@ -112,11 +112,12 @@ describe("the pi extension", () => {
   function fakePi() {
     const handlers: Record<string, (event: unknown, ctx: unknown) => unknown> = {};
     const sent: { message: { customType: string; content: string }; options: unknown }[] = [];
-    const tools: Record<string, { execute: (id: string, params: unknown) => Promise<unknown> }> = {};
+    type Execute = (id: string, params: unknown, signal?: unknown, onUpdate?: unknown, ctx?: unknown) => Promise<{ content: { text: string }[] }>;
+    const tools: Record<string, { execute: Execute }> = {};
     const pi = {
       on: (name: string, fn: (event: unknown, ctx: unknown) => unknown) => (handlers[name] = fn),
       registerCommand: () => {},
-      registerTool: (tool: { name: string; execute: (id: string, params: unknown) => Promise<unknown> }) => (tools[tool.name] = tool),
+      registerTool: (tool: { name: string; execute: Execute }) => (tools[tool.name] = tool),
       sendMessage: (message: { customType: string; content: string }, options: unknown) => sent.push({ message, options }),
     };
     return { pi, handlers, sent, tools };
@@ -214,6 +215,17 @@ describe("the pi extension", () => {
     expect(existsSync(join(dir, "state", "listener.json"))).toBe(false);
   });
 
+  it("the tool sends with this session's id in DEV_AGENT_BRIDGE_SESSION, not as an argument", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-el-session-"));
+    const fake = join(dir, "dev-agent-bridge");
+    writeFileSync(fake, `#!/bin/sh\nprintf '%s|%s' "$DEV_AGENT_BRIDGE_SESSION" "$*"\n`, { mode: 0o755 });
+    process.env.DEV_AGENT_BRIDGE_BIN = fake;
+    const { pi, tools } = fakePi();
+    engineeringLead(pi as never);
+    const result = await tools.engineering_lead_send!.execute("1", { kind: "note", topic: "t", body: "b" }, undefined, undefined, { sessionManager: { getSessionId: () => "pi-42" } });
+    expect(result.content[0].text).toBe("pi-42|send --kind note --topic t --body-file -");
+  });
+
   it("without the program the tool says so and nothing is sent", async () => {
     process.env.DEV_AGENT_BRIDGE_BIN = "/nonexistent/dev-agent-bridge";
     const { pi, tools } = fakePi();
@@ -225,5 +237,6 @@ describe("the pi extension", () => {
     expect(sendArgs({ kind: "reply", topic: "t", body: "secret-free body", reply_to: A, ctx: ["c1", " "], commit: "abc" })).toEqual([
       "send", "--kind", "reply", "--topic", "t", "--body-file", "-", "--reply-to", A, "--ctx", "c1", "--commit", "abc",
     ]);
+    expect(sendArgs({ kind: "note", topic: "t", body: "b", session: "pi-1" })).toEqual(["send", "--kind", "note", "--topic", "t", "--body-file", "-"]);
   });
 });

@@ -9,7 +9,7 @@ export interface BridgeResult {
   stderr: string;
 }
 
-export type Runner = (args: string[], stdin?: string) => Promise<BridgeResult>;
+export type Runner = (args: string[], stdin?: string, extra?: Record<string, string>) => Promise<BridgeResult>;
 
 export function bridgeBinary(env: NodeJS.ProcessEnv = process.env, home = homedir()): string | undefined {
   const named = env.DEV_AGENT_BRIDGE_BIN;
@@ -19,9 +19,9 @@ export function bridgeBinary(env: NodeJS.ProcessEnv = process.env, home = homedi
 }
 
 export function runner(binary: string, env: NodeJS.ProcessEnv = process.env): Runner {
-  return (args, stdin) =>
+  return (args, stdin, extra) =>
     new Promise((resolve) => {
-      const child = spawn(binary, args, { env, stdio: ["pipe", "pipe", "pipe"] });
+      const child = spawn(binary, args, { env: extra ? { ...env, ...extra } : env, stdio: ["pipe", "pipe", "pipe"] });
       let stdout = "";
       let stderr = "";
       child.stdout.on("data", (chunk) => (stdout += chunk));
@@ -50,6 +50,8 @@ export interface SendParams {
   ctx?: string[];
   commit?: string;
   file?: string;
+  /** The sending session, passed as DEV_AGENT_BRIDGE_SESSION so an older bridge build still sends. Engineering Lead's reply and later notes on this topic come back to it. */
+  session?: string;
 }
 
 export function sendArgs(params: SendParams): string[] {
@@ -62,7 +64,8 @@ export function sendArgs(params: SendParams): string[] {
 }
 
 export async function send(run: Runner, params: SendParams): Promise<string> {
-  const result = await run(sendArgs(params), params.body);
+  const session = params.session?.trim();
+  const result = await run(sendArgs(params), params.body, session ? { DEV_AGENT_BRIDGE_SESSION: session } : undefined);
   if (result.code === 0) return result.stdout.trim();
   const meaning = EXIT_MEANING[result.code] ?? "The bridge failed. Nothing is known to have been sent.";
   throw new Error(`${result.stderr.trim()}\n${meaning}`.trim());

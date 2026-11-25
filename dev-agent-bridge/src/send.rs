@@ -15,6 +15,7 @@ pub struct SendArgs {
     pub file: Option<String>,
     pub id: Option<String>,
     pub dry_run: bool,
+    pub session: Option<String>,
 }
 
 struct Secrets {
@@ -136,7 +137,12 @@ pub fn run(env: &Env, args: SendArgs) -> Result<String> {
     let status = post(&secrets, &msg)?;
     state.record(&msg, now);
     state.save(&state_file)?;
-    let entry = serde_json::json!({"logged_at": message::now_iso(), "direction": "to-engineering-lead", "status": status, "message": msg});
+    let from_env = env.vars.get("DEV_AGENT_BRIDGE_SESSION").cloned();
+    let session = args.session.as_deref().or(from_env.as_deref()).map(str::trim).filter(|s| !s.is_empty());
+    if let Some(session) = session {
+        crate::inbox::remember(env, session, &msg.id, &msg.topic)?;
+    }
+    let entry = serde_json::json!({"logged_at": message::now_iso(), "direction": "to-engineering-lead", "status": status, "session": session, "message": msg});
     let log = append_log(env, &entry)?;
     Ok(format!("sent {} kind={} topic={} http={status} log={}", msg.id, msg.kind, msg.topic, log.display()))
 }

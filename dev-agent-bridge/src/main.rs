@@ -40,8 +40,11 @@ enum Command {
         id: Option<String>,
         #[arg(long)]
         dry_run: bool,
+        /// The session sending, so Engineering Lead's reply and later notes on this topic go back to it. Defaults to DEV_AGENT_BRIDGE_SESSION.
+        #[arg(long)]
+        session: Option<String>,
     },
-    /// Take Engineering Lead's new inbox messages for this session, as JSON. Only the session holding the lease gets them.
+    /// Take Engineering Lead's new inbox messages for this session, as JSON. A message on a topic this session wrote on comes to it; the session holding the lease gets the rest.
     Take {
         #[arg(long)]
         session: String,
@@ -70,8 +73,8 @@ enum Command {
 fn run(cli: Cli) -> Result<String, BridgeError> {
     let env = Env::current();
     match cli.command {
-        Command::Send { kind, topic, body, body_file, reply_to, ctx, commit, file, id, dry_run } => {
-            send::run(&env, send::SendArgs { kind, topic, body, body_file, reply_to, ctx, commit, file, id, dry_run })
+        Command::Send { kind, topic, body, body_file, reply_to, ctx, commit, file, id, dry_run, session } => {
+            send::run(&env, send::SendArgs { kind, topic, body, body_file, reply_to, ctx, commit, file, id, dry_run, session })
         }
         Command::Take { session, cwd, hold } => {
             let taken = if hold { inbox::hold(&env, &session, &cwd)? } else { inbox::take(&env, &session, &cwd)? };

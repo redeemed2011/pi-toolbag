@@ -120,10 +120,11 @@ export default function engineeringLead(pi: ExtensionAPI): void {
       commit: Type.Optional(Type.String()),
       file: Type.Optional(Type.String()),
     }),
-    async execute(_id, params) {
+    async execute(_id, params, _signal, _onUpdate, ctx) {
       const bridge = binary();
       if (!bridge) throw new Error(MISSING);
-      const text = await send(bridge, params as SendParams);
+      const session = ctx?.sessionManager?.getSessionId?.();
+      const text = await send(bridge, { ...(params as SendParams), ...(session ? { session } : {}) });
       return { content: [{ type: "text", text }], details: {} };
     },
   });

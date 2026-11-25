@@ -6,7 +6,59 @@ use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
 pub const LEASE_S: f64 = 30.0;
+pub const PRESENT_S: f64 = 30.0;
 const UNREADABLE_GRACE_S: f64 = 60.0;
+const ROUTES_KEPT: usize = 500;
+
+/// Which session wrote each ask id and, most recently, on each topic. Engineering Lead's answer goes back to it.
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct Routes {
+    #[serde(default)]
+    pub asks: Vec<(String, String)>,
+    #[serde(default)]
+    pub topics: Vec<(String, String)>,
+}
+
+impl Routes {
+    fn find(list: &[(String, String)], key: &str) -> Option<String> {
+        list.iter().rev().find(|(k, _)| k == key).map(|(_, s)| s.clone())
+    }
+
+    /// The session a message is addressed to: the writer of the ask it replies to, else the last writer on its topic.
+    pub fn addressee(&self, msg: &Message) -> Option<String> {
+        msg.reply_to.as_deref().and_then(|id| Self::find(&self.asks, id)).or_else(|| Self::find(&self.topics, &msg.topic))
+    }
+
+    fn put(list: &mut Vec<(String, String)>, key: &str, session: &str) {
+        list.retain(|(k, _)| k != key);
+        list.push((key.to_string(), session.to_string()));
+        if list.len() > ROUTES_KEPT {
+            list.drain(..list.len() - ROUTES_KEPT);
+        }
+    }
+}
+
+/// Record that `session` sent message `id` on `topic`, so replies and later notes on that topic reach it.
+pub fn remember(env: &Env, session: &str, id: &str, topic: &str) -> Result<()> {
+    let p = paths(env)?;
+    let mut routes = read_json::<Routes>(&p.routes).unwrap_or_default();
+    Routes::put(&mut routes.asks, id, session);
+    Routes::put(&mut routes.topics, topic, session);
+    save_json(&p.routes, &routes)
+}
+
+fn presence_file(p: &Paths, session: &str) -> PathBuf {
+    let name: String = session.bytes().map(|b| format!("{b:02x}")).collect();
+    p.present.join(format!("{}.json", &name[..name.len().min(200)]))
+}
+
+fn mark_present(p: &Paths, session: &str, cwd: &str, now: f64) -> Result<()> {
+    save_json(&presence_file(p, session), &Lease { session: session.to_string(), cwd: cwd.to_string(), heartbeat: now })
+}
+
+fn is_present(p: &Paths, session: &str, now: f64) -> bool {
+    read_json::<Lease>(&presence_file(p, session)).is_some_and(|seen| seen.session == session && now - seen.heartbeat <= PRESENT_S)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Lease {
@@ -59,16 +111,19 @@ struct Paths {
     owner: PathBuf,
     delivered: PathBuf,
     rejected: PathBuf,
+    routes: PathBuf,
+    present: PathBuf,
 }
 
 fn paths(env: &Env) -> Result<Paths> {
     let state = env.state_dir()?;
     let delivered = state.join("delivered");
     let rejected = state.join("rejected");
-    for dir in [&delivered, &rejected] {
+    let present = state.join("present");
+    for dir in [&delivered, &rejected, &present] {
         fs::create_dir_all(dir).map_err(|e| BridgeError::new(7, format!("cannot create {}: {e}", dir.display())))?;
     }
-    Ok(Paths { inbox: env.inbox(), lease: state.join("listener.json"), owner: state.join("owner.json"), delivered, rejected })
+    Ok(Paths { inbox: env.inbox(), lease: state.join("listener.json"), owner: state.join("owner.json"), delivered, rejected, routes: state.join("routes.json"), present })
 }
 
 fn claim_marker(dir: &Path, id: &str, note: &str) -> Result<bool> {
@@ -98,6 +153,7 @@ pub fn listen(env: &Env, session: &str, cwd: &str) -> Result<String> {
 
 pub fn release(env: &Env, session: &str) -> Result<String> {
     let p = paths(env)?;
+    let _ = fs::remove_file(presence_file(&p, session));
     match read_json::<Lease>(&p.lease) {
         Some(lease) if lease.session == session => {
             let _ = fs::remove_file(&p.lease);
@@ -146,6 +202,7 @@ fn age_s(path: &Path, now: f64) -> f64 {
 pub fn hold(env: &Env, session: &str, cwd: &str) -> Result<Taken> {
     let p = paths(env)?;
     let now = now_ts();
+    mark_present(&p, session, cwd, now)?;
     let lease = read_json::<Lease>(&p.lease);
     let owner = read_json::<Owner>(&p.owner);
     if !may_hold(lease.as_ref(), owner.as_ref(), session, now) {
@@ -155,16 +212,21 @@ pub fn hold(env: &Env, session: &str, cwd: &str) -> Result<Taken> {
     Ok(Taken { listener: true, holder: None, messages: Vec::new(), rejected: Vec::new() })
 }
 
+/// Take the new messages for this session. A message addressed to a session, because that session wrote the ask it
+/// answers or last wrote on its topic, goes to that session whether or not it holds the lease. The lease holder gets the
+/// rest, and also an addressed message whose session has not polled in the last 30 seconds, so nothing waits forever.
 pub fn take(env: &Env, session: &str, cwd: &str) -> Result<Taken> {
     let p = paths(env)?;
     let now = now_ts();
+    mark_present(&p, session, cwd, now)?;
     let lease = read_json::<Lease>(&p.lease);
     let owner = read_json::<Owner>(&p.owner);
-    if !may_hold(lease.as_ref(), owner.as_ref(), session, now) {
-        return Ok(Taken { listener: false, holder: lease, messages: Vec::new(), rejected: Vec::new() });
+    let holds = may_hold(lease.as_ref(), owner.as_ref(), session, now);
+    if holds {
+        save_json(&p.lease, &Lease { session: session.to_string(), cwd: cwd.to_string(), heartbeat: now })?;
     }
-    save_json(&p.lease, &Lease { session: session.to_string(), cwd: cwd.to_string(), heartbeat: now })?;
-    let mut taken = Taken { listener: true, holder: None, messages: Vec::new(), rejected: Vec::new() };
+    let routes = read_json::<Routes>(&p.routes).unwrap_or_default();
+    let mut taken = Taken { listener: holds, holder: if holds { None } else { lease }, messages: Vec::new(), rejected: Vec::new() };
     for (id, file) in inbox_files(&p.inbox) {
         if p.delivered.join(&id).exists() || p.rejected.join(&id).exists() {
             continue;
@@ -175,7 +237,12 @@ pub fn take(env: &Env, session: &str, cwd: &str) -> Result<Taken> {
         });
         match parsed {
             Ok(msg) => {
-                if !claim_marker(&p.delivered, &id, session)? {
+                let mine = match routes.addressee(&msg) {
+                    Some(to) if to == session => true,
+                    Some(to) => holds && !is_present(&p, &to, now),
+                    None => holds,
+                };
+                if !mine || !claim_marker(&p.delivered, &id, session)? {
                     continue;
                 }
                 let entry = serde_json::json!({"logged_at": message::now_iso(), "direction": "to-dev-agent", "via": "inbox", "session": session, "message": msg});
@@ -183,6 +250,9 @@ pub fn take(env: &Env, session: &str, cwd: &str) -> Result<Taken> {
                 taken.messages.push(Delivered { id: msg.id.clone(), kind: msg.kind.clone(), topic: msg.topic.clone(), text: message::frame(&msg), message: msg });
             }
             Err(reason) => {
+                if !holds {
+                    continue;
+                }
                 if reason == "the file is not valid JSON" && age_s(&file, now) < UNREADABLE_GRACE_S {
                     continue;
                 }
@@ -298,6 +368,84 @@ mod tests {
         assert!(!take(&env, "s2", "/x").unwrap().listener);
         let taken = take(&env, "s1", "/w").unwrap();
         assert_eq!(taken.messages.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), vec![A]);
+    }
+
+    fn drop_on(dir: &Path, id: &str, kind: &str, topic: &str, reply_to: Option<&str>) {
+        fs::create_dir_all(dir.join("inbox")).unwrap();
+        let msg = serde_json::json!({"v":1,"id":id,"from":"engineering-lead","to":"dev-agent","topic":topic,"kind":kind,"reply_to":reply_to,"body":"b","refs":{},"sent_at":"2026-11-21T13:20:00-06:00"});
+        fs::write(dir.join("inbox").join(format!("{id}.json")), msg.to_string()).unwrap();
+    }
+
+    const C: &str = "cccccccc-3899-4f2d-b1d3-f76908734e5b";
+    const D: &str = "dddddddd-3899-4f2d-b1d3-f76908734e5b";
+    const ASK: &str = "eeeeeeee-3899-4f2d-b1d3-f76908734e5b";
+
+    fn ids(taken: &Taken) -> Vec<&str> {
+        taken.messages.iter().map(|m| m.id.as_str()).collect()
+    }
+
+    #[test]
+    fn a_note_on_a_topic_goes_to_the_session_that_wrote_on_it_while_another_holds_the_lease() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = env(dir.path());
+        let brazos = "brazos@laptop:/home/bo/.brazos";
+        assert!(take(&env, brazos, "/b").unwrap().listener);
+        assert!(!take(&env, "pi-1", "/w").unwrap().listener);
+        remember(&env, "pi-1", ASK, "ssh-bb-file").unwrap();
+        remember(&env, brazos, "ffffffff-3899-4f2d-b1d3-f76908734e5b", "dev-speed").unwrap();
+        drop_on(dir.path(), A, "note", "ssh-bb-file", None);
+        drop_on(dir.path(), B, "reply", "other-topic", Some(ASK));
+        drop_on(dir.path(), C, "note", "dev-speed", None);
+        drop_on(dir.path(), D, "note", "nobody-wrote", None);
+        let lease = take(&env, brazos, "/b").unwrap();
+        assert!(lease.listener);
+        assert_eq!(ids(&lease), vec![C, D], "the holder gets its own topic and the unaddressed note, not pi's");
+        let pi = take(&env, "pi-1", "/w").unwrap();
+        assert!(!pi.listener, "pi still does not hold the lease");
+        assert_eq!(ids(&pi), vec![A, B], "pi gets the note on its topic and the reply to its ask, once");
+        assert!(take(&env, "pi-1", "/w").unwrap().messages.is_empty());
+        assert!(take(&env, brazos, "/b").unwrap().messages.is_empty());
+        let log = fs::read_to_string(dir.path().join("log.jsonl")).unwrap();
+        assert_eq!(log.lines().count(), 4);
+    }
+
+    #[test]
+    fn a_busy_addressee_keeps_its_message_waiting_and_a_gone_one_falls_back_to_the_lease_holder() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = env(dir.path());
+        assert!(take(&env, "holder", "/h").unwrap().listener);
+        remember(&env, "pi-1", ASK, "t1").unwrap();
+        hold(&env, "pi-1", "/w").unwrap();
+        drop_on(dir.path(), A, "note", "t1", None);
+        assert!(take(&env, "holder", "/h").unwrap().messages.is_empty(), "pi is busy but present, so its note waits for it");
+        assert_eq!(ids(&take(&env, "pi-1", "/w").unwrap()), vec![A]);
+        drop_on(dir.path(), B, "note", "t1", None);
+        release(&env, "pi-1").unwrap();
+        assert_eq!(ids(&take(&env, "holder", "/h").unwrap()), vec![B], "a session that released no longer holds its topic's notes");
+        remember(&env, "pi-2", C, "t2").unwrap();
+        let p = paths(&env).unwrap();
+        save_json(&presence_file(&p, "pi-2"), &Lease { session: "pi-2".into(), cwd: "/w".into(), heartbeat: now_ts() - PRESENT_S - 1.0 }).unwrap();
+        drop_on(dir.path(), D, "note", "t2", None);
+        assert_eq!(ids(&take(&env, "holder", "/h").unwrap()), vec![D], "a silent session's note falls back to the holder");
+        assert!(take(&env, "pi-2", "/w").unwrap().messages.is_empty(), "and is delivered once");
+    }
+
+    #[test]
+    fn a_later_writer_on_a_topic_takes_it_over_and_a_non_holder_never_rejects_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = env(dir.path());
+        remember(&env, "pi-1", A, "shared").unwrap();
+        remember(&env, "brazos", B, "shared").unwrap();
+        assert!(take(&env, "holder", "/h").unwrap().listener);
+        take(&env, "pi-1", "/w").unwrap();
+        take(&env, "brazos", "/b").unwrap();
+        drop_on(dir.path(), C, "note", "shared", None);
+        fs::write(dir.path().join("inbox").join(format!("{D}.json")), "{\"v\":1}").unwrap();
+        let pi = take(&env, "pi-1", "/w").unwrap();
+        assert!(pi.messages.is_empty());
+        assert!(pi.rejected.is_empty(), "only the holder reports a bad file");
+        assert_eq!(ids(&take(&env, "brazos", "/b").unwrap()), vec![C]);
+        assert_eq!(take(&env, "holder", "/h").unwrap().rejected.len(), 1);
     }
 
     #[test]
