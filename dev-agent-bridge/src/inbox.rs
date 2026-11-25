@@ -239,6 +239,7 @@ pub fn take(env: &Env, session: &str, cwd: &str) -> Result<Taken> {
             Ok(msg) => {
                 let mine = match routes.addressee(&msg) {
                     Some(to) if to == session => true,
+                    Some(_) if msg.kind == "reply" => false,
                     Some(to) => holds && !is_present(&p, &to, now),
                     None => holds,
                 };
@@ -407,6 +408,18 @@ mod tests {
         assert!(take(&env, brazos, "/b").unwrap().messages.is_empty());
         let log = fs::read_to_string(dir.path().join("log.jsonl")).unwrap();
         assert_eq!(log.lines().count(), 4);
+    }
+
+    #[test]
+    fn a_reply_to_an_absent_asker_stays_for_that_asker() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = env(dir.path());
+        let brazos = "brazos@laptop:/home/bo/.brazos";
+        assert!(take(&env, brazos, "/b").unwrap().listener);
+        remember(&env, "pi-1", ASK, "ssh-bb-file").unwrap();
+        drop_on(dir.path(), B, "reply", "ssh-bb-file", Some(ASK));
+        assert!(take(&env, brazos, "/b").unwrap().messages.is_empty(), "an absent asker's reply does not go to the lease holder");
+        assert_eq!(ids(&take(&env, "pi-1", "/w").unwrap()), vec![B], "the asker can still read it");
     }
 
     #[test]
