@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AssistantMessage, AssistantMessageEvent, AssistantMessageEventStream, Usage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, AssistantMessageEvent, AssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 
 const stallBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../stall-timeout/stall-timeout");
@@ -27,15 +27,6 @@ export type Sleeper = (ms: number) => IdleWait;
 export interface GuardOptions {
   sleep?: Sleeper;
   onTimeout?: (message: string) => void;
-}
-
-const ZERO_USAGE: Usage = {
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  totalTokens: 0,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 }
 
 const defaultSleep: Sleeper = (ms) => {
@@ -65,21 +56,19 @@ export function timeoutText(model: GuardModel, idleMs: number): string {
 }
 
 export function timeoutMessage(model: GuardModel, partial: AssistantMessage | undefined, idleMs: number): AssistantMessage {
-  const errorMessage = timeoutText(model, idleMs);
-  if (partial) {
-    return { ...partial, stopReason: "error", errorMessage, timestamp: Date.now() };
-  }
-  return {
-    role: "assistant",
-    content: [],
-    api: model.api,
-    provider: model.provider,
-    model: model.id,
-    usage: ZERO_USAGE,
-    stopReason: "error",
-    errorMessage,
-    timestamp: Date.now(),
-  };
+  const child = spawnSync(stallBin, ["message"], {
+    input: JSON.stringify({
+      api: model.api,
+      provider: model.provider,
+      id: model.id,
+      idleMs,
+      partial: partial ?? null,
+      timestamp: Date.now(),
+    }),
+    encoding: "utf8",
+  });
+  if (child.status !== 0) throw new Error(child.stderr || "stall-timeout failed");
+  return JSON.parse(child.stdout) as AssistantMessage;
 }
 
 function partialFrom(event: AssistantMessageEvent): AssistantMessage | undefined {

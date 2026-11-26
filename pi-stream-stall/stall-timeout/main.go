@@ -11,12 +11,15 @@ import (
 
 func main() {
 	var input struct {
-		Flag     any            `json:"flag"`
-		Env      *string        `json:"env"`
-		Provider string         `json:"provider"`
-		ID       string         `json:"id"`
-		IdleMs   int            `json:"idleMs"`
-		Event    map[string]any `json:"event"`
+		Flag      any             `json:"flag"`
+		Env       *string         `json:"env"`
+		Provider  string          `json:"provider"`
+		ID        string          `json:"id"`
+		API       string          `json:"api"`
+		IdleMs    int             `json:"idleMs"`
+		Timestamp int64           `json:"timestamp"`
+		Partial   json.RawMessage `json:"partial"`
+		Event     map[string]any  `json:"event"`
 	}
 	if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -24,6 +27,15 @@ func main() {
 	}
 	if len(os.Args) == 2 && os.Args[1] == "text" {
 		fmt.Printf("Provider stream timeout (%s/%s): no data for %dms\n", input.Provider, input.ID, input.IdleMs)
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == "message" {
+		raw, err := json.Marshal(timeoutMessage(input.API, input.Provider, input.ID, input.IdleMs, input.Timestamp, input.Partial))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(string(raw))
 		return
 	}
 	if len(os.Args) == 2 && os.Args[1] == "partial" {
@@ -36,6 +48,37 @@ func main() {
 		return
 	}
 	fmt.Println(parseIdleTimeoutMs(input.Flag, input.Env))
+}
+
+func timeoutMessage(api, provider, id string, idleMs int, timestamp int64, partial json.RawMessage) map[string]any {
+	text := fmt.Sprintf("Provider stream timeout (%s/%s): no data for %dms", provider, id, idleMs)
+	if len(partial) > 0 && string(partial) != "null" {
+		var message map[string]any
+		if err := json.Unmarshal(partial, &message); err == nil && message != nil {
+			message["stopReason"] = "error"
+			message["errorMessage"] = text
+			message["timestamp"] = timestamp
+			return message
+		}
+	}
+	return map[string]any{
+		"role":         "assistant",
+		"content":      []any{},
+		"api":          api,
+		"provider":     provider,
+		"model":        id,
+		"usage":        zeroUsage(),
+		"stopReason":   "error",
+		"errorMessage": text,
+		"timestamp":    timestamp,
+	}
+}
+
+func zeroUsage() map[string]any {
+	return map[string]any{
+		"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "totalTokens": 0,
+		"cost": map[string]any{"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0},
+	}
 }
 
 func partialFrom(event map[string]any) any {
