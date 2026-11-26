@@ -117,6 +117,28 @@ func main() {
 			return
 		}
 		fmt.Println(selectAccount(request.Accounts, request.Active, request.Session))
+	case "bound":
+		var lengths struct {
+			Lengths []int `json:"lengths"`
+		}
+		if decode(&lengths) {
+			return
+		}
+		fmt.Println(chainBound(lengths.Lengths))
+	case "switch":
+		var request struct {
+			Kind   string  `json:"kind"`
+			Budget float64 `json:"budget"`
+		}
+		if decode(&request) {
+			return
+		}
+		raw, err := json.Marshal(switchBook(request.Kind, request.Budget))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(string(raw))
 	case "settle":
 		var request settleInput
 		if decode(&request) {

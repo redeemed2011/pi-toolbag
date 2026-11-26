@@ -422,7 +422,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     state.preferred ??= gate.preferred ?? current;
     const replayTarget = gate.replayTarget;
 
-    const bound = Math.max(1, ...config.chains.map((chain) => chain.models.length));
+    const bound = Number(attachKernel({ lengths: (config?.chains ?? []).map((chain) => chain.models.length) }, "bound"));
     for (let i = 0; i < bound; i++) {
       const decision = decideFailover({
         config,
@@ -433,16 +433,19 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
         blocked: state.usageHeld,
       });
       if (decision.action === "none") {
+        const book = JSON.parse(attachKernel({ kind: "none" }, "switch")) as { clearTools?: boolean };
+        if (book.clearTools) state.toolsThisTurn = false;
         emit({ type: "skip", reason: decision.reason, classification: decision.classification }, ctx);
-        state.toolsThisTurn = false;
         return;
       }
 
       state.attempted = decision.attempted;
       const parsed = splitModelKey(decision.next);
-      if (!parsed || !ctx.modelRegistry.find(parsed.provider, parsed.id)) {
-        state.attempted.add(decision.next);
-        emit({ type: "skip", reason: "not-in-registry", to: decision.next }, ctx);
+      const found = Boolean(parsed && ctx.modelRegistry.find(parsed.provider, parsed.id));
+      if (!found) {
+        const book = JSON.parse(attachKernel({ kind: "missing" }, "switch")) as { remember?: boolean; reason?: string };
+        if (book.remember) state.attempted.add(decision.next);
+        emit({ type: "skip", reason: book.reason ?? "not-in-registry", to: decision.next }, ctx);
         continue;
       }
 
@@ -450,14 +453,19 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       try {
         const switched = await applyModelSwitch(ctx, decision.next);
         if (!switched.ok) {
-          state.attempted.add(decision.next);
+          const book = JSON.parse(attachKernel({ kind: "rejected" }, "switch")) as { remember?: boolean };
+          if (book.remember) state.attempted.add(decision.next);
           emit({ type: "skip", reason: switched.reason, to: decision.next }, ctx);
           continue;
         }
 
-        if (mode === "replay" && replayTarget) {
-          state.remainingBudget -= 1;
-          state.toolsThisTurn = false;
+        const book = JSON.parse(attachKernel({
+          kind: mode === "replay" && replayTarget ? "replay" : "continue",
+          budget: state.remainingBudget,
+        }, "switch")) as { action?: string; budget?: number; clearTools?: boolean };
+        if (book.action === "replay" && replayTarget) {
+          state.remainingBudget = book.budget ?? state.remainingBudget - 1;
+          if (book.clearTools) state.toolsThisTurn = false;
           emit(
             {
               type: "failover",

@@ -60,6 +60,31 @@ func settleGate(input settleInput) map[string]any {
 	}
 }
 
+func chainBound(lengths []int) int {
+	bound := 1
+	for _, length := range lengths {
+		if length > bound {
+			bound = length
+		}
+	}
+	return bound
+}
+
+func switchBook(kind string, budget float64) map[string]any {
+	switch kind {
+	case "none":
+		return map[string]any{"action": "stop", "clearTools": true}
+	case "missing":
+		return map[string]any{"action": "skip", "reason": "not-in-registry", "remember": true}
+	case "rejected":
+		return map[string]any{"action": "skip", "remember": true}
+	case "replay":
+		return map[string]any{"action": "replay", "budget": budget - 1, "clearTools": true}
+	default:
+		return map[string]any{"action": "continue"}
+	}
+}
+
 func skip(reason, classification string, clear bool) map[string]any {
 	out := map[string]any{"action": "skip", "reason": reason, "clearTools": clear}
 	if classification != "" {
