@@ -124,6 +124,26 @@ func isEnvName(value string) bool {
 	return envName.MatchString(value)
 }
 
+func httpHeaders(auth, name, token string) (map[string]string, string) {
+	headers := map[string]string{"accept": "application/json"}
+	if auth != "bearer-env" {
+		return headers, ""
+	}
+	if name == "" || token == "" {
+		return nil, "no-token"
+	}
+	headers["authorization"] = "Bearer " + token
+	return headers, ""
+}
+
+func grokHeaders(token string) map[string]string {
+	return map[string]string{
+		"authorization":    "Bearer " + token,
+		"x-xai-token-auth": "xai-grok-cli",
+		"accept":           "application/json",
+	}
+}
+
 func usagePath(kind, httpPath string) string {
 	if kind == "http" {
 		return httpPath

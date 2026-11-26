@@ -117,6 +117,29 @@ func main() {
 			return
 		}
 		fmt.Println(selectAccount(request.Accounts, request.Active, request.Session))
+	case "headers":
+		var request struct {
+			Kind  string `json:"kind"`
+			Auth  string `json:"auth"`
+			Name  string `json:"name"`
+			Token string `json:"token"`
+		}
+		if decode(&request) {
+			return
+		}
+		var headers map[string]string
+		reason := ""
+		if request.Kind == "grok" {
+			headers = grokHeaders(request.Token)
+		} else {
+			headers, reason = httpHeaders(request.Auth, request.Name, request.Token)
+		}
+		raw, err := json.Marshal(map[string]any{"headers": headers, "reason": reason})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(string(raw))
 	case "chain":
 		var request struct {
 			Config  fallbackConfig `json:"config"`

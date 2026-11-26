@@ -126,14 +126,15 @@ async function readHttp(
   if (gate.source.kind !== "http") return { ok: false, reason: "bad-source" };
   const url = httpsUrl(gate.source.url);
   if (!url) return { ok: false, reason: "insecure-url" };
-  const headers: Record<string, string> = { accept: "application/json" };
-  if (gate.source.auth === "bearer-env") {
-    const name = gate.source.env;
-    const token = name ? env[name] : undefined;
-    if (!name || !token) return { ok: false, reason: "no-token" };
-    headers.authorization = `Bearer ${token}`;
-  }
-  return fetchNumber(url.toString(), headers, gate, fetchImpl, cache, ttl, now, url.toString());
+  const name = gate.source.auth === "bearer-env" ? gate.source.env ?? "" : "";
+  const built = JSON.parse(kernel("headers", {
+    kind: "http",
+    auth: gate.source.auth,
+    name,
+    token: name ? env[name] ?? "" : "",
+  })) as { headers: Record<string, string> | null; reason: string };
+  if (built.reason) return { ok: false, reason: built.reason };
+  return fetchNumber(url.toString(), built.headers ?? {}, gate, fetchImpl, cache, ttl, now, url.toString());
 }
 
 async function readGrok(
@@ -206,11 +207,7 @@ async function readGrok(
 }
 
 function grokHeaders(token: string): Record<string, string> {
-  return {
-    authorization: `Bearer ${token}`,
-    "x-xai-token-auth": "xai-grok-cli",
-    accept: "application/json",
-  };
+  return (JSON.parse(kernel("headers", { kind: "grok", token })) as { headers: Record<string, string> }).headers;
 }
 
 async function fetchNumber(
