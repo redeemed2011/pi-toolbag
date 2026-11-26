@@ -8,10 +8,21 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: fallback-kernel classify|decide|extract|usage")
+		fmt.Fprintln(os.Stderr, "usage: fallback-kernel classify|decide|extract|usage|parse")
 		os.Exit(2)
 	}
 	switch os.Args[1] {
+	case "parse":
+		var value any
+		if decode(&value) {
+			return
+		}
+		raw, err := json.Marshal(parseFallbackConfig(value))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(string(raw))
 	case "usage":
 		var request usageRequest
 		if decode(&request) {
@@ -47,7 +58,7 @@ func main() {
 		}
 		fmt.Println(string(raw))
 	default:
-		fmt.Fprintln(os.Stderr, "usage: fallback-kernel classify|decide|extract|usage")
+		fmt.Fprintln(os.Stderr, "usage: fallback-kernel classify|decide|extract|usage|parse")
 		os.Exit(2)
 	}
 }
