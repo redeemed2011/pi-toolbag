@@ -193,12 +193,16 @@ async function pump(
 
 function errorMessage(model: GuardModel, partial: AssistantMessage | undefined, error: unknown): AssistantMessage {
   const text = error instanceof Error ? error.message : String(error);
-  return {
-    ...(partial ?? timeoutMessage(model, undefined, 0)),
-    stopReason: "error",
-    errorMessage: text,
-    timestamp: Date.now(),
-  };
+  const child = spawnSync(stallBin, ["failure"], {
+    input: JSON.stringify({
+      message: partial ?? timeoutMessage(model, undefined, 0),
+      text,
+      timestamp: Date.now(),
+    }),
+    encoding: "utf8",
+  });
+  if (child.status !== 0) throw new Error(child.stderr || "stall-timeout failed");
+  return JSON.parse(child.stdout) as AssistantMessage;
 }
 
 async function finishResult(

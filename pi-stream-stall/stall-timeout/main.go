@@ -19,6 +19,8 @@ func main() {
 		IdleMs    int             `json:"idleMs"`
 		Timestamp int64           `json:"timestamp"`
 		Partial   json.RawMessage `json:"partial"`
+		Message   map[string]any  `json:"message"`
+		Text      string          `json:"text"`
 		Event     map[string]any  `json:"event"`
 	}
 	if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
@@ -31,6 +33,15 @@ func main() {
 	}
 	if len(os.Args) == 2 && os.Args[1] == "message" {
 		raw, err := json.Marshal(timeoutMessage(input.API, input.Provider, input.ID, input.IdleMs, input.Timestamp, input.Partial))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(string(raw))
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == "failure" {
+		raw, err := json.Marshal(failureMessage(input.Message, input.Text, input.Timestamp))
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -72,6 +83,16 @@ func timeoutMessage(api, provider, id string, idleMs int, timestamp int64, parti
 		"errorMessage": text,
 		"timestamp":    timestamp,
 	}
+}
+
+func failureMessage(message map[string]any, text string, timestamp int64) map[string]any {
+	if message == nil {
+		message = map[string]any{}
+	}
+	message["stopReason"] = "error"
+	message["errorMessage"] = text
+	message["timestamp"] = timestamp
+	return message
 }
 
 func zeroUsage() map[string]any {

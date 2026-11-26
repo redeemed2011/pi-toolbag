@@ -9,6 +9,19 @@ import (
 	"testing"
 )
 
+func TestFailureKeepsPartialText(t *testing.T) {
+	message := failureMessage(map[string]any{
+		"role": "assistant", "content": []any{map[string]any{"type": "text", "text": "partial"}},
+	}, "boom", 5)
+	if message["errorMessage"] != "boom" || message["stopReason"] != "error" || message["timestamp"] != int64(5) {
+		t.Fatalf("%#v", message)
+	}
+	content := message["content"].([]any)
+	if content[0].(map[string]any)["text"] != "partial" {
+		t.Fatal(content)
+	}
+}
+
 func TestMatchesJavaScript(t *testing.T) {
 	script := `function parseIdleTimeoutMs(flag, env) {
   const raw = flag !== undefined && String(flag).trim() !== "" ? String(flag) : env;
