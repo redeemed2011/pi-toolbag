@@ -7,7 +7,9 @@ type Record struct {
 	Session    string   `json:"session"`
 	Headline   string   `json:"headline"`
 	Body       string   `json:"body"`
+	Directive  string   `json:"directive,omitempty"`
 	AppliesTo  any      `json:"applies_to,omitempty"`
+	Reason     string   `json:"reason_class,omitempty"`
 	Supersedes []string `json:"supersedes,omitempty"`
 	Blocks     []string `json:"blocks,omitempty"`
 	Asks       []string `json:"asks,omitempty"`
