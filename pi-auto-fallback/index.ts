@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
@@ -91,38 +92,16 @@ function bindChildExtensions(pi: ExtensionAPI): void {
   });
 }
 
+const noticeBin = fileURLToPath(new URL("./notice/notice", import.meta.url));
+
 function notifyFallback(event: FallbackEvent, ctx?: FallbackCtx): void {
   if (!ctx?.hasUI || !ctx.ui?.notify) return;
-  if (event.type === "failover") {
-    ctx.ui.notify(
-      `failover ${event.from} -> ${event.to} reason=${event.reason} budget=${event.budget}`,
-      "warning",
-    );
-    return;
-  }
-  if (event.type === "usage-switch") {
-    ctx.ui.notify(
-      `usage ${event.metric} ${event.value} >= ${event.threshold} ${event.from} -> ${event.to}`,
-      "warning",
-    );
-    return;
-  }
-  if (event.type === "usage-return") {
-    const detail =
-      event.metric !== undefined && event.value !== undefined && event.threshold !== undefined
-        ? ` ${event.metric} ${event.value} threshold=${event.threshold}`
-        : "";
-    ctx.ui.notify(`usage return ${event.from} -> ${event.to}${detail}`, "info");
-    return;
-  }
-  if (
-    event.type === "usage-skip" &&
-    (event.reason === "unavailable" || event.reason === "no-target" || event.reason === "not-in-chain")
-  ) {
-    const model = event.model ?? "model";
-    const detail = event.detail ? `: ${event.detail}` : "";
-    ctx.ui.notify(`usage check ${event.reason} for ${model}${detail}`, "warning");
-  }
+  const child = spawnSync(noticeBin, [], { input: JSON.stringify(event), encoding: "utf8" });
+  if (child.status !== 0) throw new Error(child.stderr || "auto-fallback notice failed");
+  const text = child.stdout.trim();
+  if (text === "null") return;
+  const notice = JSON.parse(text) as { text: string; level: "warning" | "info" };
+  ctx.ui.notify(notice.text, notice.level);
 }
 
 export default function piAutoFallback(pi: ExtensionAPI): void {

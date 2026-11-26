@@ -3,6 +3,7 @@ dist/
 build/
 pi-stream-stall/stall-timeout/stall-timeout
 pi-fallback-lib/fallback-kernel/kernel
+pi-auto-fallback/notice/notice
 coverage/
 *.tsbuildinfo
 .env
