@@ -1,8 +1,18 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { UsageGate } from "./types.js";
 import { httpsUrl, readJsonNumber, reportedUsage } from "./usage.js";
+
+const kernelBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fallback-kernel/kernel");
+
+function kernel(command: string, payload: unknown): string {
+  const child = spawnSync(kernelBin, [command], { input: JSON.stringify(payload), encoding: "utf8" });
+  if (child.status !== 0) throw new Error(child.stderr || "fallback-kernel failed");
+  return child.stdout.trim();
+}
 
 const DEFAULT_BASE = "https://cli-chat-proxy.grok.com/v1";
 const CACHE_FRESH_MS = 30 * 60_000;
@@ -23,7 +33,7 @@ type CacheEntry = { at: number; value: number };
 const liveCache = new Map<string, CacheEntry>();
 
 export function grokCliDir(env: NodeJS.ProcessEnv = process.env, home = homedir()): string {
-  return join(env.HOME || home, ".pi", "grok-cli");
+  return path.join(env.HOME || home, ".pi", "grok-cli");
 }
 
 type Credential = {
@@ -81,16 +91,8 @@ export function freshWeeklyPercent(
   } catch {
     return undefined;
   }
-  if (!isObject(parsed) || !isObject(parsed.accounts)) return undefined;
-  const entry = parsed.accounts[accountId];
-  if (!isObject(entry) || typeof entry.updatedAt !== "string") return undefined;
-  const updated = Date.parse(entry.updatedAt);
-  if (!Number.isFinite(updated) || now - updated > CACHE_FRESH_MS || updated > now + 60_000) return undefined;
-  if (!isObject(entry.weekly) || typeof entry.weekly.creditUsagePercent !== "number") return undefined;
-  if (typeof entry.weekly.billingPeriodEnd !== "string") return undefined;
-  const end = Date.parse(entry.weekly.billingPeriodEnd);
-  if (!Number.isFinite(end) || end <= now) return undefined;
-  return entry.weekly.creditUsagePercent;
+  const text = kernel("weekly", { parsed, accountId, now });
+  return text === "null" ? undefined : Number(text);
 }
 
 function baseUrl(env: NodeJS.ProcessEnv, credential?: Credential): string | undefined {
@@ -104,18 +106,13 @@ function selectAccount(
   vault: { activeAccountId?: string; accounts: VaultAccount[] },
   sessionAccountId: string | undefined,
 ): { account: VaultAccount; reason?: string } | { account?: undefined; reason: string } {
-  if (sessionAccountId) {
-    const selected = vault.accounts.find((account) => account.id === sessionAccountId);
-    if (!selected?.credential) return { reason: "no-token" };
-    return { account: selected };
-  }
-  const active = vault.accounts.find(
-    (account) => account.id === vault.activeAccountId && account.credential,
-  );
-  const first = vault.accounts.find((account) => account.credential);
-  const account = active ?? first;
-  if (!account) return { reason: "no-token" };
-  return { account };
+  const index = Number(kernel("account", {
+    accounts: vault.accounts,
+    active: vault.activeAccountId ?? "",
+    session: sessionAccountId ?? "",
+  }));
+  if (index < 0) return { reason: "no-token" };
+  return { account: vault.accounts[index] };
 }
 
 export async function readGateUsage(input: {
@@ -176,8 +173,8 @@ async function readGrok(
   ttl: number,
 ): Promise<UsageRead> {
   const dir = grokCliDir(env);
-  const vaultPath = input.vaultPath ?? join(dir, "accounts.json");
-  const cachePath = input.cachePath ?? join(dir, "quota-cache.json");
+  const vaultPath = input.vaultPath ?? path.join(dir, "accounts.json");
+  const cachePath = input.cachePath ?? path.join(dir, "quota-cache.json");
 
   if (env.GROK_CLI_OAUTH_TOKEN) {
     const root = baseUrl(env);

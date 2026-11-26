@@ -29,8 +29,8 @@ func parseFallbackConfig(value any) map[string]any {
 		return fail(reason)
 	}
 	config := map[string]any{
-		"enabled":                 enabled,
-		"chains":                  chains,
+		"enabled":                enabled,
+		"chains":                 chains,
 		"maxFailoversPerRequest": budget,
 	}
 	if gates != nil {
@@ -234,7 +234,9 @@ func itoa(n int) string {
 }
 
 func stringsContains(text, part string) bool { return len(part) == 0 || indexOf(text, part) >= 0 }
-func stringsHasPrefix(text, part string) bool { return len(text) >= len(part) && text[:len(part)] == part }
+func stringsHasPrefix(text, part string) bool {
+	return len(text) >= len(part) && text[:len(part)] == part
+}
 func stringsHasSuffix(text, part string) bool {
 	return len(text) >= len(part) && text[len(text)-len(part):] == part
 }
