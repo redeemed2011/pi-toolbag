@@ -19,9 +19,25 @@ func main() {
 		fold(os.Args[2:])
 	case "mint":
 		mint(os.Args[2:])
+	case "sync":
+		if err := ctx.Sync(ctx.SyncPaths{
+			Store: envOr("CTX_SYNC_STORE", os.Getenv("HOME")+"/.brazos/ctx"),
+			Git:   envOr("CTX_SYNC_GIT", os.Getenv("HOME")+"/.local/share/ctx-sync/git"),
+			State: envOr("CTX_SYNC_STATE", os.Getenv("HOME")+"/.local/state/ctx-sync"),
+		}, os.Getenv("CTX_SYNC_DEVICE")); err != nil {
+			fmt.Fprintf(os.Stderr, "ctx-sync: %s\n", err)
+			os.Exit(1)
+		}
 	default:
 		usage()
 	}
+}
+
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func usage() {
