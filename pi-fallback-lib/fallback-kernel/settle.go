@@ -60,6 +60,37 @@ func settleGate(input settleInput) map[string]any {
 	}
 }
 
+func sessionAccountID(branch []any) (string, bool) {
+	for i := len(branch) - 1; i >= 0; i-- {
+		row, ok := branch[i].(map[string]any)
+		if !ok || row["type"] != "custom" || row["customType"] != "grok-cli-active-account-v1" {
+			continue
+		}
+		data, ok := row["data"].(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := data["accountId"].(string)
+		if id != "" {
+			return id, true
+		}
+	}
+	return "", false
+}
+
+func preferredKind(hasPreferred, hasGates, hasGate, readingOK, recovered bool) string {
+	if !hasPreferred || !hasGates || !hasGate {
+		return "ungated"
+	}
+	if !readingOK {
+		return "unavailable"
+	}
+	if !recovered {
+		return "usage-held"
+	}
+	return "recovered"
+}
+
 func chainBound(lengths []int) int {
 	bound := 1
 	for _, length := range lengths {

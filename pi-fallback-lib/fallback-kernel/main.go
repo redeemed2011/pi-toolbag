@@ -117,6 +117,28 @@ func main() {
 			return
 		}
 		fmt.Println(selectAccount(request.Accounts, request.Active, request.Session))
+	case "session":
+		var branch []any
+		if decode(&branch) {
+			return
+		}
+		if id, ok := sessionAccountID(branch); ok {
+			fmt.Println(id)
+		} else {
+			fmt.Println("null")
+		}
+	case "preferred":
+		var request struct {
+			HasPreferred bool `json:"hasPreferred"`
+			HasGates     bool `json:"hasGates"`
+			HasGate      bool `json:"hasGate"`
+			ReadingOK    bool `json:"readingOK"`
+			Recovered    bool `json:"recovered"`
+		}
+		if decode(&request) {
+			return
+		}
+		fmt.Println(preferredKind(request.HasPreferred, request.HasGates, request.HasGate, request.ReadingOK, request.Recovered))
 	case "bound":
 		var lengths struct {
 			Lengths []int `json:"lengths"`

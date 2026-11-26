@@ -159,16 +159,8 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
   };
 
   const sessionAccountId = (ctx: FallbackCtx): string | undefined => {
-    const branch = ctx.sessionManager.getBranch();
-    for (let i = branch.length - 1; i >= 0; i--) {
-      const entry = branch[i];
-      if (entry?.type !== "custom" || entry.customType !== "grok-cli-active-account-v1") continue;
-      const data = entry.data;
-      if (!data || typeof data !== "object" || Array.isArray(data)) continue;
-      const id = (data as Record<string, unknown>).accountId;
-      if (typeof id === "string" && id) return id;
-    }
-    return undefined;
+    const text = attachKernel(ctx.sessionManager.getBranch(), "session");
+    return text === "null" ? undefined : text;
   };
 
   const readUsage = (model: ModelKey, gate: UsageGate, ctx: FallbackCtx) => {
@@ -185,24 +177,30 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     | { kind: "recovered"; metric: UsageMetric; value: number; threshold: number }
   > => {
     const preferred = state.preferred;
-    if (!preferred || !config?.usageGates?.length) return { kind: "ungated" };
-    const gate = matchingGate(config.usageGates, preferred);
-    if (!gate) return { kind: "ungated" };
-    const reading = await readUsage(preferred, gate, ctx);
-    if (!reading.ok) {
+    const gate = preferred && config?.usageGates?.length ? matchingGate(config.usageGates, preferred) : undefined;
+    const reading = preferred && gate ? await readUsage(preferred, gate, ctx) : undefined;
+    const kind = attachKernel({
+      hasPreferred: Boolean(preferred),
+      hasGates: Boolean(config?.usageGates?.length),
+      hasGate: Boolean(gate),
+      readingOK: Boolean(reading?.ok),
+      recovered: Boolean(gate && reading?.ok && usageRecovered(gate, reading.value)),
+    }, "preferred");
+    if (kind === "ungated" || !preferred) return { kind: "ungated" };
+    if (kind === "unavailable") {
       state.usageHeld.add(preferred);
-      return { kind: "blocked", reason: "unavailable", detail: reading.reason };
+      return { kind: "blocked", reason: "unavailable", detail: reading && !reading.ok ? reading.reason : undefined };
     }
-    if (!usageRecovered(gate, reading.value)) {
+    if (kind === "usage-held") {
       state.usageHeld.add(preferred);
       return { kind: "blocked", reason: "usage-held" };
     }
     state.usageHeld.delete(preferred);
     return {
       kind: "recovered",
-      metric: gate.metric,
-      value: reportedUsage(gate.metric, reading.value) ?? reading.value,
-      threshold: gate.threshold,
+      metric: gate!.metric,
+      value: reportedUsage(gate!.metric, reading!.value) ?? reading!.value,
+      threshold: gate!.threshold,
     };
   };
 
