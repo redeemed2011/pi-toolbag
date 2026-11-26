@@ -11,17 +11,23 @@ import (
 
 func main() {
 	var input struct {
-		Flag      any             `json:"flag"`
-		Env       *string         `json:"env"`
-		Provider  string          `json:"provider"`
-		ID        string          `json:"id"`
-		API       string          `json:"api"`
-		IdleMs    int             `json:"idleMs"`
-		Timestamp int64           `json:"timestamp"`
-		Partial   json.RawMessage `json:"partial"`
-		Message   map[string]any  `json:"message"`
-		Text      string          `json:"text"`
-		Event     map[string]any  `json:"event"`
+		Flag         any             `json:"flag"`
+		Env          *string         `json:"env"`
+		Provider     string          `json:"provider"`
+		ID           string          `json:"id"`
+		API          string          `json:"api"`
+		IdleMs       int             `json:"idleMs"`
+		Timestamp    int64           `json:"timestamp"`
+		Partial      json.RawMessage `json:"partial"`
+		Message      map[string]any  `json:"message"`
+		Text         string          `json:"text"`
+		Event        map[string]any  `json:"event"`
+		Op           string          `json:"op"`
+		Kind         string          `json:"kind"`
+		IteratorDone bool            `json:"iteratorDone"`
+		EventType    string          `json:"eventType"`
+		HasResult    bool            `json:"hasResult"`
+		StopReason   string          `json:"stopReason"`
 	}
 	if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -38,6 +44,14 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println(string(raw))
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == "step" {
+		if input.Op == "finish" {
+			fmt.Println(finishStep(input.HasResult, input.Kind, input.StopReason))
+		} else {
+			fmt.Println(pumpStep(input.Kind, input.EventType, input.IteratorDone))
+		}
 		return
 	}
 	if len(os.Args) == 2 && os.Args[1] == "failure" {
@@ -83,6 +97,38 @@ func timeoutMessage(api, provider, id string, idleMs int, timestamp int64, parti
 		"errorMessage": text,
 		"timestamp":    timestamp,
 	}
+}
+
+func pumpStep(kind, eventType string, iteratorDone bool) string {
+	switch kind {
+	case "timeout":
+		return "timeout"
+	case "error":
+		return "fail-error"
+	}
+	if iteratorDone {
+		return "finish"
+	}
+	if eventType == "error" || eventType == "done" {
+		return "stop"
+	}
+	return "continue"
+}
+
+func finishStep(hasResult bool, kind, stopReason string) string {
+	if !hasResult {
+		return "missing"
+	}
+	if kind == "timeout" {
+		return "timeout"
+	}
+	if kind == "error" {
+		return "fail-error"
+	}
+	if stopReason == "error" {
+		return "fail-message"
+	}
+	return "end"
 }
 
 func failureMessage(message map[string]any, text string, timestamp int64) map[string]any {

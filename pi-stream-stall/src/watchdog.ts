@@ -6,6 +6,15 @@ import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 
 const stallBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../stall-timeout/stall-timeout");
 
+function stallStep(op: "pump" | "finish", payload: Record<string, unknown>): string {
+  const child = spawnSync(stallBin, ["step"], {
+    input: JSON.stringify({ op, ...payload }),
+    encoding: "utf8",
+  });
+  if (child.status !== 0) throw new Error(child.stderr || "stall-timeout failed");
+  return child.stdout.trim();
+}
+
 export interface GuardModel {
   api: AssistantMessage["api"];
   provider: AssistantMessage["provider"];
@@ -166,25 +175,36 @@ async function pump(
     while (true) {
       const pending = iterator.next();
       const raced = await raceIdle(pending, idleMs, sleep);
-      if (raced.kind === "timeout") {
+      const event = raced.kind === "value" && !raced.value.done ? raced.value.value : undefined;
+      const step = stallStep("pump", {
+        kind: raced.kind,
+        iteratorDone: raced.kind === "value" && raced.value.done,
+        eventType: event?.type ?? "",
+      });
+      if (step === "timeout") {
         endTimeout(outer, onTimeout, model, partial, idleMs);
         return;
       }
-      if (raced.kind === "error") {
-        fail(outer, errorMessage(model, partial, raced.error));
+      if (step === "fail-error") {
+        fail(outer, errorMessage(model, partial, raced.kind === "error" ? raced.error : undefined));
         return;
       }
-      if (raced.value.done) {
+      if (step === "finish") {
         const finished = await finishResult(inner, partial, model, idleMs, sleep);
-        if (finished.timedOut) endTimeout(outer, onTimeout, model, partial, idleMs);
-        else if (finished.message.stopReason === "error") fail(outer, finished.message);
+        const done = stallStep("finish", {
+          hasResult: true,
+          kind: finished.timedOut ? "timeout" : "value",
+          stopReason: finished.message.stopReason,
+        });
+        if (done === "timeout") endTimeout(outer, onTimeout, model, partial, idleMs);
+        else if (done === "fail-message") fail(outer, finished.message);
         else outer.end(finished.message);
         return;
       }
-      const event = raced.value.value;
+      if (!event) return;
       partial = partialFrom(event) ?? partial;
       outer.push(event);
-      if (event.type === "error" || event.type === "done") return;
+      if (step === "stop") return;
     }
   } catch (error) {
     fail(outer, errorMessage(model, partial, error));
@@ -212,9 +232,17 @@ async function finishResult(
   idleMs: number,
   sleep: Sleeper,
 ): Promise<{ message: AssistantMessage; timedOut: boolean }> {
-  if (!inner.result) return { message: partial ?? timeoutMessage(model, undefined, idleMs), timedOut: false };
-  const raced = await raceIdle(inner.result(), idleMs, sleep);
-  if (raced.kind === "timeout") return { message: timeoutMessage(model, partial, idleMs), timedOut: true };
-  if (raced.kind === "error") return { message: errorMessage(model, partial, raced.error), timedOut: false };
+  if (stallStep("finish", { hasResult: Boolean(inner.result) }) === "missing") {
+    return { message: partial ?? timeoutMessage(model, undefined, idleMs), timedOut: false };
+  }
+  const raced = await raceIdle(inner.result!(), idleMs, sleep);
+  const step = stallStep("finish", {
+    hasResult: true,
+    kind: raced.kind,
+    stopReason: raced.kind === "value" ? raced.value.stopReason : "",
+  });
+  if (step === "timeout") return { message: timeoutMessage(model, partial, idleMs), timedOut: true };
+  if (step === "fail-error") return { message: errorMessage(model, partial, raced.kind === "error" ? raced.error : undefined), timedOut: false };
+  if (raced.kind !== "value") return { message: timeoutMessage(model, partial, idleMs), timedOut: false };
   return { message: raced.value, timedOut: false };
 }
