@@ -1,4 +1,15 @@
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { classifyError, isFailoverWorthy } from "./classify.js";
+
+const kernelBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fallback-kernel/kernel");
+
+function attachKernel(payload: unknown): string {
+  const child = spawnSync(kernelBin, ["attach"], { input: JSON.stringify(payload), encoding: "utf8" });
+  if (child.status !== 0) throw new Error(child.stderr || "fallback-kernel failed");
+  return child.stdout.trim();
+}
 import { extractLastAssistantError } from "./extract.js";
 import { readGateUsage } from "./grokUsage.js";
 import { decideFailover, findChain, modelKey, splitModelKey } from "./kernel.js";
@@ -29,64 +40,36 @@ type EpochState = {
   refusalCategory?: string;
 }
 
-function currentKey(ctx: FallbackCtx): ModelKey | undefined {
-  if (!ctx.model?.provider || !ctx.model.id) return undefined;
-  return modelKey(ctx.model.provider, ctx.model.id);
-}
-
 function eventRecord(event: unknown): Record<string, unknown> {
   return event !== null && typeof event === "object" ? (event as Record<string, unknown>) : {};
 }
 
+function currentKey(ctx: FallbackCtx): ModelKey | undefined {
+  const text = attachKernel({ op: "current", provider: ctx.model?.provider ?? "", id: ctx.model?.id ?? "" });
+  return text === "null" ? undefined : text;
+}
+
 function assistantEntryId(event: unknown): string | undefined {
-  const context = eventRecord(event).context;
-  if (context === null || typeof context !== "object") return undefined;
-  const entries = (context as { contextEntries?: unknown }).contextEntries;
-  if (!Array.isArray(entries)) return undefined;
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const row = entries[i];
-    if (row === null || typeof row !== "object") continue;
-    const source = (row as { sourceEntry?: unknown }).sourceEntry;
-    if (source === null || typeof source !== "object") continue;
-    const entry = source as { id?: unknown; type?: unknown; message?: { role?: unknown } };
-    if (entry.type !== "message" || entry.message?.role !== "assistant") continue;
-    if (typeof entry.id === "string" && entry.id) return entry.id;
-  }
-  return undefined;
+  const text = attachKernel({ op: "entry", event });
+  return text === "null" ? undefined : text;
 }
 
 function modelFromEvent(value: unknown): { provider: string; id: string } | undefined {
-  if (value === null || typeof value !== "object") return undefined;
-  const rec = value as Record<string, unknown>;
-  if (typeof rec.provider !== "string" || typeof rec.id !== "string") return undefined;
-  return { provider: rec.provider, id: rec.id };
+  const text = attachKernel({ op: "model", value });
+  return text === "null" ? undefined : JSON.parse(text) as { provider: string; id: string };
 }
 
 function refusalCategoryFromStream(event: unknown): string | undefined {
-  const data = eventRecord(event).data;
-  if (data === null || typeof data !== "object" || Array.isArray(data)) return undefined;
-  const message = data as Record<string, unknown>;
-  if (message.type !== "message_delta") return undefined;
-  const delta = message.delta;
-  if (delta === null || typeof delta !== "object" || Array.isArray(delta)) return undefined;
-  const details = (delta as Record<string, unknown>).stop_details;
-  if (details === null || typeof details !== "object" || Array.isArray(details)) return undefined;
-  const category = (details as Record<string, unknown>).category;
-  return typeof category === "string" && category ? category : undefined;
+  const text = attachKernel({ op: "refusal", event });
+  return text === "null" ? undefined : text;
 }
 
 function resumeInPlace(entry: unknown): boolean {
-  if (!entry || typeof entry !== "object") return false;
-  const details = (entry as { details?: unknown }).details;
-  if (!details || typeof details !== "object" || Array.isArray(details)) return false;
-  return (details as { resumeInPlace?: unknown }).resumeInPlace === true;
+  return attachKernel({ op: "resume", entry }) === "true";
 }
 
 function newestCompaction(branch: ReadonlyArray<{ type?: string }>, fallback: unknown): unknown {
-  for (let index = branch.length - 1; index >= 0; index -= 1) {
-    if (branch[index]?.type === "compaction") return branch[index];
-  }
-  return fallback;
+  return JSON.parse(attachKernel({ op: "compaction", branch, fallback }));
 }
 
 // Quota, transient, and safety failover run at agent_before_settle.

@@ -26,6 +26,58 @@ func main() {
 		} else {
 			fmt.Println("null")
 		}
+	case "attach":
+		var request struct {
+			Op       string `json:"op"`
+			Provider string `json:"provider"`
+			ID       string `json:"id"`
+			Event    any    `json:"event"`
+			Value    any    `json:"value"`
+			Entry    any    `json:"entry"`
+			Branch   []any  `json:"branch"`
+			Fallback any    `json:"fallback"`
+		}
+		if decode(&request) {
+			return
+		}
+		switch request.Op {
+		case "current":
+			if key, ok := currentKey(request.Provider, request.ID); ok {
+				fmt.Println(key)
+			} else {
+				fmt.Println("null")
+			}
+		case "entry":
+			if id, ok := assistantEntryID(request.Event); ok {
+				fmt.Println(id)
+			} else {
+				fmt.Println("null")
+			}
+		case "model":
+			if provider, id, ok := modelFromEvent(request.Value); ok {
+				raw, _ := json.Marshal(map[string]string{"provider": provider, "id": id})
+				fmt.Println(string(raw))
+			} else {
+				fmt.Println("null")
+			}
+		case "refusal":
+			if category, ok := refusalCategory(request.Event); ok {
+				fmt.Println(category)
+			} else {
+				fmt.Println("null")
+			}
+		case "resume":
+			fmt.Println(fmtBool(resumeInPlace(request.Entry)))
+		case "compaction":
+			raw, err := json.Marshal(newestCompaction(request.Branch, request.Fallback))
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			fmt.Println(string(raw))
+		default:
+			fmt.Println("null")
+		}
 	case "vault":
 		var parsed any
 		if decode(&parsed) {
