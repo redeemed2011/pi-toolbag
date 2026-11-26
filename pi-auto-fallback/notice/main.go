@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type event struct {
@@ -21,6 +23,15 @@ type event struct {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "warn" {
+		raw, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(childWarning(string(raw)))
+		return
+	}
 	var input event
 	if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -37,6 +48,13 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println(string(raw))
+}
+
+func childWarning(message string) string {
+	if strings.Contains(message, "already registered") {
+		return "pi-auto-fallback: child sessions will not fail over; another extension already registered required child extensions"
+	}
+	return "pi-auto-fallback: child sessions will not fail over; " + message
 }
 
 func notice(input event) (string, string, bool) {

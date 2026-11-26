@@ -2,6 +2,15 @@ package main
 
 import "testing"
 
+func TestChildWarning(t *testing.T) {
+	if childWarning("extension already registered") != "pi-auto-fallback: child sessions will not fail over; another extension already registered required child extensions" {
+		t.Fatal("registered")
+	}
+	if childWarning("disk full") != "pi-auto-fallback: child sessions will not fail over; disk full" {
+		t.Fatal("other")
+	}
+}
+
 func TestNotice(t *testing.T) {
 	budget := 2.0
 	metric := "percent"

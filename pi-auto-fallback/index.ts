@@ -80,19 +80,22 @@ function bindChildExtensions(pi: ExtensionAPI): void {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (alreadyRegistered(error)) {
-        warn(
-          ctx,
-          "pi-auto-fallback: child sessions will not fail over; another extension already registered required child extensions",
-        );
+        warn(ctx, childWarning(message));
         return;
       }
       clear();
-      warn(ctx, `pi-auto-fallback: child sessions will not fail over; ${message}`);
+      warn(ctx, childWarning(message));
     }
   });
 }
 
 const noticeBin = fileURLToPath(new URL("./notice/notice", import.meta.url));
+
+function childWarning(message: string): string {
+  const child = spawnSync(noticeBin, ["warn"], { input: message, encoding: "utf8" });
+  if (child.status !== 0) throw new Error(child.stderr || "auto-fallback notice failed");
+  return child.stdout.trim();
+}
 
 function notifyFallback(event: FallbackEvent, ctx?: FallbackCtx): void {
   if (!ctx?.hasUI || !ctx.ui?.notify) return;
