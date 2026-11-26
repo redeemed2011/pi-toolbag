@@ -91,6 +91,25 @@ func preferredKind(hasPreferred, hasGates, hasGate, readingOK, recovered bool) s
 	return "recovered"
 }
 
+func modelSwitch(parsed, found, called, setOK, threw, sameIgnore bool) map[string]any {
+	if !parsed {
+		return map[string]any{"ok": false, "reason": "invalid-current"}
+	}
+	if !found {
+		return map[string]any{"ok": false, "reason": "not-in-registry"}
+	}
+	if !called {
+		return map[string]any{"ok": true}
+	}
+	if threw {
+		return map[string]any{"ok": false, "reason": "setModel-threw", "clearIgnore": sameIgnore}
+	}
+	if !called || !setOK {
+		return map[string]any{"ok": false, "reason": "no-auth", "clearIgnore": sameIgnore}
+	}
+	return map[string]any{"ok": true, "clearIgnore": sameIgnore}
+}
+
 func chainBound(lengths []int) int {
 	bound := 1
 	for _, length := range lengths {

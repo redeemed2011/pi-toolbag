@@ -117,6 +117,24 @@ func main() {
 			return
 		}
 		fmt.Println(selectAccount(request.Accounts, request.Active, request.Session))
+	case "model-switch":
+		var request struct {
+			Parsed     bool `json:"parsed"`
+			Found      bool `json:"found"`
+			Called     bool `json:"called"`
+			SetOK      bool `json:"setOK"`
+			Threw      bool `json:"threw"`
+			SameIgnore bool `json:"sameIgnore"`
+		}
+		if decode(&request) {
+			return
+		}
+		raw, err := json.Marshal(modelSwitch(request.Parsed, request.Found, request.Called, request.SetOK, request.Threw, request.SameIgnore))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(string(raw))
 	case "session":
 		var branch []any
 		if decode(&branch) {

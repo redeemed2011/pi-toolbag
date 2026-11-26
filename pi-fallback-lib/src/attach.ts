@@ -123,9 +123,11 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     nextKey: ModelKey,
   ): Promise<{ ok: true } | { ok: false; reason: string }> => {
     const parsed = splitModelKey(nextKey);
-    if (!parsed) return { ok: false, reason: "invalid-current" };
-    const model = ctx.modelRegistry.find(parsed.provider, parsed.id);
-    if (!model) return { ok: false, reason: "not-in-registry" };
+    const model = parsed ? ctx.modelRegistry.find(parsed.provider, parsed.id) : undefined;
+    const early = JSON.parse(attachKernel({
+      parsed: Boolean(parsed), found: Boolean(model), called: false, setOK: false, threw: false, sameIgnore: false,
+    }, "model-switch")) as { ok: boolean; reason?: string };
+    if (!early.ok) return { ok: false, reason: early.reason ?? "invalid-current" };
 
     let thinking: string | undefined;
     try {
@@ -135,17 +137,29 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     }
 
     state.ignoreModelSelectKey = nextKey;
+    let setOK = false;
+    let threw = false;
+    let thrown: unknown;
     try {
-      const ok = await pi.setModel(model);
-      if (!ok) {
-        if (state.ignoreModelSelectKey === nextKey) state.ignoreModelSelectKey = undefined;
-        return { ok: false, reason: "no-auth" };
-      }
+      setOK = await pi.setModel(model!);
     } catch (err) {
-      if (state.ignoreModelSelectKey === nextKey) state.ignoreModelSelectKey = undefined;
-      emit({ type: "host-error", where: "setModel", message: err instanceof Error ? err.message : String(err), to: nextKey }, ctx);
-      return { ok: false, reason: "setModel-threw" };
+      threw = true;
+      thrown = err;
     }
+    const book = JSON.parse(attachKernel({
+      parsed: true,
+      found: true,
+      called: true,
+      setOK,
+      threw,
+      sameIgnore: state.ignoreModelSelectKey === nextKey,
+    }, "model-switch")) as { ok: boolean; reason?: string; clearIgnore?: boolean };
+    if (!book.ok && book.clearIgnore) state.ignoreModelSelectKey = undefined;
+    if (threw) {
+      const err = thrown;
+      emit({ type: "host-error", where: "setModel", message: err instanceof Error ? err.message : String(err), to: nextKey }, ctx);
+    }
+    if (!book.ok) return { ok: false, reason: book.reason ?? "no-auth" };
 
     if (thinking !== undefined) {
       try {
@@ -154,7 +168,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
         emit({ type: "host-error", where: "setThinkingLevel", message: err instanceof Error ? err.message : String(err) }, ctx);
       }
     }
-    if (state.ignoreModelSelectKey === nextKey) state.ignoreModelSelectKey = undefined;
+    if (book.clearIgnore) state.ignoreModelSelectKey = undefined;
     return { ok: true };
   };
 
