@@ -1,4 +1,9 @@
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { FailoverError } from "./types.js";
+
+const kernelBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fallback-kernel/kernel");
 
 type BranchEntry = {
   type?: string;
@@ -12,36 +17,12 @@ type BranchEntry = {
   };
 };
 
-/**
- * Last assistant on the branch. Never fills `status`. Copies `rawStopReason`
- * when the message has one.
- */
-function physicalModel(msg: { provider?: string; model?: string }): { provider: string; model: string } | undefined {
-  const provider = msg.provider;
-  const model = msg.model;
-  if (typeof provider !== "string" || !provider || typeof model !== "string" || !model) return undefined;
-  return { provider, model };
-}
-
+/** Last assistant on the branch. Never fills `status`. Copies `rawStopReason` when the message has one. */
 export function extractLastAssistantError(
   branch: ReadonlyArray<BranchEntry>,
 ): FailoverError | undefined {
-  for (let i = branch.length - 1; i >= 0; i--) {
-    const entry = branch[i];
-    if (entry?.type !== "message") continue;
-    const msg = entry.message;
-    if (msg?.role !== "assistant") continue;
-    if (msg.stopReason === "aborted") {
-      return { text: msg.errorMessage ?? "", stopReason: "aborted", ...physicalModel(msg) };
-    }
-    if (msg.stopReason !== "error") return undefined;
-    const rawStopReason = typeof msg.rawStopReason === "string" && msg.rawStopReason ? msg.rawStopReason : undefined;
-    return {
-      text: msg.errorMessage ?? "",
-      stopReason: "error",
-      ...(rawStopReason ? { rawStopReason } : {}),
-      ...physicalModel(msg),
-    };
-  }
-  return undefined;
+  const child = spawnSync(kernelBin, ["extract"], { input: JSON.stringify(branch), encoding: "utf8" });
+  if (child.status !== 0) throw new Error(child.stderr || "fallback-kernel failed");
+  const parsed = JSON.parse(child.stdout) as FailoverError | null;
+  return parsed ?? undefined;
 }

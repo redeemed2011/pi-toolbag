@@ -43,6 +43,58 @@ func TestMatchesJavaScript(t *testing.T) {
 			t.Fatalf("decide %s\ngo %s\njs %s", item, got, want)
 		}
 	}
+	extracts := []string{
+		`[{"type":"message","message":{"role":"assistant","stopReason":"error","errorMessage":"quota","provider":"grok","model":"g"}}]`,
+		`[{"type":"message","message":{"role":"assistant","stopReason":"stop","errorMessage":"no"}}]`,
+		`[{"type":"message","message":{"role":"user","stopReason":"error"}},{"type":"message","message":{"role":"assistant","stopReason":"aborted","rawStopReason":"refusal","provider":"a"}}]`,
+		`[]`,
+	}
+	for _, item := range extracts {
+		got := extractOf(t, item)
+		want := jsExtract(t, item)
+		if got != want {
+			t.Fatalf("extract %s\ngo %s\njs %s", item, got, want)
+		}
+	}
+}
+
+func extractOf(t *testing.T, raw string) string {
+	t.Helper()
+	var branch []branchEntry
+	if err := json.Unmarshal([]byte(raw), &branch); err != nil {
+		t.Fatal(err)
+	}
+	out, err := json.Marshal(extractLastAssistantError(branch))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
+}
+
+func jsExtract(t *testing.T, raw string) string {
+	t.Helper()
+	script := `const branch = JSON.parse(process.argv[1]);
+function physical(msg){ if(!msg.provider || !msg.model) return {}; return {provider:msg.provider, model:msg.model}; }
+function extract(branch){
+ for (let i = branch.length - 1; i >= 0; i--) {
+  const entry = branch[i];
+  if (entry?.type !== "message") continue;
+  const msg = entry.message;
+  if (msg?.role !== "assistant") continue;
+  if (msg.stopReason === "aborted") return {text: msg.errorMessage ?? "", stopReason: "aborted", ...physical(msg)};
+  if (msg.stopReason !== "error") return null;
+  const rawStopReason = typeof msg.rawStopReason === "string" && msg.rawStopReason ? msg.rawStopReason : undefined;
+  return {text: msg.errorMessage ?? "", stopReason: "error", ...(rawStopReason ? {rawStopReason} : {}), ...physical(msg)};
+ }
+ return null;
+}
+process.stdout.write(JSON.stringify(extract(branch)));`
+	cmd := exec.Command("node", "-e", script, raw)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s %v", out, err)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func classifyOf(t *testing.T, raw string) string {
