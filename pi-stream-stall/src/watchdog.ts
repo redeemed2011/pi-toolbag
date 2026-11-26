@@ -83,10 +83,13 @@ export function timeoutMessage(model: GuardModel, partial: AssistantMessage | un
 }
 
 function partialFrom(event: AssistantMessageEvent): AssistantMessage | undefined {
-  if (event.type === "error") return event.error;
-  if (event.type === "done") return event.message;
-  if ("partial" in event) return event.partial;
-  return undefined;
+  const child = spawnSync(stallBin, ["partial"], {
+    input: JSON.stringify({ event }),
+    encoding: "utf8",
+  });
+  if (child.status !== 0) throw new Error(child.stderr || "stall-timeout failed");
+  const text = child.stdout.trim();
+  return text === "null" ? undefined : JSON.parse(text) as AssistantMessage;
 }
 
 function abandon(pending: Promise<unknown>): void {

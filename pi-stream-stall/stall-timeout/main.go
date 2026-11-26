@@ -11,11 +11,12 @@ import (
 
 func main() {
 	var input struct {
-		Flag     any     `json:"flag"`
-		Env      *string `json:"env"`
-		Provider string  `json:"provider"`
-		ID       string  `json:"id"`
-		IdleMs   int     `json:"idleMs"`
+		Flag     any            `json:"flag"`
+		Env      *string        `json:"env"`
+		Provider string         `json:"provider"`
+		ID       string         `json:"id"`
+		IdleMs   int            `json:"idleMs"`
+		Event    map[string]any `json:"event"`
 	}
 	if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -25,7 +26,30 @@ func main() {
 		fmt.Printf("Provider stream timeout (%s/%s): no data for %dms\n", input.Provider, input.ID, input.IdleMs)
 		return
 	}
+	if len(os.Args) == 2 && os.Args[1] == "partial" {
+		raw, err := json.Marshal(partialFrom(input.Event))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(string(raw))
+		return
+	}
 	fmt.Println(parseIdleTimeoutMs(input.Flag, input.Env))
+}
+
+func partialFrom(event map[string]any) any {
+	switch event["type"] {
+	case "error":
+		return event["error"]
+	case "done":
+		return event["message"]
+	default:
+		if partial, ok := event["partial"]; ok {
+			return partial
+		}
+		return nil
+	}
 }
 
 func parseIdleTimeoutMs(flag any, env *string) int {
