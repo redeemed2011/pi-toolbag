@@ -117,6 +117,23 @@ func main() {
 			return
 		}
 		fmt.Println(selectAccount(request.Accounts, request.Active, request.Session))
+	case "split":
+		var request struct {
+			Key string `json:"key"`
+		}
+		if decode(&request) {
+			return
+		}
+		if provider, id, ok := splitModelKey(request.Key); ok {
+			raw, err := json.Marshal(map[string]string{"provider": provider, "id": id})
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			fmt.Println(string(raw))
+		} else {
+			fmt.Println("null")
+		}
 	case "parse":
 		var value any
 		if decode(&value) {

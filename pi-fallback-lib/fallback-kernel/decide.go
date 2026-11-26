@@ -65,9 +65,17 @@ func decideFailover(input decideInput) decision {
 	return decision{Action: "none", Reason: "no-unused-member", Classification: class}
 }
 
-func validKey(key string) bool {
+func splitModelKey(key string) (string, string, bool) {
 	slash := stringsIndex(key)
-	return slash > 0 && slash < len(key)-1
+	if slash <= 0 || slash >= len(key)-1 {
+		return "", "", false
+	}
+	return key[:slash], key[slash+1:], true
+}
+
+func validKey(key string) bool {
+	_, _, ok := splitModelKey(key)
+	return ok
 }
 
 func stringsIndex(key string) int {

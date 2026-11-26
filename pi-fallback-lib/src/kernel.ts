@@ -6,9 +6,13 @@ import type { DecideInput, FallbackChain, FailoverDecision, FallbackConfig, Mode
 const kernelBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fallback-kernel/kernel");
 
 export function splitModelKey(key: string): { provider: string; id: string } | undefined {
-  const slash = key.indexOf("/");
-  if (slash <= 0 || slash === key.length - 1) return undefined;
-  return { provider: key.slice(0, slash), id: key.slice(slash + 1) };
+  const child = spawnSync(kernelBin, ["split"], {
+    input: JSON.stringify({ key }),
+    encoding: "utf8",
+  });
+  if (child.status !== 0) throw new Error(child.stderr || "fallback-kernel failed");
+  const text = child.stdout.trim();
+  return text === "null" ? undefined : JSON.parse(text) as { provider: string; id: string };
 }
 
 export function modelKey(provider: string, id: string): ModelKey {
