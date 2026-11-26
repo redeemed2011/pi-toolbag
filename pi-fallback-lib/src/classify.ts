@@ -1,4 +1,15 @@
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ErrorClass, FailoverError } from "./types.js";
+
+const kernelBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fallback-kernel/kernel");
+
+function kernel(command: string, payload: unknown): string {
+  const child = spawnSync(kernelBin, [command], { input: JSON.stringify(payload), encoding: "utf8" });
+  if (child.status !== 0) throw new Error(child.stderr || "fallback-kernel failed");
+  return child.stdout.trim();
+}
 
 const AUTH_NEEDLES = ["invalid api key", "authentication", "unauthorized", "forbidden"];
 const INVALID_MODEL_NEEDLES = ["invalid model", "model not found"];
@@ -94,34 +105,7 @@ export function parseStatusFromText(text: string): number | undefined {
 }
 
 export function classifyError(error: FailoverError): ErrorClass {
-  if (error.stopReason === "aborted") return "aborted";
-  if (error.stopReason !== undefined && error.stopReason !== "error") return "other";
-
-  if (error.rawStopReason !== undefined && SAFETY_STOPS.has(error.rawStopReason)) {
-    if (error.rawStopReason === "refusal" && error.category === "reasoning_extraction") return "other";
-    return "safety";
-  }
-
-  const text = error.text ?? "";
-  const status = error.status ?? parseStatusFromText(text);
-  if (!text.trim() && status === undefined) return "other";
-
-  // 401 is always auth. 403 is not: OpenAI-compatible providers (including xAI)
-  // report billing/credits as HTTP 403. Only treat 403 as auth when the body
-  // matches auth needles (forbidden, unauthorized, invalid api key, …).
-  if (status === 401 || includesAny(text, AUTH_NEEDLES)) return "auth";
-  if (status === 404 || includesAny(text, INVALID_MODEL_NEEDLES)) return "invalid-model";
-  if (includesAny(text, OVERFLOW_NEEDLES)) return "overflow";
-  if (status === 402 || QUOTA_402.test(text) || includesAny(text, QUOTA_NEEDLES)) return "quota";
-  if (
-    (status !== undefined && TRANSIENT_STATUSES.has(status)) ||
-    (status !== undefined && status >= 500 && status <= 599) ||
-    includesAny(text, TRANSIENT_NEEDLES)
-  ) {
-    return "transient";
-  }
-  if (SAFETY_PHRASES.some((phrase) => text.includes(phrase))) return "safety";
-  return "other";
+  return kernel("classify", error) as ErrorClass;
 }
 
 export function isFailoverWorthy(c: ErrorClass): c is "quota" | "transient" | "safety" {

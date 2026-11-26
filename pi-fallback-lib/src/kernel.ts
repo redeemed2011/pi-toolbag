@@ -1,5 +1,9 @@
-import { classifyError, isFailoverWorthy } from "./classify.js";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { DecideInput, FallbackChain, FailoverDecision, FallbackConfig, ModelKey } from "./types.js";
+
+const kernelBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fallback-kernel/kernel");
 
 export function splitModelKey(key: string): { provider: string; id: string } | undefined {
   const slash = key.indexOf("/");
@@ -16,26 +20,16 @@ export function findChain(config: FallbackConfig, current: ModelKey): FallbackCh
 }
 
 export function decideFailover(input: DecideInput): FailoverDecision {
-  const { config, current, error, remainingBudget } = input;
-  if (!config.enabled) return { action: "none", reason: "disabled" };
-  if (!splitModelKey(current)) return { action: "none", reason: "invalid-current" };
-  if (remainingBudget <= 0) return { action: "none", reason: "budget-exhausted" };
-
-  const classification = classifyError(error);
-  if (!isFailoverWorthy(classification)) {
-    return { action: "none", reason: "not-failover-worthy", classification };
-  }
-
-  const chain = findChain(config, current);
-  if (!chain) return { action: "none", reason: "not-in-chain", classification };
-
-  const attempted = new Set(input.attempted);
-  attempted.add(current);
-  const blocked = input.blocked;
-  for (const key of chain.models) {
-    if (!attempted.has(key) && !blocked?.has(key)) {
-      return { action: "failover", next: key, reason: classification, attempted };
-    }
-  }
-  return { action: "none", reason: "no-unused-member", classification };
+  const child = spawnSync(kernelBin, ["decide"], {
+    input: JSON.stringify({
+      ...input,
+      attempted: [...input.attempted],
+      blocked: input.blocked ? [...input.blocked] : [],
+    }),
+    encoding: "utf8",
+  });
+  if (child.status !== 0) throw new Error(child.stderr || "fallback-kernel failed");
+  const parsed = JSON.parse(child.stdout) as FailoverDecision & { attempted?: string[] };
+  if (parsed.action === "failover") return { ...parsed, attempted: new Set(parsed.attempted) };
+  return parsed;
 }
