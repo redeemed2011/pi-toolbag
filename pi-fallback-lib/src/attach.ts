@@ -5,8 +5,8 @@ import { classifyError, isFailoverWorthy } from "./classify.js";
 
 const kernelBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fallback-kernel/kernel");
 
-function attachKernel(payload: unknown): string {
-  const child = spawnSync(kernelBin, ["attach"], { input: JSON.stringify(payload), encoding: "utf8" });
+function attachKernel(payload: unknown, command = "attach"): string {
+  const child = spawnSync(kernelBin, [command], { input: JSON.stringify(payload), encoding: "utf8" });
   if (child.status !== 0) throw new Error(child.stderr || "fallback-kernel failed");
   return child.stdout.trim();
 }
@@ -385,58 +385,42 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     event: unknown,
     mode: "replay" | "safety",
   ): Promise<{ continue: true; entries: [{ type: "context_edit"; targetId: string; replacement: null }] } | undefined> => {
-    if (!config || !enabled) return;
-    if (state.failoverInFlight) return;
-    if (mode === "safety" && !ctx.isIdle()) {
-      emit({ type: "skip", reason: "not-idle" }, ctx);
-      return;
-    }
-
     const error = extractLastAssistantError(ctx.sessionManager.getBranch());
-    if (!error) {
-      if (mode === "safety") state.toolsThisTurn = false;
-      return;
-    }
-    if (state.refusalCategory) error.category = state.refusalCategory;
-
-    const classification = classifyError(error);
-    if (!isFailoverWorthy(classification)) {
-      if (mode === "safety") {
-        emit({ type: "skip", reason: "not-failover-worthy", classification }, ctx);
-        state.toolsThisTurn = false;
-      }
-      return;
-    }
-    const owned =
-      mode === "replay" &&
-      (classification === "quota" || classification === "transient" || classification === "safety");
-    if (!owned) return;
-
-    if (!options.retryAfterTools && state.toolsThisTurn) {
-      emit({ type: "skip", reason: "tools-already-started" }, ctx);
-      state.toolsThisTurn = false;
-      return;
-    }
-
+    if (error && state.refusalCategory) error.category = state.refusalCategory;
+    const classification = error ? classifyError(error) : undefined;
     const virtual = currentKey(ctx);
-    const physical = error.provider && error.model ? modelKey(error.provider, error.model) : undefined;
-    const current = physical ?? virtual;
-    if (!current) {
-      emit({ type: "skip", reason: "no-current-model" }, ctx);
-      state.toolsThisTurn = false;
+    const physical = error?.provider && error.model ? modelKey(error.provider, error.model) : undefined;
+    const gate = JSON.parse(attachKernel({
+      enabled: Boolean(config && enabled),
+      inFlight: state.failoverInFlight,
+      mode,
+      idle: ctx.isIdle(),
+      hasError: Boolean(error),
+      classification,
+      worthy: classification ? isFailoverWorthy(classification) : false,
+      retryAfterTools: options.retryAfterTools,
+      toolsThisTurn: state.toolsThisTurn,
+      virtual: virtual ?? "",
+      physical: physical ?? "",
+      replayTarget: mode === "replay" ? assistantEntryId(event) ?? "" : "kept",
+    }, "settle")) as {
+      action: "return" | "skip" | "continue";
+      reason?: string;
+      classification?: string;
+      clearTools: boolean;
+      current?: string;
+      preferred?: string;
+      replayTarget?: string;
+    };
+    if (gate.clearTools) state.toolsThisTurn = false;
+    if (gate.action === "skip") {
+      emit({ type: "skip", reason: gate.reason ?? "", ...(gate.classification ? { classification: gate.classification } : {}) }, ctx);
       return;
     }
-    state.preferred ??= virtual ?? current;
-
-    let replayTarget: string | undefined;
-    if (mode === "replay") {
-      replayTarget = assistantEntryId(event);
-      if (!replayTarget) {
-        emit({ type: "skip", reason: "no-assistant-entry" }, ctx);
-        state.toolsThisTurn = false;
-        return;
-      }
-    }
+    if (gate.action !== "continue" || !gate.current) return;
+    const current = gate.current;
+    state.preferred ??= gate.preferred ?? current;
+    const replayTarget = gate.replayTarget;
 
     const bound = Math.max(1, ...config.chains.map((chain) => chain.models.length));
     for (let i = 0; i < bound; i++) {

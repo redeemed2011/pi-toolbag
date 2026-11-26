@@ -117,6 +117,17 @@ func main() {
 			return
 		}
 		fmt.Println(selectAccount(request.Accounts, request.Active, request.Session))
+	case "settle":
+		var request settleInput
+		if decode(&request) {
+			return
+		}
+		raw, err := json.Marshal(settleGate(request))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(string(raw))
 	case "after":
 		var request struct {
 			OK            bool `json:"ok"`

@@ -1,0 +1,69 @@
+package main
+
+type settleInput struct {
+	Enabled         bool   `json:"enabled"`
+	InFlight        bool   `json:"inFlight"`
+	Mode            string `json:"mode"`
+	Idle            bool   `json:"idle"`
+	HasError        bool   `json:"hasError"`
+	Classification  string `json:"classification"`
+	Worthy          bool   `json:"worthy"`
+	RetryAfterTools bool   `json:"retryAfterTools"`
+	ToolsThisTurn   bool   `json:"toolsThisTurn"`
+	Virtual         string `json:"virtual"`
+	Physical        string `json:"physical"`
+	ReplayTarget    string `json:"replayTarget"`
+}
+
+func settleGate(input settleInput) map[string]any {
+	if !input.Enabled || input.InFlight {
+		return map[string]any{"action": "return", "clearTools": false}
+	}
+	if input.Mode == "safety" && !input.Idle {
+		return skip("not-idle", "", false)
+	}
+	if !input.HasError {
+		return map[string]any{"action": "return", "clearTools": input.Mode == "safety"}
+	}
+	if !input.Worthy {
+		if input.Mode == "safety" {
+			return skip("not-failover-worthy", input.Classification, true)
+		}
+		return map[string]any{"action": "return", "clearTools": false}
+	}
+	if input.Mode != "replay" {
+		return map[string]any{"action": "return", "clearTools": false}
+	}
+	if !input.RetryAfterTools && input.ToolsThisTurn {
+		return skip("tools-already-started", "", true)
+	}
+	current := input.Physical
+	if current == "" {
+		current = input.Virtual
+	}
+	if current == "" {
+		return skip("no-current-model", "", true)
+	}
+	preferred := input.Virtual
+	if preferred == "" {
+		preferred = current
+	}
+	if input.ReplayTarget == "" {
+		return skip("no-assistant-entry", "", true)
+	}
+	return map[string]any{
+		"action":       "continue",
+		"clearTools":   false,
+		"current":      current,
+		"preferred":    preferred,
+		"replayTarget": input.ReplayTarget,
+	}
+}
+
+func skip(reason, classification string, clear bool) map[string]any {
+	out := map[string]any{"action": "skip", "reason": reason, "clearTools": clear}
+	if classification != "" {
+		out["classification"] = classification
+	}
+	return out
+}
