@@ -5,30 +5,46 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"pi-toolbag/ctx"
 )
 
 func main() {
-	if len(os.Args) < 3 || os.Args[1] != "fold" {
-		fmt.Fprintln(os.Stderr, "usage: ctx fold <log.jsonl>")
-		os.Exit(2)
+	if len(os.Args) < 2 {
+		usage()
 	}
-	file, err := os.Open(os.Args[2])
+	switch os.Args[1] {
+	case "fold":
+		fold(os.Args[2:])
+	case "mint":
+		mint(os.Args[2:])
+	default:
+		usage()
+	}
+}
+
+func usage() {
+	fmt.Fprintln(os.Stderr, "usage: ctx fold <log.jsonl>")
+	fmt.Fprintln(os.Stderr, "       ctx mint --log <log.jsonl> --type <type> --headline <text> --session <id>")
+	os.Exit(2)
+}
+
+func fold(args []string) {
+	if len(args) != 1 {
+		usage()
+	}
+	file, err := os.Open(args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	defer file.Close()
 	live := ctx.FoldLive(ctx.ParseJSONL(file))
-	ids := func(set map[string]bool) []string {
-		out := []string{}
-		for id := range set {
-			out = append(out, id)
-		}
-		return out
+	liveIDs := make([]string, 0, len(live.Live))
+	for id := range live.Live {
+		liveIDs = append(liveIDs, id)
 	}
-	liveIDs := ids(live.Live)
 	sort.Strings(liveIDs)
 	frontier := []string{}
 	for _, rec := range ctx.Frontier(live, "") {
@@ -44,4 +60,54 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println(string(raw))
+}
+
+func mint(args []string) {
+	log := flag(args, "--log")
+	kind := flag(args, "--type")
+	headline := flag(args, "--headline")
+	session := flag(args, "--session")
+	if log == "" || kind == "" || headline == "" || session == "" {
+		usage()
+	}
+	applies := flag(args, "--applies-to")
+	var appliesTo any
+	if applies == "all" {
+		appliesTo = "all"
+	} else if applies != "" {
+		appliesTo = strings.Split(applies, ",")
+	}
+	result, err := ctx.MintFile(log, ctx.PutInput{
+		Type:       kind,
+		Headline:   headline,
+		Body:       flag(args, "--body"),
+		Directive:  flag(args, "--directive"),
+		AppliesTo:  appliesTo,
+		Supersedes: flag(args, "--supersedes"),
+		Reason:     flag(args, "--reason"),
+		Session:    session,
+	}, "gated-edge", 0, flag(args, "--claimed"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if !result.OK {
+		fmt.Fprintln(os.Stderr, result.Error)
+		os.Exit(1)
+	}
+	raw, err := json.Marshal(result.Record)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Println(string(raw))
+}
+
+func flag(args []string, name string) string {
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == name {
+			return args[i+1]
+		}
+	}
+	return ""
 }

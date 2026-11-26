@@ -6,8 +6,60 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"os"
 	"strings"
 )
+
+func AppendRecord(path string, rec Record) error {
+	if err := os.MkdirAll(dirOf(path), 0o755); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = file.Write(append(raw, '\n'))
+	return err
+}
+
+func ReadLog(path string) ([]Record, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+	return ParseJSONL(file), nil
+}
+
+func MintFile(path string, input PutInput, occupancy string, sibling int, claimed string) (PutResult, error) {
+	existing, err := ReadLog(path)
+	if err != nil {
+		return PutResult{}, err
+	}
+	result := Put(existing, input, occupancy, sibling, claimed)
+	if !result.OK {
+		return result, nil
+	}
+	if err := AppendRecord(path, result.Record); err != nil {
+		return PutResult{}, err
+	}
+	return result, nil
+}
+
+func dirOf(path string) string {
+	if i := strings.LastIndex(path, "/"); i > 0 {
+		return path[:i]
+	}
+	return "."
+}
 
 func ParseJSONL(r io.Reader) []Record {
 	out := []Record{}
@@ -87,6 +139,13 @@ func lineToJudgment(raw map[string]any) (Record, bool) {
 func parseAppliesTo(value any) (any, bool) {
 	if value == "all" {
 		return "all", true
+	}
+	if texts, ok := value.([]string); ok {
+		items := make([]any, len(texts))
+		for i, text := range texts {
+			items[i] = text
+		}
+		value = items
 	}
 	items, ok := value.([]any)
 	if !ok || len(items) == 0 {

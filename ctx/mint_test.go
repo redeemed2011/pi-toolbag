@@ -2,6 +2,30 @@ package ctx
 
 import "testing"
 
+func TestMintFileAppendsAQuestionAndFoldsItBack(t *testing.T) {
+	path := t.TempDir() + "/log.jsonl"
+	got, err := MintFile(path, PutInput{Type: "question", Headline: "Ship the store", Body: "One store.", Session: "s", ID: "q1", TS: "1"}, "gated-edge", 0, "")
+	if err != nil || !got.OK {
+		t.Fatal(got, err)
+	}
+	records, err := ReadLog(path)
+	if err != nil || len(records) != 1 || records[0].ID != "q1" {
+		t.Fatal(records, err)
+	}
+	live := FoldLive(records)
+	if !live.Live["q1"] || len(Frontier(live, "")) != 1 {
+		t.Fatal(live.Live)
+	}
+	refused, err := MintFile(path, PutInput{Type: "constraint", Headline: "No directive", AppliesTo: "all", Session: "s"}, "gated-edge", 0, "")
+	if err != nil || refused.OK || refused.Error != "directive required" {
+		t.Fatal(refused, err)
+	}
+	again, err := ReadLog(path)
+	if err != nil || len(again) != 1 {
+		t.Fatal(again, err)
+	}
+}
+
 func TestMintRefusesAConstraintWithoutADirective(t *testing.T) {
 	got := Put(nil, PutInput{Type: "constraint", Headline: "Keep the gate", AppliesTo: "all", Session: "s"}, "gated-edge", 0, "")
 	if got.OK || got.Error != "directive required" {
