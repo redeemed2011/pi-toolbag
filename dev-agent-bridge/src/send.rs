@@ -1,4 +1,5 @@
 use crate::message::{self, Draft, Message, DEV_AGENT, ENG_LEAD};
+use crate::state::write_atomic;
 use crate::state::{append_log, now_ts, BridgeError, Env, Result, SendState};
 use std::io::Read;
 use std::path::Path;
@@ -109,6 +110,7 @@ pub fn run(env: &Env, args: SendArgs) -> Result<String> {
     }
     let secrets_path = env.secrets_path();
     let carries_key = |key: &str| serde_json::to_string(&msg).unwrap_or_default().contains(key);
+    let pieces = message::split_body(&msg.body);
     if args.dry_run {
         let secrets = load_secrets(&secrets_path);
         if let Ok(secrets) = &secrets {
@@ -121,8 +123,9 @@ pub fn run(env: &Env, args: SendArgs) -> Result<String> {
             Err(error) => format!("secrets: {}", error.message),
         };
         return Ok(format!(
-            "{}\nheaders: Authorization=Bearer <redacted>; X-Automation-Key=<redacted>\n{status}\ndry run: nothing sent or recorded",
-            serde_json::to_string_pretty(&msg).unwrap_or_default()
+            "{}\nheaders: Authorization=Bearer <redacted>; X-Automation-Key=<redacted>\n{status}\nparts: {}\ndry run: nothing sent or recorded",
+            serde_json::to_string_pretty(&msg).unwrap_or_default(),
+            pieces.len()
         ));
     }
     let secrets = load_secrets(&secrets_path)?;
@@ -134,8 +137,24 @@ pub fn run(env: &Env, args: SendArgs) -> Result<String> {
     let now = now_ts();
     state.prune(now);
     state.check(&msg, now)?;
-    let status = post(&secrets, &msg)?;
-    state.record(&msg, now);
+    let saved = msg.clone();
+    let copy = env.bridge_share().join("from-dev-agent").join(format!("{}.json", saved.id));
+    if let Some(parent) = copy.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| BridgeError::new(7, format!("cannot save the full message: {e}")))?;
+    }
+    write_atomic(&copy, serde_json::to_string(&saved).unwrap_or_default().as_bytes()).map_err(|e| BridgeError::new(7, format!("cannot save the full message: {e}")))?;
+    let count = pieces.len() as u32;
+    let mut status = 0;
+    for (index, piece) in pieces.iter().enumerate() {
+        let mut part = saved.clone();
+        part.body = piece.clone();
+        if count > 1 {
+            part.part = Some((index as u32) + 1);
+            part.parts = Some(count);
+        }
+        status = post(&secrets, &part)?;
+    }
+    state.record(&saved, now);
     state.save(&state_file)?;
     let from_env = env.vars.get("DEV_AGENT_BRIDGE_SESSION").cloned();
     let session = args.session.as_deref().or(from_env.as_deref()).map(str::trim).filter(|s| !s.is_empty());

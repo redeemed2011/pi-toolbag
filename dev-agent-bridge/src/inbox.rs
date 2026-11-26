@@ -237,6 +237,25 @@ pub fn take(env: &Env, session: &str, cwd: &str) -> Result<Taken> {
         });
         match parsed {
             Ok(msg) => {
+                if let Some(reason) = message::integrity_error(&msg) {
+                    if holds && claim_marker(&p.rejected, &id, &reason)? {
+                        taken.rejected.push(Rejected { file: file.display().to_string(), reason: reason.clone() });
+                        let _ = crate::send::run(env, crate::send::SendArgs {
+                            kind: "note".to_string(),
+                            topic: "bridge-body".to_string(),
+                            body: Some(reason),
+                            body_file: None,
+                            reply_to: None,
+                            ctx: Vec::new(),
+                            commit: None,
+                            file: None,
+                            id: None,
+                            dry_run: false,
+                            session: Some(session.to_string()),
+                        });
+                    }
+                    continue;
+                }
                 let mine = match routes.addressee(&msg) {
                     Some(to) if to == session => true,
                     Some(_) if msg.kind == "reply" => false,

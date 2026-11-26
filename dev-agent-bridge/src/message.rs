@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 
 pub const VERSION: u64 = 1;
 pub const KINDS: [&str; 3] = ["ask", "reply", "note"];
-pub const MAX_BODY_BYTES: usize = 8000;
+pub const PART_ESCAPED_CHARS: usize = 1800;
 pub const MAX_TOPIC_CHARS: usize = 80;
 pub const ENG_LEAD: &str = "engineering-lead";
 pub const DEV_AGENT: &str = "dev-agent";
@@ -31,6 +31,14 @@ pub struct Message {
     pub body: String,
     pub refs: Refs,
     pub sent_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parts: Option<u32>,
 }
 
 fn secret_patterns() -> &'static [Regex] {
@@ -84,9 +92,63 @@ pub struct Draft {
     pub id: Option<String>,
 }
 
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(bytes);
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0xf) as usize] as char);
+    }
+    out
+}
+
+pub fn json_escaped_chars(text: &str) -> usize {
+    serde_json::to_string(text).map(|quoted| quoted.chars().count().saturating_sub(2)).unwrap_or(0)
+}
+
+pub fn split_body(body: &str) -> Vec<String> {
+    if json_escaped_chars(body) <= PART_ESCAPED_CHARS {
+        return vec![body.to_string()];
+    }
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    for ch in body.chars() {
+        let mut next = current.clone();
+        next.push(ch);
+        if !current.is_empty() && json_escaped_chars(&next) > PART_ESCAPED_CHARS {
+            parts.push(std::mem::take(&mut current));
+        }
+        current.push(ch);
+    }
+    if !current.is_empty() {
+        parts.push(current);
+    }
+    parts
+}
+
+pub fn integrity_error(msg: &Message) -> Option<String> {
+    let bytes = msg.body.len() as u64;
+    let hash = sha256_hex(msg.body.as_bytes());
+    if let Some(claimed) = msg.body_bytes {
+        if claimed != bytes {
+            return Some(format!("refused {}: body_bytes is {claimed}, the body is {bytes} bytes", msg.id));
+        }
+    }
+    if let Some(claimed) = &msg.body_sha256 {
+        if claimed != &hash {
+            return Some(format!("refused {}: body_sha256 does not match", msg.id));
+        }
+    }
+    None
+}
+
 pub fn build(draft: Draft) -> Message {
     let trimmed = |value: Option<String>| value.map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
     let ctx: Vec<String> = draft.ctx.iter().map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect();
+    let body_bytes = draft.body.len() as u64;
+    let body_sha256 = sha256_hex(draft.body.as_bytes());
     Message {
         v: VERSION,
         id: draft.id.unwrap_or_else(new_id),
@@ -102,6 +164,10 @@ pub fn build(draft: Draft) -> Message {
             file: trimmed(draft.file),
         },
         sent_at: now_iso(),
+        body_bytes: Some(body_bytes),
+        body_sha256: Some(body_sha256),
+        part: None,
+        parts: None,
     }
 }
 
@@ -138,9 +204,6 @@ pub fn validate(msg: &Message) -> Vec<String> {
     if msg.body.trim().is_empty() {
         errors.push("body is required".to_string());
     } else {
-        if msg.body.len() > MAX_BODY_BYTES {
-            errors.push(format!("body is over {MAX_BODY_BYTES} bytes; put detail in a file and pass --file"));
-        }
         if looks_secret(&msg.body) {
             errors.push("body looks like it contains a secret; remove it".to_string());
         }
@@ -210,6 +273,10 @@ mod tests {
             body: "Not deployed.".into(),
             refs: Refs { commit: Some("2c8f4ef".into()), ..Refs::default() },
             sent_at: "2026-11-21T13:20:00-06:00".into(),
+            body_bytes: None,
+            body_sha256: None,
+            part: None,
+            parts: None,
         }
     }
 
@@ -273,5 +340,23 @@ mod tests {
         assert_eq!(msg.refs, Refs { ctx: Some(vec!["c1".into()]), commit: None, file: None });
         assert!(is_message_id(&msg.id));
         assert!(validate(&msg).is_empty());
+    }
+
+    #[test]
+    fn a_long_body_is_split_without_being_shortened_and_a_bad_hash_is_refused() {
+        let body = "q\".".repeat(2000);
+        let parts = split_body(&body);
+        assert!(parts.len() > 1);
+        assert_eq!(parts.concat(), body);
+        assert!(parts.iter().all(|part| json_escaped_chars(part) <= PART_ESCAPED_CHARS));
+        let mut msg = incoming("note", None);
+        msg.body = "hello".into();
+        msg.body_bytes = Some(5);
+        msg.body_sha256 = Some(sha256_hex(b"hello"));
+        assert_eq!(integrity_error(&msg), None);
+        msg.body_sha256 = Some("dead".into());
+        let reason = integrity_error(&msg).unwrap();
+        assert!(reason.contains(&msg.id));
+        assert!(reason.contains("body_sha256"));
     }
 }
