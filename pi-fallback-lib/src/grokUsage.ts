@@ -223,9 +223,28 @@ async function fetchNumber(
   now: number,
   cacheKey: string,
 ): Promise<UsageRead> {
-  const path = gate.source.kind === "http" ? gate.source.path : "config.creditUsagePercent";
-  const hit = cache.get(`${cacheKey}:${path}`);
-  if (hit && ttl > 0 && now - hit.at < ttl) return { ok: true, value: hit.value };
+  const looked = JSON.parse(kernel("usage", {
+    op: "cache",
+    kind: gate.source.kind,
+    path: gate.source.kind === "http" ? gate.source.path : "",
+    cacheKey,
+    now,
+    ttl,
+  })) as { path: string; key: string; fresh: boolean };
+  const path = looked.path;
+  const cached = cache.get(looked.key);
+  const fresh = cached
+    ? (JSON.parse(kernel("usage", {
+      op: "cache",
+      kind: gate.source.kind,
+      path: gate.source.kind === "http" ? gate.source.path : "",
+      cacheKey,
+      at: cached.at,
+      now,
+      ttl,
+    })) as { fresh: boolean }).fresh
+    : false;
+  if (cached && fresh) return { ok: true, value: cached.value };
 
   let response: { ok: boolean; status: number; json(): Promise<unknown> };
   try {

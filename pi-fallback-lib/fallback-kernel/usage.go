@@ -124,17 +124,33 @@ func isEnvName(value string) bool {
 	return envName.MatchString(value)
 }
 
+func usagePath(kind, httpPath string) string {
+	if kind == "http" {
+		return httpPath
+	}
+	return "config.creditUsagePercent"
+}
+
+func cacheFresh(at, now, ttl float64, present bool) bool {
+	return present && ttl > 0 && now-at < ttl
+}
+
 type usageRequest struct {
-	Op      string          `json:"op"`
-	Metric  string          `json:"metric"`
-	Value   *float64        `json:"value"`
-	Gate    usageGate       `json:"gate"`
-	Gates   []usageGate     `json:"gates"`
-	Model   string          `json:"model"`
-	Payload json.RawMessage `json:"payload"`
-	Path    string          `json:"path"`
-	URL     string          `json:"url"`
-	Name    string          `json:"name"`
+	Op       string          `json:"op"`
+	Metric   string          `json:"metric"`
+	Value    *float64        `json:"value"`
+	Gate     usageGate       `json:"gate"`
+	Gates    []usageGate     `json:"gates"`
+	Model    string          `json:"model"`
+	Payload  json.RawMessage `json:"payload"`
+	Path     string          `json:"path"`
+	URL      string          `json:"url"`
+	Name     string          `json:"name"`
+	Kind     string          `json:"kind"`
+	CacheKey string          `json:"cacheKey"`
+	At       *float64        `json:"at"`
+	Now      float64         `json:"now"`
+	TTL      float64         `json:"ttl"`
 }
 
 func runUsage(request usageRequest) string {
@@ -166,6 +182,18 @@ func runUsage(request usageRequest) string {
 		return fmtBool(httpsURL(request.URL))
 	case "env":
 		return fmtBool(isEnvName(request.Name))
+	case "cache":
+		path := usagePath(request.Kind, request.Path)
+		at := 0.0
+		if request.At != nil {
+			at = *request.At
+		}
+		fresh := cacheFresh(at, request.Now, request.TTL, request.At != nil)
+		raw, err := json.Marshal(map[string]any{"path": path, "key": request.CacheKey + ":" + path, "fresh": fresh})
+		if err != nil {
+			return "null"
+		}
+		return string(raw)
 	default:
 		return "null"
 	}
