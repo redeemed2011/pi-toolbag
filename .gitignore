@@ -1,6 +1,7 @@
 node_modules/
 dist/
 build/
+pi-stream-stall/stall-timeout/stall-timeout
 coverage/
 *.tsbuildinfo
 .env

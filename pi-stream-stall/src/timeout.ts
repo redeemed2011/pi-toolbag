@@ -1,13 +1,17 @@
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 export const DEFAULT_IDLE_MS = 180_000;
+
+const bin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../stall-timeout/stall-timeout");
 
 /** Flag wins over env. `0`, `off`, and `false` disable. Invalid values use the default. */
 export function parseIdleTimeoutMs(flag: boolean | string | undefined, env: string | undefined): number {
-  const raw = flag !== undefined && String(flag).trim() !== "" ? String(flag) : env;
-  if (raw === undefined) return DEFAULT_IDLE_MS;
-  const trimmed = raw.trim().toLowerCase();
-  if (trimmed === "") return DEFAULT_IDLE_MS;
-  if (trimmed === "0" || trimmed === "off" || trimmed === "false") return 0;
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_IDLE_MS;
-  return Math.floor(parsed);
+  const child = spawnSync(bin, [], {
+    input: JSON.stringify({ flag: flag === undefined ? null : flag, env: env === undefined ? null : env }),
+    encoding: "utf8",
+  });
+  if (child.status !== 0) throw new Error(child.stderr || "stall-timeout failed");
+  return Number(child.stdout.trim());
 }
