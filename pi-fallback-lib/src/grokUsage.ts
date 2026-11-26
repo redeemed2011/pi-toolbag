@@ -167,10 +167,9 @@ async function readGrok(
       now,
       `env:${root}`,
     );
-    if (live.ok) return live;
     const cached = freshWeeklyPercent(cachePath, "account-1", now);
-    if (cached !== undefined && reportedUsage(input.gate.metric, cached) !== undefined) {
-      return { ok: true, value: cached };
+    if (afterFailedFetch(live.ok, cached, true, input.gate.metric) === "cache") {
+      return { ok: true, value: cached as number };
     }
     return live;
   }
@@ -198,10 +197,25 @@ async function readGrok(
     now,
     `${selected.account.id}:${root}`,
   );
-  if (live.ok) return live;
   const fallback = cached();
-  if (fallback !== undefined) return { ok: true, value: fallback };
+  if (afterFailedFetch(live.ok, fallback, false, input.gate.metric) === "cache") {
+    return { ok: true, value: fallback as number };
+  }
   return live;
+}
+
+function afterFailedFetch(
+  ok: boolean,
+  value: number | undefined,
+  requireUsable: boolean,
+  metric: UsageGate["metric"],
+): string {
+  return kernel("after", {
+    ok,
+    hasValue: value !== undefined,
+    requireUsable,
+    usable: value !== undefined && reportedUsage(metric, value) !== undefined,
+  });
 }
 
 function grokHeaders(token: string): Record<string, string> {

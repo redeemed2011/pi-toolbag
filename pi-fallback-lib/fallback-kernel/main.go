@@ -117,6 +117,17 @@ func main() {
 			return
 		}
 		fmt.Println(selectAccount(request.Accounts, request.Active, request.Session))
+	case "after":
+		var request struct {
+			OK            bool `json:"ok"`
+			HasValue      bool `json:"hasValue"`
+			RequireUsable bool `json:"requireUsable"`
+			Usable        bool `json:"usable"`
+		}
+		if decode(&request) {
+			return
+		}
+		fmt.Println(afterLive(request.OK, request.HasValue, request.RequireUsable, request.Usable))
 	case "token":
 		var request struct {
 			Expires float64 `json:"expires"`

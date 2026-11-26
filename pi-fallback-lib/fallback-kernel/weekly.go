@@ -134,6 +134,16 @@ func parseCredential(value any) (map[string]any, bool) {
 	return cred, true
 }
 
+func afterLive(ok, hasValue, requireUsable, usable bool) string {
+	if ok {
+		return "live"
+	}
+	if hasValue && (!requireUsable || usable) {
+		return "cache"
+	}
+	return "live"
+}
+
 func tokenChoice(expires, now float64, cached bool) string {
 	if expires > now {
 		return "fetch"
