@@ -26,6 +26,21 @@ func main() {
 		} else {
 			fmt.Println("null")
 		}
+	case "vault":
+		var parsed any
+		if decode(&parsed) {
+			return
+		}
+		if vault, ok := readVault(parsed); ok {
+			raw, err := json.Marshal(vault)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			fmt.Println(string(raw))
+		} else {
+			fmt.Println("null")
+		}
 	case "base":
 		var request struct {
 			Credential string `json:"credential"`

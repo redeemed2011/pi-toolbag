@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"strings"
 	"time"
 )
@@ -75,6 +76,62 @@ func baseURL(credentialBase, piBase, grokBase string) (string, bool) {
 		return "", false
 	}
 	return strings.TrimRight(raw, "/"), true
+}
+
+func readVault(parsed any) (map[string]any, bool) {
+	object, ok := parsed.(map[string]any)
+	if !ok || object["version"] != float64(1) {
+		return nil, false
+	}
+	items, ok := object["accounts"].([]any)
+	if !ok {
+		return nil, false
+	}
+	accounts := []any{}
+	for _, item := range items {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := obj["id"].(string)
+		if id == "" {
+			continue
+		}
+		account := map[string]any{"id": id}
+		if cred, ok := parseCredential(obj["credential"]); ok {
+			account["credential"] = cred
+		}
+		accounts = append(accounts, account)
+	}
+	result := map[string]any{"accounts": accounts}
+	if active, ok := object["activeAccountId"].(string); ok {
+		result["activeAccountId"] = active
+	}
+	return result, true
+}
+
+func parseCredential(value any) (map[string]any, bool) {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	access, _ := object["access"].(string)
+	if access == "" {
+		return nil, false
+	}
+	expires, ok := object["expires"].(float64)
+	if !ok || math.IsNaN(expires) || math.IsInf(expires, 0) {
+		return nil, false
+	}
+	cred := map[string]any{"access": access, "expires": expires}
+	if _, present := object["baseUrl"]; present {
+		text, ok := object["baseUrl"].(string)
+		if !ok {
+			return nil, false
+		}
+		cred["baseUrl"] = text
+	}
+	return cred, true
 }
 
 func selectAccount(accounts []vaultAccount, active, session string) int {

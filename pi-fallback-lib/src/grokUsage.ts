@@ -42,22 +42,6 @@ type Credential = {
 
 type VaultAccount = { id: string; credential?: Credential };
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function parseCredential(value: unknown): Credential | undefined {
-  if (!isObject(value)) return undefined;
-  if (typeof value.access !== "string" || !value.access) return undefined;
-  if (typeof value.expires !== "number" || !Number.isFinite(value.expires)) return undefined;
-  if (value.baseUrl !== undefined && typeof value.baseUrl !== "string") return undefined;
-  return {
-    access: value.access,
-    expires: value.expires,
-    ...(typeof value.baseUrl === "string" ? { baseUrl: value.baseUrl } : {}),
-  };
-}
-
 export function readVaultAccounts(path: string): { activeAccountId?: string; accounts: VaultAccount[] } | undefined {
   if (!existsSync(path)) return undefined;
   let parsed: unknown;
@@ -66,15 +50,8 @@ export function readVaultAccounts(path: string): { activeAccountId?: string; acc
   } catch {
     return undefined;
   }
-  if (!isObject(parsed) || parsed.version !== 1 || !Array.isArray(parsed.accounts)) return undefined;
-  const accounts: VaultAccount[] = [];
-  for (const item of parsed.accounts) {
-    if (!isObject(item) || typeof item.id !== "string" || !item.id) continue;
-    const credential = parseCredential(item.credential);
-    accounts.push({ id: item.id, ...(credential ? { credential } : {}) });
-  }
-  const active = typeof parsed.activeAccountId === "string" ? parsed.activeAccountId : undefined;
-  return { ...(active ? { activeAccountId: active } : {}), accounts };
+  const text = kernel("vault", parsed);
+  return text === "null" ? undefined : JSON.parse(text) as { activeAccountId?: string; accounts: VaultAccount[] };
 }
 
 export function freshWeeklyPercent(
