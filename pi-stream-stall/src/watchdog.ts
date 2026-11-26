@@ -1,5 +1,10 @@
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { AssistantMessage, AssistantMessageEvent, AssistantMessageEventStream, Usage } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+
+const stallBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../stall-timeout/stall-timeout");
 
 export interface GuardModel {
   api: AssistantMessage["api"];
@@ -51,7 +56,12 @@ const defaultSleep: Sleeper = (ms) => {
 }
 
 export function timeoutText(model: GuardModel, idleMs: number): string {
-  return `Provider stream timeout (${model.provider}/${model.id}): no data for ${idleMs}ms`;
+  const child = spawnSync(stallBin, ["text"], {
+    input: JSON.stringify({ provider: model.provider, id: model.id, idleMs }),
+    encoding: "utf8",
+  });
+  if (child.status !== 0) throw new Error(child.stderr || "stall-timeout failed");
+  return child.stdout.trim();
 }
 
 export function timeoutMessage(model: GuardModel, partial: AssistantMessage | undefined, idleMs: number): AssistantMessage {

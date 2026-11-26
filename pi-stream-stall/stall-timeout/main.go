@@ -11,12 +11,19 @@ import (
 
 func main() {
 	var input struct {
-		Flag any     `json:"flag"`
-		Env  *string `json:"env"`
+		Flag     any     `json:"flag"`
+		Env      *string `json:"env"`
+		Provider string  `json:"provider"`
+		ID       string  `json:"id"`
+		IdleMs   int     `json:"idleMs"`
 	}
 	if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	if len(os.Args) == 2 && os.Args[1] == "text" {
+		fmt.Printf("Provider stream timeout (%s/%s): no data for %dms\n", input.Provider, input.ID, input.IdleMs)
+		return
 	}
 	fmt.Println(parseIdleTimeoutMs(input.Flag, input.Env))
 }
