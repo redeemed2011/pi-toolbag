@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"time"
 )
 
@@ -51,6 +52,29 @@ func parseTime(text string) (float64, bool) {
 type vaultAccount struct {
 	ID         string         `json:"id"`
 	Credential map[string]any `json:"credential"`
+}
+
+const defaultGrokBase = "https://cli-chat-proxy.grok.com/v1"
+
+func baseURL(credentialBase, piBase, grokBase string) (string, bool) {
+	raw := credentialBase
+	if raw == "" {
+		raw = piBase
+	}
+	if raw == "" {
+		raw = grokBase
+	}
+	if raw == "" {
+		raw = defaultGrokBase
+	}
+	check := raw
+	if strings.HasSuffix(raw, "/v1") || strings.Contains(raw, "://") {
+		check = strings.TrimRight(raw, "/")
+	}
+	if !httpsURL(check) {
+		return "", false
+	}
+	return strings.TrimRight(raw, "/"), true
 }
 
 func selectAccount(accounts []vaultAccount, active, session string) int {

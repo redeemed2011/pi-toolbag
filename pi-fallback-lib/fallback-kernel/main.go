@@ -26,6 +26,20 @@ func main() {
 		} else {
 			fmt.Println("null")
 		}
+	case "base":
+		var request struct {
+			Credential string `json:"credential"`
+			Pi         string `json:"pi"`
+			Grok       string `json:"grok"`
+		}
+		if decode(&request) {
+			return
+		}
+		if root, ok := baseURL(request.Credential, request.Pi, request.Grok); ok {
+			fmt.Println(root)
+		} else {
+			fmt.Println("null")
+		}
 	case "account":
 		var request struct {
 			Accounts []vaultAccount `json:"accounts"`

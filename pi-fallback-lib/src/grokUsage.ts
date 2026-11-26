@@ -14,8 +14,6 @@ function kernel(command: string, payload: unknown): string {
   return child.stdout.trim();
 }
 
-const DEFAULT_BASE = "https://cli-chat-proxy.grok.com/v1";
-const CACHE_FRESH_MS = 30 * 60_000;
 const LIVE_TTL_MS = 60_000;
 const FETCH_TIMEOUT_MS = 5_000;
 
@@ -96,10 +94,12 @@ export function freshWeeklyPercent(
 }
 
 function baseUrl(env: NodeJS.ProcessEnv, credential?: Credential): string | undefined {
-  const raw = credential?.baseUrl || env.PI_GROK_CLI_BASE_URL || env.GROK_CLI_BASE_URL || DEFAULT_BASE;
-  const url = httpsUrl(raw.endsWith("/v1") || raw.includes("://") ? raw.replace(/\/+$/, "") : raw);
-  if (!url) return undefined;
-  return raw.replace(/\/+$/, "");
+  const text = kernel("base", {
+    credential: credential?.baseUrl ?? "",
+    pi: env.PI_GROK_CLI_BASE_URL ?? "",
+    grok: env.GROK_CLI_BASE_URL ?? "",
+  });
+  return text === "null" ? undefined : text;
 }
 
 function selectAccount(
