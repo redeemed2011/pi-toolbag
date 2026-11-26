@@ -181,12 +181,10 @@ async function readGrok(
   if (!selected.account?.credential) return { ok: false, reason: selected.reason ?? "no-token" };
   const credential = selected.account.credential;
   const cached = () => freshWeeklyPercent(cachePath, selected.account.id, now);
-
-  if (credential.expires <= now) {
-    const stale = cached();
-    if (stale !== undefined) return { ok: true, value: stale };
-    return { ok: false, reason: "token-expired" };
-  }
+  const stale = credential.expires <= now ? cached() : undefined;
+  const choice = kernel("token", { expires: credential.expires, now, cached: stale !== undefined });
+  if (choice === "cache") return { ok: true, value: stale as number };
+  if (choice === "token-expired") return { ok: false, reason: "token-expired" };
 
   const root = baseUrl(env, credential);
   if (!root) return { ok: false, reason: "insecure-url" };

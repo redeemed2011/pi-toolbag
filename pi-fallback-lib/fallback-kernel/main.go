@@ -117,6 +117,16 @@ func main() {
 			return
 		}
 		fmt.Println(selectAccount(request.Accounts, request.Active, request.Session))
+	case "token":
+		var request struct {
+			Expires float64 `json:"expires"`
+			Now     float64 `json:"now"`
+			Cached  bool    `json:"cached"`
+		}
+		if decode(&request) {
+			return
+		}
+		fmt.Println(tokenChoice(request.Expires, request.Now, request.Cached))
 	case "headers":
 		var request struct {
 			Kind  string `json:"kind"`

@@ -134,6 +134,16 @@ func parseCredential(value any) (map[string]any, bool) {
 	return cred, true
 }
 
+func tokenChoice(expires, now float64, cached bool) string {
+	if expires > now {
+		return "fetch"
+	}
+	if cached {
+		return "cache"
+	}
+	return "token-expired"
+}
+
 func selectAccount(accounts []vaultAccount, active, session string) int {
 	if session != "" {
 		for i, account := range accounts {
