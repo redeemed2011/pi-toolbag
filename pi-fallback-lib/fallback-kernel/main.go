@@ -117,6 +117,24 @@ func main() {
 			return
 		}
 		fmt.Println(selectAccount(request.Accounts, request.Active, request.Session))
+	case "chain":
+		var request struct {
+			Config  fallbackConfig `json:"config"`
+			Current string         `json:"current"`
+		}
+		if decode(&request) {
+			return
+		}
+		if chain := findChain(request.Config, request.Current); chain != nil {
+			raw, err := json.Marshal(chain)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			fmt.Println(string(raw))
+		} else {
+			fmt.Println("null")
+		}
 	case "split":
 		var request struct {
 			Key string `json:"key"`

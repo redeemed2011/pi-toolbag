@@ -20,7 +20,13 @@ export function modelKey(provider: string, id: string): ModelKey {
 }
 
 export function findChain(config: FallbackConfig, current: ModelKey): FallbackChain | undefined {
-  return config.chains.find((chain) => chain.models.includes(current));
+  const child = spawnSync(kernelBin, ["chain"], {
+    input: JSON.stringify({ config, current }),
+    encoding: "utf8",
+  });
+  if (child.status !== 0) throw new Error(child.stderr || "fallback-kernel failed");
+  const text = child.stdout.trim();
+  return text === "null" ? undefined : JSON.parse(text) as FallbackChain;
 }
 
 export function decideFailover(input: DecideInput): FailoverDecision {
