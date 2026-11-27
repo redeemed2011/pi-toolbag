@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { gateAgentMessage, runRecordFlow } from "../src/commands/record.js";
 import type { Hitl } from "../src/hitl.js";
-import { executeRecord } from "../src/tools/record.js";
+import { executeRecord } from "pi-ctx-lib";
 import { constraint, question } from "./fixtures.js";
 
 function throwingHitl(): Hitl {

@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runBindFlow, runUnbind } from "../src/commands/bind.js";
-import { foldSession } from "../src/fold.js";
+import { foldSession } from "pi-ctx-lib";
 import type { Hitl } from "../src/hitl.js";
 import { Runtime } from "../src/runtime.js";
-import { appendProjectRecord, createProject, loadProjectLive, readProjectMeta } from "../src/store/project.js";
-import { CTX_BIND, type Entry } from "../src/types.js";
+import { appendProjectRecord, createProject, loadProjectLive, readProjectMeta } from "pi-ctx-lib";
+import { CTX_BIND, type Entry } from "pi-ctx-lib";
 import { recorded } from "./fixtures.js";
 
 function scriptedHitl(plan: {

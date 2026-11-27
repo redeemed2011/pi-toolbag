@@ -14,6 +14,7 @@
     "check-sandbox": "bash scripts/check-sandbox.sh"
   },
   "dependencies": {
+    "pi-ctx-lib": "*",
     "pi-fallback-lib": "*"
   },
   "peerDependencies": {

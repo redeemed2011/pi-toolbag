@@ -1,8 +1,8 @@
 import type { Hitl } from "../hitl.js";
 import type { Runtime } from "../runtime.js";
 import { publishBoundStatus, type StatusSink } from "../render/bound-status.js";
-import { renameProject, slugify } from "../store/project.js";
-import { CTX_BIND } from "../types.js";
+import { renameProject, slugify } from "pi-ctx-lib";
+import { CTX_BIND } from "pi-ctx-lib";
 import type { BindPi, BindResult } from "./bind.js";
 
 /** Rename the bound project. The old id stays an alias, so other sessions bound to it keep working. */

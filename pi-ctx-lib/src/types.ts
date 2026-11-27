@@ -103,6 +103,7 @@ export type JudgmentRecord = {
 	byte_size?: number;
 	producer?: string;
 	expires_at?: string;
+	author?: string;
 };
 
 export type LiveSet = {

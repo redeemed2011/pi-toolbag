@@ -1,4 +1,4 @@
-import type { Entry, JudgmentRecord, Observation } from "../src/types.js";
+import type { Entry, JudgmentRecord, Observation } from "pi-ctx-lib";
 
 const TS = "2026-09-14T10:00:00.000Z";
 

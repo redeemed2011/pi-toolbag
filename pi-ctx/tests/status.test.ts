@@ -3,9 +3,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import { foldLive } from "../src/fold.js";
+import { foldLive } from "pi-ctx-lib";
 import { registerContextHook } from "../src/hooks/context-hook.js";
-import { applyStatusToSystem, statusLine } from "../src/render/status.js";
+import { applyStatusToSystem, statusLine } from "pi-ctx-lib";
 import { Runtime } from "../src/runtime.js";
 import {
 	BIND_GUIDELINE,
@@ -25,7 +25,7 @@ import {
 	FOOTER_TAG,
 	type Entry,
 	type JudgmentRecord,
-} from "../src/types.js";
+} from "pi-ctx-lib";
 import { assistantMsg, compaction, constraint, question, userMsg } from "./fixtures.js";
 
 function bind(projectId = "p1"): Entry {

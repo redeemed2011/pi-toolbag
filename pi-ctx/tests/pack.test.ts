@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { INJECT_CAP, injectTokens } from "../src/render/estimate.js";
-import { packInject } from "../src/render/pack.js";
-import { renderInject } from "../src/render/inject.js";
+import { INJECT_CAP, injectTokens } from "pi-ctx-lib";
+import { packInject } from "pi-ctx-lib";
+import { renderInject } from "pi-ctx-lib";
 import { DEFAULTS } from "../src/config.js";
 import { constraint, question } from "./fixtures.js";
-import type { SessionFold } from "../src/types.js";
+import type { SessionFold } from "pi-ctx-lib";
 
 const session = (over: Partial<SessionFold> = {}): SessionFold => ({
 	enabled: true,

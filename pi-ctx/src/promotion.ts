@@ -1,4 +1,4 @@
-import type { Observation } from "./types.js";
+import type { Observation } from "pi-ctx-lib";
 
 const FIRM = /\b(must not|must-not|never)\b/i;
 const COND = /\b(only if|unless)\b/i;

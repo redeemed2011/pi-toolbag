@@ -2,8 +2,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseJsonl, unionLogDir } from "../src/store/jsonl.js";
-import { appendProjectRecord, loadProjectLive } from "../src/store/project.js";
+import { parseJsonl, unionLogDir } from "pi-ctx-lib";
+import { appendProjectRecord, loadProjectLive } from "pi-ctx-lib";
 
 describe("jsonl skip-bad-line", () => {
 	it("drops malformed lines and duplicates by byte hash / id", () => {

@@ -15,9 +15,9 @@ import {
 	statusSink,
 } from "../src/render/bound-status.js";
 import { Runtime } from "../src/runtime.js";
-import { createProject } from "../src/store/project.js";
+import { createProject } from "pi-ctx-lib";
 import { registerTools } from "../src/tools/register.js";
-import { CTX_BIND, CTX_ENABLED, type Entry } from "../src/types.js";
+import { CTX_BIND, CTX_ENABLED, type Entry } from "pi-ctx-lib";
 
 function bindEntry(projectId: string | null, id = "b"): Entry {
 	return { type: "custom", id, customType: CTX_BIND, data: { project_id: projectId } };

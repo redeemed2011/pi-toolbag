@@ -141,5 +141,6 @@ export function lineToJudgment(line: JsonlLine): JudgmentRecord | undefined {
 		byte_size: evidence?.byte_size,
 		producer: evidence?.producer,
 		expires_at: evidence?.expires_at,
+		author: typeof line.author === "string" && line.author.trim() ? line.author.trim() : undefined,
 	};
 }

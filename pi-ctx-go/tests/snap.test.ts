@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { JudgmentRecord, LiveSet } from "../../pi-ctx/src/types.js";
+import type { JudgmentRecord, LiveSet } from "pi-ctx-lib";
 import { destinationContext, unresolvedNotBuilt } from "../src/snap.js";
 
 function record(partial: Pick<JudgmentRecord, "id" | "type" | "ts" | "headline" | "body"> & Partial<JudgmentRecord>): JudgmentRecord {

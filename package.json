@@ -5,9 +5,14 @@
   "description": "Pi extensions: agent memory (ctx), same-session cross-model failover, and the first-questions / first-principles rituals.",
   "license": "MIT",
   "type": "module",
+  "exports": {
+    "./ctx": "./pi-ctx-lib/src/index.ts",
+    "./ctx/*": "./pi-ctx-lib/src/*.ts"
+  },
   "keywords": ["pi-package"],
   "workspaces": [
     "pi-fallback-lib",
+    "pi-ctx-lib",
     "pi-ctx",
     "pi-auto-fallback",
     "pi-foundations",
@@ -17,8 +22,8 @@
     "pi-engineering-lead"
   ],
   "scripts": {
-    "test": "cd pi-ctx && node ../node_modules/vitest/vitest.mjs run && cd ../pi-fallback-lib && node ../node_modules/vitest/vitest.mjs run && cd ../pi-auto-fallback && node ../node_modules/vitest/vitest.mjs run && cd ../pi-foundations && node ../node_modules/vitest/vitest.mjs run && cd ../pi-stream-stall && node ../node_modules/vitest/vitest.mjs run && cd ../pi-tool-groups && npm test && cd ../pi-ctx-go && node ../node_modules/vitest/vitest.mjs run && cd ../pi-engineering-lead && node ../node_modules/vitest/vitest.mjs run",
-    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p pi-ctx && node node_modules/typescript/bin/tsc --noEmit -p pi-fallback-lib && node node_modules/typescript/bin/tsc --noEmit -p pi-auto-fallback && node node_modules/typescript/bin/tsc --noEmit -p pi-foundations && node node_modules/typescript/bin/tsc --noEmit -p pi-stream-stall && node node_modules/typescript/bin/tsc --noEmit -p pi-tool-groups && node node_modules/typescript/bin/tsc --noEmit -p pi-ctx-go && node node_modules/typescript/bin/tsc --noEmit -p pi-engineering-lead"
+    "test": "cd pi-ctx-lib && node ../node_modules/vitest/vitest.mjs run && cd ../pi-ctx && node ../node_modules/vitest/vitest.mjs run && cd ../pi-fallback-lib && node ../node_modules/vitest/vitest.mjs run && cd ../pi-auto-fallback && node ../node_modules/vitest/vitest.mjs run && cd ../pi-foundations && node ../node_modules/vitest/vitest.mjs run && cd ../pi-stream-stall && node ../node_modules/vitest/vitest.mjs run && cd ../pi-tool-groups && npm test && cd ../pi-ctx-go && node ../node_modules/vitest/vitest.mjs run && cd ../pi-engineering-lead && node ../node_modules/vitest/vitest.mjs run",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p pi-ctx-lib && node node_modules/typescript/bin/tsc --noEmit -p pi-ctx && node node_modules/typescript/bin/tsc --noEmit -p pi-fallback-lib && node node_modules/typescript/bin/tsc --noEmit -p pi-auto-fallback && node node_modules/typescript/bin/tsc --noEmit -p pi-foundations && node node_modules/typescript/bin/tsc --noEmit -p pi-stream-stall && node node_modules/typescript/bin/tsc --noEmit -p pi-tool-groups && node node_modules/typescript/bin/tsc --noEmit -p pi-ctx-go && node node_modules/typescript/bin/tsc --noEmit -p pi-engineering-lead"
   },
   "pi": {
     "extensions": [

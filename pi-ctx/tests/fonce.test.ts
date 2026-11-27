@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULTS } from "../src/config.js";
-import { applyFonceA, isFirstCallAfterCompact, sendGuardTokens, stripFooter } from "../src/render/fonce.js";
-import { FOOTER_TAG, type SessionFold } from "../src/types.js";
+import { applyFonceA, isFirstCallAfterCompact, sendGuardTokens, stripFooter } from "pi-ctx-lib";
+import { FOOTER_TAG, type SessionFold } from "pi-ctx-lib";
 import { assistantMsg, compaction, constraint, question, userMsg } from "./fixtures.js";
 
 const bound: SessionFold = {

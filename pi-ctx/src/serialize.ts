@@ -1,4 +1,4 @@
-import type { Entry } from "./types.js";
+import type { Entry } from "pi-ctx-lib";
 
 function pad(n: number): string {
 	return n.toString().padStart(2, "0");

@@ -3,14 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runClaimFlow } from "../src/commands/claim.js";
-import { foldSession } from "../src/fold.js";
+import { foldSession } from "pi-ctx-lib";
 import { findingRawError, GRANT_TYPE, hashGrantToken } from "../src/grant.js";
 import { registerContextHook } from "../src/hooks/context-hook.js";
 import { onPendingReplaceSettled } from "../src/hooks/pending-replace-hook.js";
 import type { Hitl } from "../src/hitl.js";
 import { Runtime } from "../src/runtime.js";
-import { lineToJudgment } from "../src/store/jsonl.js";
-import { appendProjectRecord, createProject, loadProjectRecords } from "../src/store/project.js";
+import { lineToJudgment } from "pi-ctx-lib";
+import { appendProjectRecord, createProject, loadProjectRecords } from "pi-ctx-lib";
 import { registerTools } from "../src/tools/register.js";
 import {
 	CTX_BIND,
@@ -18,7 +18,7 @@ import {
 	CTX_OCCUPANCY,
 	CTX_PENDING_TURN,
 	type Entry,
-} from "../src/types.js";
+} from "pi-ctx-lib";
 import { compaction } from "./fixtures.js";
 
 type Tool = {

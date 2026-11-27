@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { foldLive } from "../src/fold.js";
-import { executeGet } from "../src/tools/get.js";
-import { executeZoom } from "../src/tools/zoom.js";
+import { foldLive } from "pi-ctx-lib";
+import { executeGet } from "pi-ctx-lib";
+import { executeZoom } from "pi-ctx-lib";
 import { constraint, obs, question } from "./fixtures.js";
 
 const FULL = "9851f9b8-0d1c-4a2e-9f3b-1234567890ab";

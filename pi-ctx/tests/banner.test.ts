@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULTS } from "../src/config.js";
-import { mismatchBanner } from "../src/render/banner.js";
-import { renderInject } from "../src/render/inject.js";
-import type { Observation, SessionFold } from "../src/types.js";
+import { mismatchBanner } from "pi-ctx-lib";
+import { renderInject } from "pi-ctx-lib";
+import type { Observation, SessionFold } from "pi-ctx-lib";
 import { constraint, obs, question, userMsg } from "./fixtures.js";
 
 const branch = [userMsg("u0", "before"), userMsg("u1", "kept"), userMsg("u2", "tail")];

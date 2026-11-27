@@ -198,7 +198,7 @@ export function foldLive(records: JudgmentRecord[]): LiveSet {
 		live,
 		constraints: ofType("constraint"),
 		questions: ofType("question"),
-		destinations: ofType("destination"),
+		destinations: ofType("destination").sort((a, b) => a.ts.localeCompare(b.ts) || a.id.localeCompare(b.id)),
 		outOfScope: ofType("out_of_scope"),
 		fog: ofType("fog"),
 		pendingReplaces: ofType("pending_replace"),
@@ -210,6 +210,31 @@ export function foldLive(records: JudgmentRecord[]): LiveSet {
 
 export function bodySetGE(live: LiveSet): JudgmentRecord[] {
 	return live.constraints.filter((c) => live.live.has(c.id));
+}
+
+export function followClaim(live: LiveSet, claimedId: string | null): string | null {
+	if (!claimedId || live.live.has(claimedId)) return claimedId;
+	const children = new Map<string, string[]>();
+	for (const rec of live.byId.values()) {
+		for (const parent of rec.supersedes ?? []) children.set(parent, [...(children.get(parent) ?? []), rec.id]);
+	}
+	const seen = new Set<string>([claimedId]);
+	const reached: string[] = [];
+	let wave = [claimedId];
+	while (wave.length) {
+		const next: string[] = [];
+		for (const id of wave) {
+			for (const kid of children.get(id) ?? []) {
+				if (seen.has(kid)) continue;
+				seen.add(kid);
+				if (live.live.has(kid)) reached.push(kid);
+				else next.push(kid);
+			}
+		}
+		wave = next;
+	}
+	const open = reached.filter((id) => live.byId.get(id)?.type === "question");
+	return reached.length === 1 && open.length === 1 ? open[0]! : null;
 }
 
 export function bodySetCS(live: LiveSet, claimedId: string | null): JudgmentRecord[] {

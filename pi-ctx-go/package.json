@@ -11,6 +11,9 @@
     "test": "node ../node_modules/vitest/vitest.mjs run",
     "typecheck": "node ../node_modules/typescript/bin/tsc --noEmit"
   },
+  "dependencies": {
+    "pi-ctx-lib": "*"
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
   },

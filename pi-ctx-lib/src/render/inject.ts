@@ -1,16 +1,21 @@
 import { foldLive, resolveOccupancy } from "../fold.js";
-import type { Config } from "../config.js";
-import type { Entry, JudgmentRecord, PackedInject, SessionFold } from "../types.js";
+import type { Entry, JudgmentRecord, Occupancy, PackedInject, SessionFold } from "../types.js";
 import { renderClaimStrip } from "./claim-strip.js";
 import { renderGatedEdge } from "./gated-edge.js";
 import { recallErrorInject, renderUnbound } from "./unbound.js";
+
+export type RenderConfig = {
+	occupancy: Occupancy;
+	gatedEdgeSiblingHeadlines: 0 | 2;
+};
 
 export function renderInject(opts: {
 	session: SessionFold;
 	branch: Entry[];
 	firstKeptId: string;
-	config: Config;
+	config: RenderConfig;
 	projectRecords?: JudgmentRecord[];
+	includeAuthor?: boolean;
 }): PackedInject {
 	try {
 		if (!opts.session.bound) {
@@ -25,6 +30,7 @@ export function renderInject(opts: {
 				firstKeptId: opts.firstKeptId,
 				branch: opts.branch,
 				observations: opts.session.observations,
+				includeAuthor: opts.includeAuthor,
 			});
 		}
 		return renderGatedEdge({
@@ -34,6 +40,7 @@ export function renderInject(opts: {
 			branch: opts.branch,
 			siblingKnob: opts.config.gatedEdgeSiblingHeadlines,
 			observations: opts.session.observations,
+			includeAuthor: opts.includeAuthor,
 		});
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
@@ -45,8 +52,9 @@ export function renderConstitutionOnly(opts: {
 	session: SessionFold;
 	branch: Entry[];
 	firstKeptId: string;
-	config: Config;
+	config: RenderConfig;
 	projectRecords?: JudgmentRecord[];
+	includeAuthor?: boolean;
 }): PackedInject {
 	const packed = renderInject(opts);
 	if (!opts.session.bound) return packed;
@@ -59,6 +67,7 @@ export function renderConstitutionOnly(opts: {
 			firstKeptId: opts.firstKeptId,
 			branch: opts.branch,
 			observations: [],
+			includeAuthor: opts.includeAuthor,
 		});
 	}
 	return renderGatedEdge({
@@ -68,5 +77,6 @@ export function renderConstitutionOnly(opts: {
 		branch: opts.branch,
 		siblingKnob: opts.config.gatedEdgeSiblingHeadlines,
 		observations: [],
+		includeAuthor: opts.includeAuthor,
 	});
 }

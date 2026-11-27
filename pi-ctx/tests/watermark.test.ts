@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { coverageCommit } from "../src/commit.js";
-import { CTX_OBSERVATIONS_EMPTY_COVER, CTX_OBSERVATIONS_RECORDED } from "../src/types.js";
+import { CTX_OBSERVATIONS_EMPTY_COVER, CTX_OBSERVATIONS_RECORDED } from "pi-ctx-lib";
 import { obs } from "./fixtures.js";
 
 describe("observer watermark", () => {

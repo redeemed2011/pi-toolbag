@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULTS } from "../src/config.js";
-import { INJECT_CAP, injectTokens } from "../src/render/estimate.js";
-import { renderInject } from "../src/render/inject.js";
-import { recallErrorInject } from "../src/render/unbound.js";
+import { INJECT_CAP, injectTokens } from "pi-ctx-lib";
+import { renderInject } from "pi-ctx-lib";
+import { recallErrorInject } from "pi-ctx-lib";
 import { obs } from "./fixtures.js";
 
 describe("unbound inject", () => {

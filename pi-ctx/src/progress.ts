@@ -1,11 +1,13 @@
 import { estimateEntryTokens, isSourceEntry, isValidCutPoint } from "./tokens.js";
-import { CTX_OBSERVATIONS_EMPTY_COVER, CTX_OBSERVATIONS_RECORDED, type Entry } from "./types.js";
+import {
+	CTX_OBSERVATIONS_EMPTY_COVER,
+	CTX_OBSERVATIONS_RECORDED,
+	entryIndexById,
+	findLastCompactionIndex,
+	type Entry,
+} from "pi-ctx-lib";
 
-export function entryIndexById(entries: Entry[]): Map<string, number> {
-	const map = new Map<string, number>();
-	for (let i = 0; i < entries.length; i++) map.set(entries[i].id, i);
-	return map;
-}
+export { entryIndexById, findLastCompactionIndex };
 
 export function entryIndexForId(entries: Entry[], entryId: string | undefined): number {
 	if (!entryId) return -1;
@@ -52,13 +54,6 @@ export function latestCoverageMarkerId(entries: Entry[]): string | undefined {
 		}
 	}
 	return latestMarkerId;
-}
-
-export function findLastCompactionIndex(entries: Entry[]): number {
-	for (let i = entries.length - 1; i >= 0; i--) {
-		if (entries[i].type === "compaction") return i;
-	}
-	return -1;
 }
 
 export function rawTokensSinceLastCompaction(entries: Entry[]): number {

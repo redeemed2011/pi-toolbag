@@ -1,3 +1,4 @@
+import { authorDisplayEnabled, authorOf } from "../author.js";
 import { bodySetCS, bodySetGE } from "../fold.js";
 import { claimedBodyOrEmpty } from "../render/gated-edge.js";
 import { gateCheck } from "../render/occupancy.js";
@@ -59,12 +60,14 @@ export function lookupRecord(
 	records: JudgmentRecord[],
 	observations: Observation[],
 	now = Date.now(),
+	includeAuthor?: boolean,
 ): Record<string, unknown> {
 	const resolved = resolveId(rawId, live, records, observations);
 	if ("error" in resolved) {
 		return resolved.candidates ? { error: resolved.error, id: rawId, candidates: resolved.candidates } : { error: resolved.error, id: rawId };
 	}
 	const id = resolved.id;
+	const showAuthor = authorDisplayEnabled(includeAuthor);
 	const rec = live.byId.get(id) ?? records.find((r) => r.id === id);
 	if (rec) {
 		const view: Record<string, unknown> = {
@@ -72,6 +75,7 @@ export function lookupRecord(
 			type: rec.type,
 			ts: rec.ts,
 			live: live.live.has(rec.id),
+			...(showAuthor ? { author: authorOf(rec) } : {}),
 			headline: rec.headline,
 			directive: rec.directive,
 			rationale: rec.rationale,
@@ -89,6 +93,7 @@ export function lookupRecord(
 				.map((item) => ({
 					id: item.id,
 					session: item.session,
+					...(showAuthor ? { author: authorOf(item) } : {}),
 					headline: item.headline,
 					live: live.live.has(item.id),
 				}));
@@ -126,6 +131,7 @@ export function defaultRetrieve(opts: {
 	claimedId: string | null;
 	live: LiveSet;
 	recency: Observation[];
+	includeAuthor?: boolean;
 }): Record<string, unknown> {
 	const recency = opts.recency.slice(0, RETRIEVE_HEADLINE_CAP).map((o) => ({
 		id: o.id,
@@ -163,6 +169,7 @@ export function defaultRetrieve(opts: {
 			note: "bodies via zoom",
 		};
 	}
+	const showAuthor = authorDisplayEnabled(opts.includeAuthor);
 	return {
 		occupancy: "gated-edge",
 		gate: 0,
@@ -170,6 +177,7 @@ export function defaultRetrieve(opts: {
 			id: c.id,
 			headline: c.headline,
 			applies_to: c.applies_to,
+			...(showAuthor ? { author: authorOf(c) } : {}),
 			body: c.directive || c.body,
 		})),
 		claim,
@@ -188,8 +196,9 @@ export function executeGet(opts: {
 	observations: Observation[];
 	recency: Observation[];
 	now?: number;
+	includeAuthor?: boolean;
 }): Record<string, unknown> {
 	if (!opts.enabled) return { error: "ctx is off" };
-	if (opts.id) return lookupRecord(opts.id, opts.live, opts.records, opts.observations, opts.now);
+	if (opts.id) return lookupRecord(opts.id, opts.live, opts.records, opts.observations, opts.now, opts.includeAuthor);
 	return defaultRetrieve(opts);
 }

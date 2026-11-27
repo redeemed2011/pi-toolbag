@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolvePromoterModel, type SessionModelSource } from "../config.js";
-import { foldLive, foldSession, resolveOccupancy } from "../fold.js";
+import { foldLive, foldSession, resolveOccupancy } from "pi-ctx-lib";
 import type { Hitl } from "../hitl.js";
 import type { Runtime } from "../runtime.js";
 import {
@@ -16,12 +16,12 @@ import {
 	type WorkerExit,
 } from "../spawn/observer.js";
 import { runResultPath } from "../spawn/runs.js";
-import { CTX_PROMOTER_LATCH, type Entry, type JudgmentRecord } from "../types.js";
-import { applyPromoterResult } from "./apply.js";
+import { CTX_PROMOTER_LATCH, type Entry, type JudgmentRecord } from "pi-ctx-lib";
+import { applyPromoterResult } from "pi-ctx-lib";
 import { runPendingReplaceHitl } from "./hitl.js";
 import { promoterKickoffPrompt, readPromoterSubmission, writePromoterKickoff } from "./io.js";
-import { extractAssistantQuotes, extractUserQuotes } from "./quotes.js";
-import { PROMOTER_CHARS, PROMOTER_N, PROMOTER_SHELF_N, emptyPromoterResult, parsePromoterResult } from "./schema.js";
+import { extractAssistantQuotes, extractUserQuotes } from "pi-ctx-lib";
+import { PROMOTER_CHARS, PROMOTER_N, PROMOTER_SHELF_N, emptyPromoterResult, parsePromoterResult } from "pi-ctx-lib";
 
 export const PROMOTER_EXTENSION_PATH = join(
 	dirname(fileURLToPath(import.meta.url)),

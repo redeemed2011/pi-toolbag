@@ -1,8 +1,8 @@
 import { estimateTokens } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { DEFAULTS } from "../src/config.js";
-import { injectTokens, textTokens } from "../src/render/estimate.js";
-import { renderInject } from "../src/render/inject.js";
+import { injectTokens, textTokens } from "pi-ctx-lib";
+import { renderInject } from "pi-ctx-lib";
 import { estimateEntryTokens } from "../src/tokens.js";
 import { bashHidden, constraint, question, userMsg } from "./fixtures.js";
 

@@ -1,6 +1,6 @@
 import { entryIndexById, rawTokensFrom } from "./progress.js";
 import { isSourceEntry, isValidCutPoint } from "./tokens.js";
-import { CTX_OBSERVATIONS_EMPTY_COVER, CTX_OBSERVATIONS_RECORDED, type Entry } from "./types.js";
+import { CTX_OBSERVATIONS_EMPTY_COVER, CTX_OBSERVATIONS_RECORDED, type Entry } from "pi-ctx-lib";
 
 function chunkBoundaryIndices(branch: Entry[]): number[] {
 	const indexes = entryIndexById(branch);

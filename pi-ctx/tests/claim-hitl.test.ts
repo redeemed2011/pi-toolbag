@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { runClaimFlow } from "../src/commands/claim.js";
-import { foldLive } from "../src/fold.js";
+import { foldLive } from "pi-ctx-lib";
 import type { Hitl } from "../src/hitl.js";
 import { Runtime } from "../src/runtime.js";
-import { applyClaim } from "../src/tools/claim.js";
+import { applyClaim } from "pi-ctx-lib";
 import { question } from "./fixtures.js";
 
 function scriptedHitl(plan: { confirms?: boolean[]; hasUI?: boolean } = {}): Hitl {

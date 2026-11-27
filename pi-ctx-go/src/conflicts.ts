@@ -1,4 +1,4 @@
-import type { JudgmentRecord, LiveSet } from "../../pi-ctx/src/types.js";
+import type { JudgmentRecord, LiveSet } from "pi-ctx-lib";
 
 const CALL_CAP = 1_000_000;
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { bodySetCS, bodySetGE, foldLive, resolveOccupancy } from "../src/fold.js";
-import { claimedSlotCap, claimSlotFits, gateCheck } from "../src/render/occupancy.js";
+import { bodySetCS, bodySetGE, foldLive, resolveOccupancy } from "pi-ctx-lib";
+import { claimedSlotCap, claimSlotFits, gateCheck } from "pi-ctx-lib";
 import { constraint, question } from "./fixtures.js";
 
 describe("resolveOccupancy", () => {

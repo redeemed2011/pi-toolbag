@@ -1,3 +1,4 @@
+import { authorDisplayEnabled, authorOf } from "../author.js";
 import { bodySetCS } from "../fold.js";
 import { pendingReplaceSection } from "../promoter/inject.js";
 import type { Entry, JudgmentRecord, LiveSet, Observation, PackedInject, SessionFold } from "../types.js";
@@ -6,11 +7,12 @@ import { gateCheck } from "./occupancy.js";
 import { packInject, renderOverflow } from "./pack.js";
 import { claimedBodyOrEmpty, countsLine, destinationMd } from "./gated-edge.js";
 
-function appliedBodiesMd(bodies: JudgmentRecord[]): string {
+function appliedBodiesMd(bodies: JudgmentRecord[], includeAuthor: boolean): string {
 	if (bodies.length === 0) return "";
 	const parts = ["## Applied constraints"];
 	for (const c of bodies) {
-		parts.push(`### ${c.headline} (${c.id})\n${c.directive || c.body}`);
+		const label = includeAuthor ? `${c.id}, by ${authorOf(c)}` : c.id;
+		parts.push(`### ${c.headline} (${label})\n${c.directive || c.body}`);
 	}
 	return parts.join("\n\n");
 }
@@ -21,6 +23,7 @@ export function renderClaimStrip(opts: {
 	firstKeptId: string;
 	branch: Entry[];
 	observations: Observation[];
+	includeAuthor?: boolean;
 }): PackedInject {
 	const claimed = claimedBodyOrEmpty(opts.live, opts.session.claimedId);
 	const dest = destinationMd(opts.live);
@@ -56,7 +59,7 @@ export function renderClaimStrip(opts: {
 	return packInject({
 		headers,
 		dest,
-		bodiesMd: appliedBodiesMd(applied),
+		bodiesMd: appliedBodiesMd(applied, authorDisplayEnabled(opts.includeAuthor)),
 		claimedMd: claimed.md,
 		counts,
 		banner,

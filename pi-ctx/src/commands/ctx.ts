@@ -1,11 +1,11 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { bodySetCS, bodySetGE, resolveOccupancy } from "../fold.js";
+import { bodySetCS, bodySetGE, resolveOccupancy } from "pi-ctx-lib";
 import { hitlFromCtx } from "../hitl.js";
 import { notifyFrom } from "../notify.js";
-import { mintGateFlags } from "../mint.js";
-import { gateCheck } from "../render/occupancy.js";
+import { mintGateFlags } from "pi-ctx-lib";
+import { gateCheck } from "pi-ctx-lib";
 import type { Runtime } from "../runtime.js";
-import { CTX_ENABLED, type Entry } from "../types.js";
+import { CTX_ENABLED, type Entry } from "pi-ctx-lib";
 import { publishRuntimeBoundStatus, statusSink } from "../render/bound-status.js";
 import { runAskFlow } from "./ask.js";
 import { runBindFlow, runUnbind } from "./bind.js";

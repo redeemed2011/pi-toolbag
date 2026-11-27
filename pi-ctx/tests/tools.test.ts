@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { foldLive } from "../src/fold.js";
+import { foldLive } from "pi-ctx-lib";
 import { Runtime } from "../src/runtime.js";
-import { applyClaim } from "../src/tools/claim.js";
-import { executeFrontier, FRONTIER_CAP } from "../src/tools/frontier.js";
-import { executeSearch } from "../src/tools/search.js";
-import { defaultRetrieve, executeGet, RETRIEVE_HEADLINE_CAP } from "../src/tools/get.js";
+import { applyClaim } from "pi-ctx-lib";
+import { executeFrontier, FRONTIER_CAP } from "pi-ctx-lib";
+import { executeSearch } from "pi-ctx-lib";
+import { defaultRetrieve, executeGet, RETRIEVE_HEADLINE_CAP } from "pi-ctx-lib";
 import { registerTools } from "../src/tools/register.js";
 import { dropKeys, jsonResult } from "../src/tools/result.js";
 import { constraint, obs, question } from "./fixtures.js";

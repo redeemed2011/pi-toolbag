@@ -1,8 +1,7 @@
-import type { Config } from "../config.js";
-import { findLastCompactionIndex } from "../progress.js";
 import { FOOTER_TAG, type Entry, type JudgmentRecord, type SessionFold } from "../types.js";
+import { findLastCompactionIndex } from "./banner.js";
 import { INJECT_CAP } from "./estimate.js";
-import { renderConstitutionOnly } from "./inject.js";
+import { renderConstitutionOnly, type RenderConfig } from "./inject.js";
 
 export type AgentMessage = {
 	role?: string;
@@ -37,8 +36,8 @@ export function applyFonceA(
 	requestMessages: AgentMessage[],
 	sessionBranch: Entry[],
 	session: SessionFold,
-	config: Config,
-	opts?: { firstKeptId?: string; projectRecords?: JudgmentRecord[] },
+	config: RenderConfig,
+	opts?: { firstKeptId?: string; projectRecords?: JudgmentRecord[]; includeAuthor?: boolean },
 ): AgentMessage[] {
 	const msgs = stripFooter(requestMessages);
 	if (!session.bound) return msgs;
@@ -54,6 +53,7 @@ export function applyFonceA(
 		firstKeptId,
 		config,
 		projectRecords: opts?.projectRecords,
+		includeAuthor: opts?.includeAuthor,
 	});
 	msgs.push({
 		role: "custom",

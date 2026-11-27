@@ -1,10 +1,10 @@
-import { resolveOccupancy } from "../fold.js";
+import { resolveOccupancy } from "pi-ctx-lib";
 import { branchHasBind, findGrantByToken, PROJECT_ID_RE } from "../grant.js";
 import { publishBoundStatus, type StatusSink } from "../render/bound-status.js";
 import type { Runtime } from "../runtime.js";
-import { loadProjectLive, readProjectMeta } from "../store/project.js";
-import { applyClaim } from "./claim.js";
-import { CTX_BIND, CTX_CLAIM, type Entry } from "../types.js";
+import { loadProjectLive, readProjectMeta } from "pi-ctx-lib";
+import { applyClaim } from "pi-ctx-lib";
+import { CTX_BIND, CTX_CLAIM, type Entry } from "pi-ctx-lib";
 
 type AttachPi = { appendEntry: (customType: string, data?: unknown) => void };
 

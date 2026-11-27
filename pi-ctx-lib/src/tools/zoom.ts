@@ -8,8 +8,9 @@ export function executeZoom(opts: {
 	records: JudgmentRecord[];
 	observations: Observation[];
 	now?: number;
+	includeAuthor?: boolean;
 }): Record<string, unknown> {
 	if (!opts.enabled) return { error: "ctx is off" };
 	if (!opts.id) return { error: "not_found", id: opts.id };
-	return lookupRecord(opts.id, opts.live, opts.records, opts.observations, opts.now);
+	return lookupRecord(opts.id, opts.live, opts.records, opts.observations, opts.now, opts.includeAuthor);
 }

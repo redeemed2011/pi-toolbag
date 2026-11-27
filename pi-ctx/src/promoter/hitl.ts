@@ -1,9 +1,9 @@
-import { foldLive } from "../fold.js";
+import { foldLive } from "pi-ctx-lib";
 import type { Hitl } from "../hitl.js";
-import { putJudgment } from "../mint.js";
-import { appendProjectRecord } from "../store/project.js";
-import { executeRecord } from "../tools/record.js";
-import type { JudgmentRecord, Occupancy } from "../types.js";
+import { putJudgment } from "pi-ctx-lib";
+import { appendProjectRecord } from "pi-ctx-lib";
+import { executeRecord } from "pi-ctx-lib";
+import type { JudgmentRecord, Occupancy } from "pi-ctx-lib";
 
 export const KEEP = "Keep live law";
 export const SUPERSEDE = "Supersede with user quote";

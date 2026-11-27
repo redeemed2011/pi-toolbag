@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { foldLive, frontierItems } from "../src/fold.js";
-import { putJudgment } from "../src/mint.js";
-import { lineToJudgment, type JsonlLine } from "../src/store/jsonl.js";
-import { applyClaim } from "../src/tools/claim.js";
+import { foldLive, frontierItems } from "pi-ctx-lib";
+import { putJudgment } from "pi-ctx-lib";
+import { lineToJudgment, type JsonlLine } from "pi-ctx-lib";
+import { applyClaim } from "pi-ctx-lib";
 import { question } from "./fixtures.js";
 
 const base = {

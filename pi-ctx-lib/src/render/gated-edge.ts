@@ -1,3 +1,4 @@
+import { authorDisplayEnabled, authorOf } from "../author.js";
 import { bodySetGE } from "../fold.js";
 import type { JudgmentRecord, LiveSet, Observation, PackedInject, SessionFold } from "../types.js";
 import { pendingReplaceSection } from "../promoter/inject.js";
@@ -7,11 +8,12 @@ import { gateCheck } from "./occupancy.js";
 import { packInject, renderOverflow } from "./pack.js";
 import type { Entry } from "../types.js";
 
-function constraintBodiesMd(bodies: JudgmentRecord[]): string {
+function constraintBodiesMd(bodies: JudgmentRecord[], includeAuthor: boolean): string {
 	if (bodies.length === 0) return "";
 	const parts = ["## Constraints"];
 	for (const c of bodies) {
-		parts.push(`### ${c.headline} (${c.id})\n${c.directive || c.body}`);
+		const label = includeAuthor ? `${c.id}, by ${authorOf(c)}` : c.id;
+		parts.push(`### ${c.headline} (${label})\n${c.directive || c.body}`);
 	}
 	return parts.join("\n\n");
 }
@@ -38,6 +40,7 @@ export function renderGatedEdge(opts: {
 	branch: Entry[];
 	siblingKnob: 0 | 2;
 	observations: Observation[];
+	includeAuthor?: boolean;
 }): PackedInject {
 	const bodies = bodySetGE(opts.live);
 	const claimed = claimedBodyOrEmpty(opts.live, opts.session.claimedId);
@@ -74,7 +77,7 @@ export function renderGatedEdge(opts: {
 	return packInject({
 		headers,
 		dest,
-		bodiesMd: constraintBodiesMd(bodies),
+		bodiesMd: constraintBodiesMd(bodies, authorDisplayEnabled(opts.includeAuthor)),
 		claimedMd: claimed.md,
 		counts,
 		banner,

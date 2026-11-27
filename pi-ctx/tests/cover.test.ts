@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { planCoverageStep, retentionCutId } from "../src/cover.js";
-import { recencyLines } from "../src/render/gated-edge.js";
+import { recencyLines } from "pi-ctx-lib";
 import { assistantToolCall, obs, recorded, toolResult, userMsg } from "./fixtures.js";
 
 const branch = [

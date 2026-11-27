@@ -23,7 +23,7 @@ vi.mock("../src/spawn/observer.js", async () => {
 import { writePromoterResult } from "../src/promoter/io.js";
 import { workerRetryWaits } from "../src/spawn/observer.js";
 import { harvestAfterBind } from "../src/promoter/run.js";
-import { emptyPromoterResult } from "../src/promoter/schema.js";
+import { emptyPromoterResult } from "pi-ctx-lib";
 import { Runtime } from "../src/runtime.js";
 import { runResultPath } from "../src/spawn/runs.js";
 import { userMsg } from "./fixtures.js";

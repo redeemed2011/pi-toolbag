@@ -1,11 +1,11 @@
 import { basename } from "node:path";
 import type { Hitl } from "../hitl.js";
 import type { Runtime } from "../runtime.js";
-import { createProject, listProjects, readProjectMeta, slugify } from "../store/project.js";
+import { createProject, listProjects, readProjectMeta, slugify } from "pi-ctx-lib";
 import { harvestAfterBind, type HarvestReceipt, type PromoterRunFn } from "../promoter/run.js";
-import { PROMOTER_N, PROMOTER_SHELF_N } from "../promoter/schema.js";
+import { PROMOTER_N, PROMOTER_SHELF_N } from "pi-ctx-lib";
 import { publishBoundStatus, type StatusSink } from "../render/bound-status.js";
-import { CTX_BIND, type Entry } from "../types.js";
+import { CTX_BIND, type Entry } from "pi-ctx-lib";
 
 export type BindPi = { appendEntry: (customType: string, data?: unknown) => void };
 

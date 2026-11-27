@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { putJudgment } from "../src/mint.js";
+import { putJudgment } from "pi-ctx-lib";
 import { constraint, question } from "./fixtures.js";
 
 const base = {

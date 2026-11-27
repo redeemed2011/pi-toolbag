@@ -1,13 +1,13 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { foldSession } from "../fold.js";
-import { INJECT_CAP, injectTokens } from "../render/estimate.js";
-import { renderInject } from "../render/inject.js";
-import { recallErrorInject } from "../render/unbound.js";
+import { foldSession } from "pi-ctx-lib";
+import { INJECT_CAP, injectTokens } from "pi-ctx-lib";
+import { renderInject } from "pi-ctx-lib";
+import { recallErrorInject } from "pi-ctx-lib";
 import type { Runtime } from "../runtime.js";
 import { planCoverageStep, retentionCutId } from "../cover.js";
 import { entryIndexForId, latestCoverageMarkerId, rawTokensFrom } from "../progress.js";
 import { canSkipObserverWait, snapCutoff } from "../snap.js";
-import { CTX_FOLDED, type Entry } from "../types.js";
+import { CTX_FOLDED, type Entry } from "pi-ctx-lib";
 import { dispatchCoverageSlice } from "./observer-trigger.js";
 
 export function registerCompactionHook(pi: ExtensionAPI, runtime: Runtime): void {

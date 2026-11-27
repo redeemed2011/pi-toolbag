@@ -5,6 +5,15 @@ import { validateAppliesTo } from "./store/jsonl.js";
 import type { AppliesTo, JudgmentRecord, LiveSet, Occupancy, ReasonClass } from "./types.js";
 import { parseEvidenceMeta, type EvidenceMeta } from "./evidence.js";
 
+let lastMintMs = 0;
+function mintTimestamp(given?: string): string {
+	if (given) return given;
+	const now = Date.now();
+	const ms = now > lastMintMs ? now : lastMintMs + 1;
+	lastMintMs = ms;
+	return new Date(ms).toISOString();
+}
+
 export function mintGateFlags(
 	live: LiveSet,
 	claimedId: string | null,
@@ -37,6 +46,7 @@ export type PutInput = {
 	byte_size?: number;
 	producer?: string;
 	expires_at?: string;
+	author?: string;
 	id?: string;
 	ts?: string;
 	session: string;
@@ -141,7 +151,7 @@ export function putJudgment(opts: {
 	const record: JudgmentRecord = {
 		id: input.id ?? randomUUID(),
 		type: input.type,
-		ts: input.ts ?? new Date().toISOString(),
+		ts: mintTimestamp(input.ts),
 		session: input.session,
 		headline,
 		body: (input.body ?? directive ?? headline).trim(),
@@ -159,6 +169,7 @@ export function putJudgment(opts: {
 		byte_size: evidence?.byte_size,
 		producer: evidence?.producer,
 		expires_at: evidence?.expires_at,
+		author: input.author?.trim() || undefined,
 	};
 
 	const after = foldLive([...existing, record]);

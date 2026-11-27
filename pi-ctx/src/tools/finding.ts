@@ -1,5 +1,5 @@
-import { putJudgment, type PutOk } from "../mint.js";
-import type { JudgmentRecord, Occupancy } from "../types.js";
+import { putJudgment, type PutOk } from "pi-ctx-lib";
+import type { JudgmentRecord, Occupancy } from "pi-ctx-lib";
 
 export function executeFinding(opts: {
 	enabled: boolean;

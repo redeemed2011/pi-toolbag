@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { Occupancy } from "./types.js";
-import { isOccupancy } from "./types.js";
+import type { Occupancy } from "pi-ctx-lib";
+import { isOccupancy } from "pi-ctx-lib";
 
 export type ConfiguredModel = {
 	provider: string;

@@ -1,8 +1,8 @@
 import type { Hitl } from "../hitl.js";
-import { foldLive, resolveOccupancy } from "../fold.js";
+import { foldLive, resolveOccupancy } from "pi-ctx-lib";
 import type { Runtime } from "../runtime.js";
-import { applyClaim, type ClaimAction } from "../tools/claim.js";
-import { CTX_CLAIM } from "../types.js";
+import { applyClaim, type ClaimAction } from "pi-ctx-lib";
+import { CTX_CLAIM } from "pi-ctx-lib";
 
 export type ClaimPi = { appendEntry: (customType: string, data?: unknown) => void };
 

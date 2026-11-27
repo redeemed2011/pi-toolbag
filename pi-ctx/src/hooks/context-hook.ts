@@ -1,10 +1,10 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { foldLive, foldSession, resolveOccupancy } from "../fold.js";
-import { applyPendingInject, pendingReplaceSection } from "../promoter/inject.js";
-import { applyFonceA, type AgentMessage } from "../render/fonce.js";
-import { applyStatusToSystem, statusLine } from "../render/status.js";
+import { foldLive, foldSession, resolveOccupancy } from "pi-ctx-lib";
+import { applyPendingInject, pendingReplaceSection } from "pi-ctx-lib";
+import { applyFonceA, type AgentMessage } from "pi-ctx-lib";
+import { applyStatusToSystem, statusLine } from "pi-ctx-lib";
 import type { Runtime } from "../runtime.js";
-import { CTX_STATUS_INJECT, type Entry } from "../types.js";
+import { CTX_STATUS_INJECT, type Entry } from "pi-ctx-lib";
 
 function branchOf(ctx: ExtensionContext): Entry[] {
 	return ctx.sessionManager.getBranch() as Entry[];

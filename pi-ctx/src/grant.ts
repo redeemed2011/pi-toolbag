@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { byteHash, unionLogDir, type JsonlLine } from "./store/jsonl.js";
-import { projectLogsDir } from "./store/paths.js";
-import { CTX_BIND, isPlainRecord, type Entry } from "./types.js";
+import { byteHash, unionLogDir, type JsonlLine } from "pi-ctx-lib";
+import { projectLogsDir } from "pi-ctx-lib";
+import { CTX_BIND, isPlainRecord, type Entry } from "pi-ctx-lib";
 
 export const GRANT_TYPE = "ctx.grant";
 

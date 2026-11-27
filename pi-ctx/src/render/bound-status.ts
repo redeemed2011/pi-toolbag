@@ -1,4 +1,4 @@
-import { readProjectMeta } from "../store/project.js";
+import { readProjectMeta } from "pi-ctx-lib";
 
 /** Footer slot. Pi sorts extension statuses by this key and drops the line when it is cleared. */
 export const BOUND_STATUS_KEY = "ctx";

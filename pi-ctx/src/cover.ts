@@ -1,6 +1,6 @@
 import { entryIndexForId, latestCoverageMarkerId, selectSourceSlice, type SourceSlice } from "./progress.js";
 import { isSourceEntry, isValidCutPoint } from "./tokens.js";
-import type { Entry } from "./types.js";
+import type { Entry } from "pi-ctx-lib";
 
 /** First source entry after the coverage watermark and strictly before the cut. */
 export function firstUncoveredSourceId(branch: Entry[], firstKeptId: string): string | undefined {

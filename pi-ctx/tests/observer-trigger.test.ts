@@ -4,7 +4,7 @@ import { evaluateObserverTriggers } from "../src/hooks/observer-trigger.js";
 import { Runtime } from "../src/runtime.js";
 import { workerRetryWaits } from "../src/spawn/observer.js";
 import { runResultPath, writeObserverResult } from "../src/spawn/runs.js";
-import type { Entry } from "../src/types.js";
+import type { Entry } from "pi-ctx-lib";
 import { userMsg } from "./fixtures.js";
 
 type Exit = { code: number | null; signal: NodeJS.Signals | null; stderr: string };

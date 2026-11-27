@@ -1,8 +1,8 @@
-import { foldLive, resolveOccupancy } from "../fold.js";
-import { putJudgment } from "../mint.js";
+import { foldLive, resolveOccupancy } from "pi-ctx-lib";
+import { putJudgment } from "pi-ctx-lib";
 import type { Runtime } from "../runtime.js";
-import { appendProjectRecord } from "../store/project.js";
-import { CTX_CLAIM } from "../types.js";
+import { appendProjectRecord } from "pi-ctx-lib";
+import { CTX_CLAIM } from "pi-ctx-lib";
 
 export const ASK_HEADLINE = "Ask the operator";
 

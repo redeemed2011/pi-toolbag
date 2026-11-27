@@ -1,4 +1,4 @@
-import type { LiveSet } from "../../pi-ctx/src/types.js";
+import type { LiveSet } from "pi-ctx-lib";
 import {
   buildConflictPacket,
   CONFLICT_ASK,

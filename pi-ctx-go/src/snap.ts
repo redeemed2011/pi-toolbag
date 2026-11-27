@@ -1,8 +1,8 @@
 import { loadConfig } from "../../pi-ctx/src/config.js";
-import { foldSession, frontierItems, resolveOccupancy } from "../../pi-ctx/src/fold.js";
-import { loadProjectLive } from "../../pi-ctx/src/store/project.js";
-import { applyClaim } from "../../pi-ctx/src/tools/claim.js";
-import type { Entry, JudgmentRecord, LiveSet } from "../../pi-ctx/src/types.js";
+import { foldSession, frontierItems, resolveOccupancy } from "pi-ctx-lib";
+import { loadProjectLive } from "pi-ctx-lib";
+import { applyClaim } from "pi-ctx-lib";
+import type { Entry, JudgmentRecord, LiveSet } from "pi-ctx-lib";
 import type { Snap } from "./state.js";
 
 export type BoundSnap = Snap & {

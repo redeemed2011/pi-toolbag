@@ -16,7 +16,7 @@ import {
 } from "../spawn/observer.js";
 import { readObserverResult, runResultPath } from "../spawn/runs.js";
 import { coverageCommit } from "../commit.js";
-import type { Entry, Observation } from "../types.js";
+import type { Entry, Observation } from "pi-ctx-lib";
 import { notifyFrom, type Notify } from "../notify.js";
 
 type TriggerCtx = {

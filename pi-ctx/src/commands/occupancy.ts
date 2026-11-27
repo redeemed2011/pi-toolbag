@@ -1,8 +1,8 @@
-import { foldLive, resolveOccupancy } from "../fold.js";
+import { foldLive, resolveOccupancy } from "pi-ctx-lib";
 import type { Hitl } from "../hitl.js";
-import { mintGateFlags } from "../mint.js";
+import { mintGateFlags } from "pi-ctx-lib";
 import type { Runtime } from "../runtime.js";
-import { CTX_OCCUPANCY, isOccupancy, type Occupancy } from "../types.js";
+import { CTX_OCCUPANCY, isOccupancy, type Occupancy } from "pi-ctx-lib";
 
 export type OccupancyPi = { appendEntry: (customType: string, data?: unknown) => void };
 

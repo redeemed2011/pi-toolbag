@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parsePromoterResult, PROMOTER_SHELF_N, type PromoterResult } from "./schema.js";
+import { parsePromoterResult, PROMOTER_SHELF_N, type PromoterResult } from "pi-ctx-lib";
 
 export type PromoterKickoff = {
 	corpus: string[];

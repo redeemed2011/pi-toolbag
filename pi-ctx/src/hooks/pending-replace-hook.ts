@@ -1,10 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { foldLive, foldSession, resolveOccupancy } from "../fold.js";
+import { foldLive, foldSession, resolveOccupancy } from "pi-ctx-lib";
 import { hitlFromCtx } from "../hitl.js";
 import { runPendingReplaceHitl } from "../promoter/hitl.js";
-import { PENDING_HITL_TURNS } from "../promoter/schema.js";
+import { PENDING_HITL_TURNS } from "pi-ctx-lib";
 import type { Runtime } from "../runtime.js";
-import { CTX_PENDING_TURN, type Entry } from "../types.js";
+import { CTX_PENDING_TURN, type Entry } from "pi-ctx-lib";
 
 type TurnCtx = {
 	hasUI: boolean;

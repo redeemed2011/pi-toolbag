@@ -2,7 +2,7 @@ import {
 	CTX_OBSERVATIONS_EMPTY_COVER,
 	CTX_OBSERVATIONS_RECORDED,
 	type Observation,
-} from "./types.js";
+} from "pi-ctx-lib";
 
 export type CoverageCommit =
 	| { customType: typeof CTX_OBSERVATIONS_RECORDED; data: { observations: Observation[]; coversUpToId: string; about_claim_id?: string } }

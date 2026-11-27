@@ -1,6 +1,6 @@
 import { estimateTokens as estimateMessageTokens } from "@earendil-works/pi-coding-agent";
-import { injectTokens } from "./render/estimate.js";
-import type { Entry } from "./types.js";
+import { injectTokens } from "pi-ctx-lib";
+import type { Entry } from "pi-ctx-lib";
 
 function excluded(entry: Entry): boolean {
 	if (entry.excludeFromContext === true) return true;

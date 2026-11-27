@@ -9,7 +9,7 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { attachFallback } from "pi-fallback-lib";
 import { writePromoterResult } from "./src/promoter/io.js";
-import { emptyPromoterResult } from "./src/promoter/schema.js";
+import { emptyPromoterResult } from "pi-ctx-lib";
 
 const Item = Type.Object({
 	quote: Type.String({ minLength: 1 }),

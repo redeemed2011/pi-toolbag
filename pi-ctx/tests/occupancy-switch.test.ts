@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { occupancyStatusLine, runOccupancyFlow } from "../src/commands/occupancy.js";
-import { foldLive } from "../src/fold.js";
+import { foldLive } from "pi-ctx-lib";
 import type { Hitl } from "../src/hitl.js";
 import { Runtime } from "../src/runtime.js";
-import { projectLogsDir } from "../src/store/paths.js";
-import { appendProjectRecord, createProject } from "../src/store/project.js";
+import { projectLogsDir } from "pi-ctx-lib";
+import { appendProjectRecord, createProject } from "pi-ctx-lib";
 import { constraint } from "./fixtures.js";
 
 function scriptedHitl(plan: { confirms?: boolean[]; hasUI?: boolean } = {}): Hitl {

@@ -1,10 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { foldSession } from "../fold.js";
+import { foldSession } from "pi-ctx-lib";
 import { rawTokensSinceLastCompaction } from "../progress.js";
-import { sendGuardTokens } from "../render/fonce.js";
+import { sendGuardTokens } from "pi-ctx-lib";
 import { notifyFrom } from "../notify.js";
 import type { Runtime } from "../runtime.js";
-import { CTX_RESUME, type Entry } from "../types.js";
+import { CTX_RESUME, type Entry } from "pi-ctx-lib";
 
 const RESUME_PROMPT =
 	"[automatic] Your context was just compacted to free space; no user message was sent. " +

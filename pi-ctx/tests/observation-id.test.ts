@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { foldSession } from "../src/fold.js";
+import { foldSession } from "pi-ctx-lib";
 import { observationRecordId } from "../src/hooks/observer-trigger.js";
-import type { Entry } from "../src/types.js";
+import type { Entry } from "pi-ctx-lib";
 
 function batch(entryId: string, cover: string, rows: { id: string; body: string }[]): Entry {
 	return {

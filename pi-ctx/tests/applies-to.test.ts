@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateAppliesTo } from "../src/store/jsonl.js";
+import { validateAppliesTo } from "pi-ctx-lib";
 
 describe("applies_to refuse-missing", () => {
 	it("refuses missing, empty array, and dangling ids; never defaults to all", () => {

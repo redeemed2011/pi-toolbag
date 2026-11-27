@@ -1,5 +1,17 @@
-import { entryIndexById } from "../progress.js";
 import type { Entry, Observation, SessionFold } from "../types.js";
+
+export function entryIndexById(entries: Entry[]): Map<string, number> {
+	const m = new Map<string, number>();
+	for (let i = 0; i < entries.length; i++) m.set(entries[i].id, i);
+	return m;
+}
+
+export function findLastCompactionIndex(entries: Entry[]): number {
+	for (let i = entries.length - 1; i >= 0; i--) {
+		if (entries[i].type === "compaction") return i;
+	}
+	return -1;
+}
 
 export function mismatchBanner(opts: {
 	session: Pick<SessionFold, "claimedId">;

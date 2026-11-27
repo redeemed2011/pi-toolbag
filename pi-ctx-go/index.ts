@@ -5,7 +5,7 @@ import { unresolved } from "./src/conflicts.js";
 import { IMPASSE_ASK, runJudge, thinkingLevel, type JudgeModel } from "./src/judge.js";
 import { buildImpassePacket, buildPacket, judgedDone, parseImpasse, productStamp } from "./src/packet.js";
 import { closedQuestions, prepareClaim, readSnap, type BoundSnap } from "./src/snap.js";
-import { CTX_CLAIM } from "../pi-ctx/src/types.js";
+import { CTX_CLAIM } from "pi-ctx-lib";
 import {
   freshState,
   onConflictsTurn,
@@ -21,7 +21,7 @@ import {
   type Step,
 } from "./src/state.js";
 import { settleBarePrompt } from "./src/prompt-delivery.js";
-import type { Entry } from "../pi-ctx/src/types.js";
+import type { Entry } from "pi-ctx-lib";
 
 type GoCtx = ExtensionContext & {
   waitForIdle?: () => Promise<void>;

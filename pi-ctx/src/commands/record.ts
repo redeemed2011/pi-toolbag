@@ -1,8 +1,8 @@
-import { foldLive } from "../fold.js";
+import { foldLive } from "pi-ctx-lib";
 import type { Hitl } from "../hitl.js";
-import type { PutErr, PutInput, PutOk } from "../mint.js";
-import { executeRecord } from "../tools/record.js";
-import type { JudgmentRecord, Occupancy } from "../types.js";
+import type { PutErr, PutInput, PutOk } from "pi-ctx-lib";
+import { executeRecord } from "pi-ctx-lib";
+import type { JudgmentRecord, Occupancy } from "pi-ctx-lib";
 
 const GATE_TELL = "If you cannot resolve it, tell the user the constraint list is full.";
 

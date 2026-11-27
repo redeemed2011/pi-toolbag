@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { runRecordFlow } from "../src/commands/record.js";
 import type { Hitl } from "../src/hitl.js";
-import { putJudgment } from "../src/mint.js";
-import { executeRecord } from "../src/tools/record.js";
+import { putJudgment } from "pi-ctx-lib";
+import { executeRecord } from "pi-ctx-lib";
 import { constraint, question } from "./fixtures.js";
 
 function scriptedHitl(

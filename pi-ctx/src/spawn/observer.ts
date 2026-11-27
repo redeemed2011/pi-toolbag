@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { findChain, loadFallbackConfigFile, modelKey, splitModelKey } from "pi-fallback-lib";
 import type { ConfiguredModel } from "../config.js";
-import { workerRunDir } from "../store/paths.js";
+import { workerRunDir } from "pi-ctx-lib";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const WORKER_EXTENSION_PATH = join(REPO_ROOT, "worker.ts");

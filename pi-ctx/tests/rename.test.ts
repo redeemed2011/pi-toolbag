@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runRenameFlow } from "../src/commands/rename.js";
 import type { Hitl } from "../src/hitl.js";
 import { Runtime } from "../src/runtime.js";
-import { resolveProjectId } from "../src/store/paths.js";
-import { appendProjectRecord, createProject, listProjects, loadProjectRecords, readProjectMeta, renameProject } from "../src/store/project.js";
-import { CTX_BIND, type Entry } from "../src/types.js";
+import { resolveProjectId } from "pi-ctx-lib";
+import { appendProjectRecord, createProject, listProjects, loadProjectRecords, readProjectMeta, renameProject } from "pi-ctx-lib";
+import { CTX_BIND, type Entry } from "pi-ctx-lib";
 
 const recorded = (r: { id: string; type: string; headline: string }) => ({ ...r, ts: `2026-11-21T00:00:0${r.id.slice(1)}.000Z`, session: "old-session", body: r.headline });
 

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { registerCompactionHook } from "../src/hooks/compaction-hook.js";
-import { INJECT_CAP, injectTokens } from "../src/render/estimate.js";
+import { INJECT_CAP, injectTokens } from "pi-ctx-lib";
 import { Runtime } from "../src/runtime.js";
 import { assistantToolCall, recorded, toolResult, userMsg } from "./fixtures.js";
 

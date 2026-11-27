@@ -1,8 +1,8 @@
 import { type Config, DEFAULTS, loadConfig } from "./config.js";
-import { foldLive, foldSession } from "./fold.js";
-import { resolveProjectId } from "./store/paths.js";
-import { loadProjectRecords } from "./store/project.js";
-import type { Entry, JudgmentRecord, LiveSet, Occupancy, SessionFold } from "./types.js";
+import { foldLive, foldSession } from "pi-ctx-lib";
+import { resolveProjectId } from "pi-ctx-lib";
+import { loadProjectRecords } from "pi-ctx-lib";
+import type { Entry, JudgmentRecord, LiveSet, Occupancy, SessionFold } from "pi-ctx-lib";
 
 export type InFlightObserver = {
 	controller: AbortController;

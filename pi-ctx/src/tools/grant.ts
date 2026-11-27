@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { GRANT_TYPE, hashGrantToken, newGrantToken } from "../grant.js";
-import { appendProjectRecord } from "../store/project.js";
-import type { LiveSet } from "../types.js";
+import { appendProjectRecord } from "pi-ctx-lib";
+import type { LiveSet } from "pi-ctx-lib";
 
 export function executeGrant(opts: {
 	enabled: boolean;

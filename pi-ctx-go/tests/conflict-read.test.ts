@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { foldLive } from "../../pi-ctx/src/fold.js";
-import type { JudgmentRecord } from "../../pi-ctx/src/types.js";
+import { foldLive } from "pi-ctx-lib";
+import type { JudgmentRecord } from "pi-ctx-lib";
 import { CONFLICT_BUSY, runConflictRead } from "../src/conflict-read.js";
 import { freshState } from "../src/state.js";
 

@@ -7,7 +7,7 @@ import { registerCtxCommand } from "../src/commands/ctx.js";
 import { registerCompactionHook } from "../src/hooks/compaction-hook.js";
 import { registerCompactionTrigger } from "../src/hooks/compaction-trigger.js";
 import { Runtime } from "../src/runtime.js";
-import { CTX_RESUME } from "../src/types.js";
+import { CTX_RESUME } from "pi-ctx-lib";
 import { userMsg } from "./fixtures.js";
 function staleUi() {
 	let stale = false;
