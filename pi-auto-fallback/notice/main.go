@@ -23,6 +23,21 @@ type event struct {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "bind" {
+		var request struct {
+			Phase           string `json:"phase"`
+			HasRegistration bool   `json:"hasRegistration"`
+			SameSession     bool   `json:"sameSession"`
+			HasSession      bool   `json:"hasSession"`
+			HasAPI          bool   `json:"hasAPI"`
+		}
+		if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(childBind(request.Phase, request.HasRegistration, request.SameSession, request.HasSession, request.HasAPI))
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == "warn" {
 		raw, err := io.ReadAll(os.Stdin)
 		if err != nil {
@@ -48,6 +63,25 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println(string(raw))
+}
+
+func childBind(phase string, hasRegistration, sameSession, hasSession, hasAPI bool) string {
+	if phase == "before" {
+		if hasRegistration && sameSession {
+			return "keep"
+		}
+		if !hasSession {
+			return "skip"
+		}
+		return "load"
+	}
+	if !hasAPI {
+		return "skip"
+	}
+	if !sameSession {
+		return "replace"
+	}
+	return "register"
 }
 
 func childWarning(message string) string {

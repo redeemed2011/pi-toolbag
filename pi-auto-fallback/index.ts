@@ -66,11 +66,12 @@ function bindChildExtensions(pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, ctx) => {
     try {
       const sessionId = ctx.sessionManager.getSessionId();
-      if (registration && boundSessionId === sessionId) return;
-      if (!sessionId) return;
+      const before = childBind("before", Boolean(registration), boundSessionId === sessionId, Boolean(sessionId), false);
+      if (before === "keep" || before === "skip") return;
       const api = await loadRequiredChildApi();
-      if (!api) return;
-      if (boundSessionId !== sessionId) clear();
+      const after = childBind("after", Boolean(registration), boundSessionId === sessionId, Boolean(sessionId), Boolean(api));
+      if (after === "skip") return;
+      if (after === "replace") clear();
       // Native Pi children only. requireForAllRunners would refuse external runners.
       registration = api.registerRequiredChildExtensions({
         sessionId,
@@ -93,6 +94,15 @@ const noticeBin = fileURLToPath(new URL("./notice/notice", import.meta.url));
 
 function childWarning(message: string): string {
   const child = spawnSync(noticeBin, ["warn"], { input: message, encoding: "utf8" });
+  if (child.status !== 0) throw new Error(child.stderr || "auto-fallback notice failed");
+  return child.stdout.trim();
+}
+
+function childBind(phase: string, hasRegistration: boolean, sameSession: boolean, hasSession: boolean, hasAPI: boolean): string {
+  const child = spawnSync(noticeBin, ["bind"], {
+    input: JSON.stringify({ phase, hasRegistration, sameSession, hasSession, hasAPI }),
+    encoding: "utf8",
+  });
   if (child.status !== 0) throw new Error(child.stderr || "auto-fallback notice failed");
   return child.stdout.trim();
 }
