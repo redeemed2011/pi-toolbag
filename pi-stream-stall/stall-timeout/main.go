@@ -46,6 +46,10 @@ func main() {
 		fmt.Println(string(raw))
 		return
 	}
+	if len(os.Args) == 2 && os.Args[1] == "race" {
+		fmt.Println(raceAftermath(input.Kind))
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == "step" {
 		if input.Op == "finish" {
 			fmt.Println(finishStep(input.HasResult, input.Kind, input.StopReason))
@@ -97,6 +101,13 @@ func timeoutMessage(api, provider, id string, idleMs int, timestamp int64, parti
 		"errorMessage": text,
 		"timestamp":    timestamp,
 	}
+}
+
+func raceAftermath(kind string) string {
+	if kind == "timeout" {
+		return "abandon"
+	}
+	return "cancel-sleep"
 }
 
 func pumpStep(kind, eventType string, iteratorDone bool) string {

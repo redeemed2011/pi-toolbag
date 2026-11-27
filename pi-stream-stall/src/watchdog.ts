@@ -112,7 +112,12 @@ async function raceIdle<T>(
     idle.promise.then(() => ({ kind: "timeout" as const })),
     settled,
   ]);
-  if (winner.kind === "timeout") {
+  const aftermath = spawnSync(stallBin, ["race"], {
+    input: JSON.stringify({ kind: winner.kind }),
+    encoding: "utf8",
+  });
+  if (aftermath.status !== 0) throw new Error(aftermath.stderr || "stall-timeout failed");
+  if (aftermath.stdout.trim() === "abandon") {
     abandon(settled);
     return winner;
   }
