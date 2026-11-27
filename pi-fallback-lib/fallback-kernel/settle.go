@@ -117,6 +117,39 @@ func usageCandidate(sameOrHeld, hasGate, readingOK, crossed bool) string {
 	return "clear"
 }
 
+func compactStart(enabled bool, reason string, willRetry bool) string {
+	if !enabled {
+		return "return"
+	}
+	if reason == "overflow" && willRetry {
+		return "stay-retry"
+	}
+	if reason == "manual" || reason == "threshold" || (reason == "overflow" && !willRetry) {
+		return "maybe-restore"
+	}
+	return "return"
+}
+
+func compactResume(reason string, resume bool) string {
+	if reason == "manual" && resume {
+		return "stay-resume"
+	}
+	return "restore"
+}
+
+func compactSwitch(checkUsage, held, blocked bool) string {
+	if !checkUsage {
+		if held {
+			return "usage-held"
+		}
+		return "switch"
+	}
+	if blocked {
+		return "blocked"
+	}
+	return "switch"
+}
+
 func beforeAgent(messageType string, checkUsage, enabled, inFlight, hasCurrent bool) string {
 	if messageType == "custom" || !checkUsage || !enabled || inFlight || !hasCurrent {
 		return "return"

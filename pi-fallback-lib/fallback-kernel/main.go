@@ -138,6 +138,28 @@ func main() {
 			return
 		}
 		fmt.Println(usageCandidate(candidate.SameOrHeld, candidate.HasGate, candidate.ReadingOK, candidate.Crossed))
+	case "compact":
+		var request struct {
+			Op         string `json:"op"`
+			Enabled    bool   `json:"enabled"`
+			Reason     string `json:"reason"`
+			WillRetry  bool   `json:"willRetry"`
+			Resume     bool   `json:"resume"`
+			CheckUsage bool   `json:"checkUsage"`
+			Held       bool   `json:"held"`
+			Blocked    bool   `json:"blocked"`
+		}
+		if decode(&request) {
+			return
+		}
+		switch request.Op {
+		case "resume":
+			fmt.Println(compactResume(request.Reason, request.Resume))
+		case "switch":
+			fmt.Println(compactSwitch(request.CheckUsage, request.Held, request.Blocked))
+		default:
+			fmt.Println(compactStart(request.Enabled, request.Reason, request.WillRetry))
+		}
 	case "before":
 		var request struct {
 			MessageType string `json:"messageType"`

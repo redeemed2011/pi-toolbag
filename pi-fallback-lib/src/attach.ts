@@ -364,49 +364,48 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     emit({ type: "usage-skip", reason: "no-target", model: current }, ctx);
   });
   pi.on("session_compact", async (event, ctx) => {
-    if (!config || !enabled) return;
     const rec = eventRecord(event);
-    const reason = rec.reason;
+    const reason = typeof rec.reason === "string" ? rec.reason : "";
     const willRetry = rec.willRetry === true;
-    if (reason === "overflow" && willRetry) {
+    const started = attachKernel({
+      enabled: Boolean(config && enabled),
+      reason,
+      willRetry,
+    }, "compact");
+    if (started === "return") return;
+    if (started === "stay-retry") {
       emit({ type: "stay", reason: "overflow-will-retry" }, ctx);
       return;
     }
-    if (reason === "manual" || reason === "threshold" || (reason === "overflow" && !willRetry)) {
-      const entry = newestCompaction(ctx.sessionManager.getBranch(), rec.compactionEntry);
-      if (reason === "manual" && resumeInPlace(entry)) {
-        emit({ type: "stay", reason: "resume-in-place" }, ctx);
-        return;
-      }
-      const current = currentKey(ctx);
-      if (state.preferred && current !== state.preferred) {
-        if (options.checkUsage === false) {
-          if (state.usageHeld.has(state.preferred)) {
-            emit({ type: "usage-skip", reason: "usage-held", model: state.preferred }, ctx);
-          } else {
-            const switched = await applyModelSwitch(ctx, state.preferred);
-            if (!switched.ok) {
-              emit({ type: "restore", ok: false, to: state.preferred, reason: switched.reason }, ctx);
-            } else {
-              emit({ type: "restore", ok: true, to: state.preferred }, ctx);
-            }
-          }
+    const entry = newestCompaction(ctx.sessionManager.getBranch(), rec.compactionEntry);
+    const resumed = attachKernel({ op: "resume", reason, resume: resumeInPlace(entry) }, "compact");
+    if (resumed === "stay-resume") {
+      emit({ type: "stay", reason: "resume-in-place" }, ctx);
+      return;
+    }
+    const current = currentKey(ctx);
+    if (state.preferred && current !== state.preferred) {
+      const probe = options.checkUsage === false ? undefined : await readPreferredGate(ctx);
+      const choice = attachKernel({
+        op: "switch",
+        checkUsage: options.checkUsage !== false,
+        held: state.usageHeld.has(state.preferred),
+        blocked: probe?.kind === "blocked",
+      }, "compact");
+      if (choice === "usage-held") {
+        emit({ type: "usage-skip", reason: "usage-held", model: state.preferred }, ctx);
+      } else if (choice === "blocked" && probe?.kind === "blocked") {
+        emit({ type: "usage-skip", reason: probe.reason, model: state.preferred, detail: probe.detail }, ctx);
+      } else {
+        const switched = await applyModelSwitch(ctx, state.preferred);
+        if (!switched.ok) {
+          emit({ type: "restore", ok: false, to: state.preferred, reason: switched.reason }, ctx);
         } else {
-          const probe = await readPreferredGate(ctx);
-          if (probe.kind === "blocked") {
-            emit({ type: "usage-skip", reason: probe.reason, model: state.preferred, detail: probe.detail }, ctx);
-          } else {
-            const switched = await applyModelSwitch(ctx, state.preferred);
-            if (!switched.ok) {
-              emit({ type: "restore", ok: false, to: state.preferred, reason: switched.reason }, ctx);
-            } else {
-              emit({ type: "restore", ok: true, to: state.preferred }, ctx);
-            }
-          }
+          emit({ type: "restore", ok: true, to: state.preferred }, ctx);
         }
       }
-      resetEpoch();
     }
+    resetEpoch();
   });
 
   const onFailover = async (
