@@ -117,6 +117,27 @@ func main() {
 			return
 		}
 		fmt.Println(selectAccount(request.Accounts, request.Active, request.Session))
+	case "reading":
+		var reading struct {
+			OK      bool `json:"ok"`
+			Crossed bool `json:"crossed"`
+			InChain bool `json:"inChain"`
+		}
+		if decode(&reading) {
+			return
+		}
+		fmt.Println(usageReading(reading.OK, reading.Crossed, reading.InChain))
+	case "candidate":
+		var candidate struct {
+			SameOrHeld bool `json:"sameOrHeld"`
+			HasGate    bool `json:"hasGate"`
+			ReadingOK  bool `json:"readingOK"`
+			Crossed    bool `json:"crossed"`
+		}
+		if decode(&candidate) {
+			return
+		}
+		fmt.Println(usageCandidate(candidate.SameOrHeld, candidate.HasGate, candidate.ReadingOK, candidate.Crossed))
 	case "before":
 		var request struct {
 			MessageType string `json:"messageType"`

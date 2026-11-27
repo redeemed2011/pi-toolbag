@@ -306,34 +306,43 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     if (!gate) return;
 
     const reading = await readUsage(current, gate, ctx);
-    if (!reading.ok) {
-      emit({ type: "usage-skip", reason: "unavailable", model: current, detail: reading.reason }, ctx);
+    const crossed = reading.ok && thresholdCrossed(gate, reading.value);
+    const chain = reading.ok && crossed ? findChain(config, current) : undefined;
+    const readingKind = attachKernel({
+      ok: reading.ok,
+      crossed,
+      inChain: Boolean(chain),
+    }, "reading");
+    if (readingKind === "unavailable") {
+      emit({ type: "usage-skip", reason: "unavailable", model: current, detail: reading.ok ? undefined : reading.reason }, ctx);
       return;
     }
-    if (!thresholdCrossed(gate, reading.value)) {
+    if (readingKind === "clear") {
       state.usageHeld.delete(current);
       return;
     }
     state.usageHeld.add(current);
-
-    const chain = findChain(config, current);
-    if (!chain) {
+    if (readingKind === "not-in-chain" || !chain) {
       emit({ type: "usage-skip", reason: "not-in-chain", model: current }, ctx);
       return;
     }
 
     const reported = reportedUsage(gate.metric, reading.value) ?? reading.value;
     for (const key of chain.models) {
-      if (key === current || state.usageHeld.has(key)) continue;
-      const nextGate = matchingGate(gates, key);
-      if (nextGate) {
-        const nextReading = await readUsage(key, nextGate, ctx);
-        if (!nextReading.ok || thresholdCrossed(nextGate, nextReading.value)) {
-          if (nextReading.ok) state.usageHeld.add(key);
-          continue;
-        }
-        state.usageHeld.delete(key);
+      const nextGate = key === current || state.usageHeld.has(key) ? undefined : matchingGate(gates, key);
+      const nextReading = nextGate ? await readUsage(key, nextGate, ctx) : undefined;
+      const candidate = attachKernel({
+        sameOrHeld: key === current || state.usageHeld.has(key),
+        hasGate: Boolean(nextGate),
+        readingOK: Boolean(nextReading?.ok),
+        crossed: Boolean(nextGate && nextReading?.ok && thresholdCrossed(nextGate, nextReading.value)),
+      }, "candidate");
+      if (candidate === "skip") continue;
+      if (candidate === "hold") {
+        if (nextReading?.ok) state.usageHeld.add(key);
+        continue;
       }
+      if (candidate === "clear") state.usageHeld.delete(key);
       const switched = await applyModelSwitch(ctx, key);
       if (!switched.ok) {
         emit({ type: "skip", reason: switched.reason, to: key }, ctx);

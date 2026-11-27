@@ -91,6 +91,32 @@ func preferredKind(hasPreferred, hasGates, hasGate, readingOK, recovered bool) s
 	return "recovered"
 }
 
+func usageReading(ok, crossed, inChain bool) string {
+	if !ok {
+		return "unavailable"
+	}
+	if !crossed {
+		return "clear"
+	}
+	if !inChain {
+		return "not-in-chain"
+	}
+	return "hold"
+}
+
+func usageCandidate(sameOrHeld, hasGate, readingOK, crossed bool) string {
+	if sameOrHeld {
+		return "skip"
+	}
+	if !hasGate {
+		return "switch"
+	}
+	if !readingOK || crossed {
+		return "hold"
+	}
+	return "clear"
+}
+
 func beforeAgent(messageType string, checkUsage, enabled, inFlight, hasCurrent bool) string {
 	if messageType == "custom" || !checkUsage || !enabled || inFlight || !hasCurrent {
 		return "return"
