@@ -1,12 +1,12 @@
 # dev-agent-bridge
 
-One Rust program for messages between Sam's dev agents and Engineering Lead (Sam's Grok Bot on bb-file). pi (`pi-engineering-lead`) and Brazos (`engineering_lead_send`) both call it. It replaces `grok-bot-made/dev-agent-bridge/bridge_send.py` on this side.
+One Go program for messages between Sam's dev agents and Engineering Lead (Sam's Grok Bot on bb-file). pi (`pi-engineering-lead`) and Brazos (`engineering_lead_send`) both call it. It replaces the earlier Rust `dev-agent-bridge` and `grok-bot-made/dev-agent-bridge/bridge_send.py` on this side.
 
 ```sh
-cargo install --path . --root ~/.cargo     # installs ~/.cargo/bin/dev-agent-bridge
+GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o ~/.local/bin/dev-agent-bridge .
 ```
 
-Build with `cargo install`, not from a copy under `~/src`: inside cplt, programs under `~/src` cannot run, and `~/.cargo/bin` can.
+Install into `~/.local/bin`, not from a copy under `~/src`: inside cplt, programs under `~/src` cannot run, and `~/.local/bin` can.
 
 ## Commands
 
@@ -40,5 +40,5 @@ State (sent ids, rate cap, lease, delivered and rejected ids): `DEV_AGENT_BRIDGE
 ## Test
 
 ```sh
-cargo test
+go test -v ./...
 ```

@@ -6,7 +6,7 @@ Engineering Lead (Sam's Grok Bot on bb-file) and the pi agent talk through [`dev
 - **Sending.** `engineering_lead_send` (kind, topic, body, reply_to, ctx, commit, file) runs `dev-agent-bridge send` with the body on stdin.
 - `/engineering-lead status` shows the listener and how many messages wait. `/engineering-lead release` gives the lease up.
 
-Needs `~/.cargo/bin/dev-agent-bridge` or `DEV_AGENT_BRIDGE_BIN`. Without it nothing is received, and the tool says it is not installed.
+Needs `~/.local/bin/dev-agent-bridge` (or `~/.cargo/bin/dev-agent-bridge`, or `DEV_AGENT_BRIDGE_BIN`). Without it nothing is received, and the tool says it is not installed.
 
 ## Test
 

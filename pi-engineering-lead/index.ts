@@ -6,7 +6,7 @@ import { Listener, type Incoming } from "./src/listener.js";
 
 export const CUSTOM_TYPE = "engineering-lead";
 const POLL_MS = Number(process.env.PI_ENGINEERING_LEAD_POLL_MS) || 3000;
-const MISSING = "The dev-agent-bridge program is not installed (~/.cargo/bin/dev-agent-bridge, or DEV_AGENT_BRIDGE_BIN). Nothing was sent.";
+const MISSING = "The dev-agent-bridge program is not installed (~/.local/bin/dev-agent-bridge, ~/.cargo/bin/dev-agent-bridge, or DEV_AGENT_BRIDGE_BIN). Nothing was sent.";
 
 /** One session message for every Engineering Lead message taken together, so none waits behind another in memory. */
 export const MID_WORK = "This arrived between your tool calls. Handle it, then carry on with the work you were doing.";

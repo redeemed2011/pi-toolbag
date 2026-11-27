@@ -11,7 +11,7 @@ Pi extensions and the library they share.
 | `pi-stream-stall/` | Ends a silent provider stream without `abort()`, so failover can hop. |
 | `pi-tool-groups/` | Collapses finished tool runs into one native row. |
 | `pi-engineering-lead/` | Engineering Lead's messages arrive in one interactive session; `engineering_lead_send` answers. Shim over `dev-agent-bridge`. |
-| `dev-agent-bridge/` | Rust program that sends to Engineering Lead's webhook and takes its inbox. Not an extension; `cargo install --path dev-agent-bridge --root ~/.cargo`. |
+| `dev-agent-bridge/` | Go program that sends to Engineering Lead's webhook and takes its inbox. Not an extension; `cd dev-agent-bridge && go build -trimpath -o ~/.local/bin/dev-agent-bridge .`. |
 
 ## Install
 

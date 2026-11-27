@@ -14,8 +14,10 @@ export type Runner = (args: string[], stdin?: string, extra?: Record<string, str
 export function bridgeBinary(env: NodeJS.ProcessEnv = process.env, home = homedir()): string | undefined {
   const named = env.DEV_AGENT_BRIDGE_BIN;
   if (named) return existsSync(named) ? named : undefined;
-  const installed = join(home, ".cargo", "bin", "dev-agent-bridge");
-  return existsSync(installed) ? installed : undefined;
+  for (const installed of [join(home, ".local", "bin", "dev-agent-bridge"), join(home, ".cargo", "bin", "dev-agent-bridge")]) {
+    if (existsSync(installed)) return installed;
+  }
+  return undefined;
 }
 
 export function runner(binary: string, env: NodeJS.ProcessEnv = process.env): Runner {

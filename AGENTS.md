@@ -23,6 +23,6 @@ Before any commit, run `npm test` from this repo root and do not commit if it fa
 | First questions / first principles | `pi-foundations/README.md` |
 | Silent provider streams | `pi-stream-stall/README.md` |
 | Tool row grouping | `pi-tool-groups/README.md` |
-| Engineering Lead messages | `pi-engineering-lead/README.md`, `dev-agent-bridge/README.md` (`cargo test`) |
+| Engineering Lead messages | `pi-engineering-lead/README.md`, `dev-agent-bridge/README.md` (`go test ./...`) |
 
 Do not stack this package with `npm:pi-auto-fallback`. Further extensions belong in this repo, declared from the root `pi.extensions` list.
