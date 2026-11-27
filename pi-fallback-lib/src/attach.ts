@@ -257,19 +257,24 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     const model = modelFromEvent(rec.model);
     if (!model) return;
     const key = modelKey(model.provider, model.id);
-    const source = rec.source;
-    if (state.ignoreModelSelectKey && key === state.ignoreModelSelectKey && source === "set") {
-      state.ignoreModelSelectKey = undefined;
-      return;
-    }
+    const book = JSON.parse(attachKernel({
+      key,
+      source: typeof rec.source === "string" ? rec.source : "",
+      ignore: state.ignoreModelSelectKey ?? "",
+      hasPreferred: Boolean(state.preferred),
+    }, "select")) as { action: string; preferred?: string; reset?: boolean };
     state.ignoreModelSelectKey = undefined;
-    if (source === "restore") {
-      if (!state.preferred) state.preferred = key;
+    if (book.action === "ignore") return;
+    if (book.action === "restore") {
+      state.preferred = book.preferred;
       return;
     }
-    state.preferred = key;
-    state.usageHeld = new Set();
-    resetEpoch();
+    if (book.action === "restore-keep") return;
+    state.preferred = book.preferred ?? key;
+    if (book.reset) {
+      state.usageHeld = new Set();
+      resetEpoch();
+    }
   });
 
   pi.on("tool_execution_start", () => {

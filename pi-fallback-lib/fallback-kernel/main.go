@@ -117,6 +117,22 @@ func main() {
 			return
 		}
 		fmt.Println(selectAccount(request.Accounts, request.Active, request.Session))
+	case "select":
+		var picked struct {
+			Key          string `json:"key"`
+			Source       string `json:"source"`
+			Ignore       string `json:"ignore"`
+			HasPreferred bool   `json:"hasPreferred"`
+		}
+		if decode(&picked) {
+			return
+		}
+		raw, err := json.Marshal(modelSelect(picked.Key, picked.Source, picked.Ignore, picked.HasPreferred))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(string(raw))
 	case "model-switch":
 		var request struct {
 			Parsed     bool `json:"parsed"`

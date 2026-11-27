@@ -91,6 +91,19 @@ func preferredKind(hasPreferred, hasGates, hasGate, readingOK, recovered bool) s
 	return "recovered"
 }
 
+func modelSelect(key, source, ignore string, hasPreferred bool) map[string]any {
+	if ignore != "" && key == ignore && source == "set" {
+		return map[string]any{"action": "ignore"}
+	}
+	if source == "restore" {
+		if !hasPreferred {
+			return map[string]any{"action": "restore", "preferred": key}
+		}
+		return map[string]any{"action": "restore-keep"}
+	}
+	return map[string]any{"action": "select", "preferred": key, "reset": true}
+}
+
 func modelSwitch(parsed, found, called, setOK, threw, sameIgnore bool) map[string]any {
 	if !parsed {
 		return map[string]any{"ok": false, "reason": "invalid-current"}
