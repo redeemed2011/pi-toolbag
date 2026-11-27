@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math/rand"
 	"os/exec"
 	"strings"
 	"testing"
@@ -54,6 +55,113 @@ func TestMatchesJavaScript(t *testing.T) {
 		want := jsExtract(t, item)
 		if got != want {
 			t.Fatalf("extract %s\ngo %s\njs %s", item, got, want)
+		}
+	}
+}
+
+func TestFuzzMatchesJavaScript(t *testing.T) {
+	rng := rand.New(rand.NewSource(99))
+	texts := []string{
+		"", "   ", "quota exceeded", "status: 500", "HTTP 403 forbidden", "plain 403",
+		"context window exceeded", "model not found", "Output blocked by content filtering policy",
+		"timeout", "rate limit", "code 402 billing", "error code: 503", "429 too many",
+		"nothing matches here", "guardrail_blocked", "invalid api key", "status=404",
+	}
+	stopReasons := []string{"", "error", "aborted", "stop", "length"}
+	rawStops := []string{"", "refusal", "SAFETY", "content_filter", "other"}
+	categories := []string{"", "reasoning_extraction", "policy"}
+	statuses := []int{0, 401, 402, 403, 404, 408, 429, 500, 502, 503}
+
+	for i := 0; i < 100; i++ {
+		payload := map[string]any{"text": texts[rng.Intn(len(texts))]}
+		if s := stopReasons[rng.Intn(len(stopReasons))]; s != "" {
+			payload["stopReason"] = s
+		}
+		if r := rawStops[rng.Intn(len(rawStops))]; r != "" {
+			payload["rawStopReason"] = r
+		}
+		if c := categories[rng.Intn(len(categories))]; c != "" {
+			payload["category"] = c
+		}
+		if st := statuses[rng.Intn(len(statuses))]; st != 0 {
+			payload["status"] = st
+		}
+		raw, _ := json.Marshal(payload)
+		got := classifyOf(t, string(raw))
+		want := js(t, "classify", string(raw))
+		if got != want {
+			t.Fatalf("fuzz classify %d %s: go=%s js=%s", i, raw, got, want)
+		}
+	}
+
+	models := []string{"a/b", "c/d", "e/f", "g/h", "invalid", "z/z"}
+	for i := 0; i < 80; i++ {
+		chain := []string{}
+		for _, m := range []string{"a/b", "c/d", "e/f", "g/h"} {
+			if rng.Intn(2) == 0 {
+				chain = append(chain, m)
+			}
+		}
+		attempted := []string{}
+		blocked := []string{}
+		for _, m := range []string{"a/b", "c/d", "e/f", "g/h"} {
+			if rng.Intn(4) == 0 {
+				attempted = append(attempted, m)
+			}
+			if rng.Intn(4) == 0 {
+				blocked = append(blocked, m)
+			}
+		}
+		errObj := map[string]any{"text": texts[rng.Intn(len(texts))]}
+		if st := statuses[rng.Intn(len(statuses))]; st != 0 {
+			errObj["status"] = st
+		}
+		payload := map[string]any{
+			"config":          map[string]any{"enabled": rng.Intn(5) != 0, "chains": []any{map[string]any{"models": chain}}},
+			"current":         models[rng.Intn(len(models))],
+			"error":           errObj,
+			"attempted":       attempted,
+			"blocked":         blocked,
+			"remainingBudget": rng.Intn(4),
+		}
+		raw, _ := json.Marshal(payload)
+		got := decideOf(t, string(raw))
+		want := js(t, "decide", string(raw))
+		if got != want {
+			t.Fatalf("fuzz decide %d %s\ngo %s\njs %s", i, raw, got, want)
+		}
+	}
+
+	roles := []string{"user", "assistant", "tool"}
+	types := []string{"message", "custom"}
+	for i := 0; i < 60; i++ {
+		n := rng.Intn(6)
+		branch := make([]map[string]any, 0, n)
+		for j := 0; j < n; j++ {
+			msg := map[string]any{
+				"role":         roles[rng.Intn(len(roles))],
+				"stopReason":   stopReasons[rng.Intn(len(stopReasons))],
+				"errorMessage": texts[rng.Intn(len(texts))],
+			}
+			if r := rawStops[rng.Intn(len(rawStops))]; r != "" {
+				msg["rawStopReason"] = r
+			}
+			if rng.Intn(2) == 0 {
+				msg["provider"] = "grok"
+			}
+			if rng.Intn(2) == 0 {
+				msg["model"] = "g"
+			}
+			branch = append(branch, map[string]any{
+				"type":    types[rng.Intn(len(types))],
+				"message": msg,
+			})
+		}
+		raw, _ := json.Marshal(branch)
+		got := extractOf(t, string(raw))
+		want := jsExtract(t, string(raw))
+		if got != want {
+			t.Fatalf("fuzz extract %d %s\ngo %s\njs %s", i, raw, got, want)
 		}
 	}
 }

@@ -1,14 +1,8 @@
-import { spawnSync } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { classifyError, isFailoverWorthy } from "./classify.js";
-
-const kernelBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fallback-kernel/kernel");
+import { runKernel } from "./kernelBin.js";
 
 function attachKernel(payload: unknown, command = "attach"): string {
-  const child = spawnSync(kernelBin, [command], { input: JSON.stringify(payload), encoding: "utf8" });
-  if (child.status !== 0) throw new Error(child.stderr || "fallback-kernel failed");
-  return child.stdout.trim();
+  return runKernel(command, payload);
 }
 import { extractLastAssistantError } from "./extract.js";
 import { readGateUsage } from "./grokUsage.js";
@@ -18,6 +12,7 @@ import type {
   AttachHandle,
   BeforeAgentStartEventLike,
   AttachOptions,
+  ErrorClass,
   FallbackConfig,
   FallbackCtx,
   FallbackEvent,
@@ -210,11 +205,12 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       return { kind: "blocked", reason: "usage-held" };
     }
     state.usageHeld.delete(preferred);
+    if (!gate || !reading?.ok) return { kind: "ungated" };
     return {
       kind: "recovered",
-      metric: gate!.metric,
-      value: reportedUsage(gate!.metric, reading!.value) ?? reading!.value,
-      threshold: gate!.threshold,
+      metric: gate.metric,
+      value: reportedUsage(gate.metric, reading.value) ?? reading.value,
+      threshold: gate.threshold,
     };
   };
 
@@ -296,7 +292,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       inFlight: state.failoverInFlight,
       hasCurrent: Boolean(current),
     }, "before");
-    if (start === "return") return;
+    if (start === "return" || !current || !config) return;
     if (!state.preferred) state.preferred = current;
     if (current !== state.preferred && (await returnToPreferred(ctx, current))) return;
 
@@ -327,6 +323,7 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
       return;
     }
 
+    if (!reading.ok) return;
     const reported = reportedUsage(gate.metric, reading.value) ?? reading.value;
     for (const key of chain.models) {
       const nextGate = key === current || state.usageHeld.has(key) ? undefined : matchingGate(gates, key);
@@ -442,15 +439,15 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
     };
     if (gate.clearTools) state.toolsThisTurn = false;
     if (gate.action === "skip") {
-      emit({ type: "skip", reason: gate.reason ?? "", ...(gate.classification ? { classification: gate.classification } : {}) }, ctx);
+      emit({ type: "skip", reason: gate.reason ?? "", ...(gate.classification ? { classification: gate.classification as ErrorClass } : {}) }, ctx);
       return;
     }
-    if (gate.action !== "continue" || !gate.current) return;
+    if (gate.action !== "continue" || !gate.current || !config || !error) return;
     const current = gate.current;
     state.preferred ??= gate.preferred ?? current;
     const replayTarget = gate.replayTarget;
 
-    const bound = Number(attachKernel({ lengths: (config?.chains ?? []).map((chain) => chain.models.length) }, "bound"));
+    const bound = Number(attachKernel({ lengths: config.chains.map((chain) => chain.models.length) }, "bound"));
     for (let i = 0; i < bound; i++) {
       const decision = decideFailover({
         config,

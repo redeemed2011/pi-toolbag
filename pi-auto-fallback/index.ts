@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, renameSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -70,7 +70,7 @@ function bindChildExtensions(pi: ExtensionAPI): void {
       if (before === "keep" || before === "skip") return;
       const api = await loadRequiredChildApi();
       const after = childBind("after", Boolean(registration), boundSessionId === sessionId, Boolean(sessionId), Boolean(api));
-      if (after === "skip") return;
+      if (after === "skip" || !api) return;
       if (after === "replace") clear();
       // Native Pi children only. requireForAllRunners would refuse external runners.
       registration = api.registerRequiredChildExtensions({
@@ -90,28 +90,47 @@ function bindChildExtensions(pi: ExtensionAPI): void {
   });
 }
 
-const noticeBin = fileURLToPath(new URL("./notice/notice", import.meta.url));
+const noticeDir = fileURLToPath(new URL("./notice", import.meta.url));
+const noticeBin = join(noticeDir, "notice");
+let noticeEnsured = false;
 
-function childWarning(message: string): string {
-  const child = spawnSync(noticeBin, ["warn"], { input: message, encoding: "utf8" });
+function ensureNoticeBin(): string {
+  if (noticeEnsured && existsSync(noticeBin)) return noticeBin;
+  if (!existsSync(noticeBin)) {
+    const tmp = `${noticeBin}.${process.pid}.tmp`;
+    const go = spawnSync("go", ["build", "-trimpath", "-o", tmp, "."], {
+      cwd: noticeDir,
+      encoding: "utf8",
+      env: { ...process.env, GOTOOLCHAIN: "local", CGO_ENABLED: "0" },
+    });
+    if (go.error || go.status !== 0 || !existsSync(tmp)) {
+      rmSync(tmp, { force: true });
+      const detail = go.error ? go.error.message : (go.stderr || `go build exited ${go.status ?? go.signal}`);
+      throw new Error(`pi-auto-fallback could not build notice: ${detail}`);
+    }
+    renameSync(tmp, noticeBin);
+  }
+  noticeEnsured = true;
+  return noticeBin;
+}
+
+function runNotice(args: string[], input: string): string {
+  const child = spawnSync(ensureNoticeBin(), args, { input, encoding: "utf8" });
   if (child.status !== 0) throw new Error(child.stderr || "auto-fallback notice failed");
   return child.stdout.trim();
 }
 
+function childWarning(message: string): string {
+  return runNotice(["warn"], message);
+}
+
 function childBind(phase: string, hasRegistration: boolean, sameSession: boolean, hasSession: boolean, hasAPI: boolean): string {
-  const child = spawnSync(noticeBin, ["bind"], {
-    input: JSON.stringify({ phase, hasRegistration, sameSession, hasSession, hasAPI }),
-    encoding: "utf8",
-  });
-  if (child.status !== 0) throw new Error(child.stderr || "auto-fallback notice failed");
-  return child.stdout.trim();
+  return runNotice(["bind"], JSON.stringify({ phase, hasRegistration, sameSession, hasSession, hasAPI }));
 }
 
 function notifyFallback(event: FallbackEvent, ctx?: FallbackCtx): void {
   if (!ctx?.hasUI || !ctx.ui?.notify) return;
-  const child = spawnSync(noticeBin, [], { input: JSON.stringify(event), encoding: "utf8" });
-  if (child.status !== 0) throw new Error(child.stderr || "auto-fallback notice failed");
-  const text = child.stdout.trim();
+  const text = runNotice([], JSON.stringify(event));
   if (text === "null") return;
   const notice = JSON.parse(text) as { text: string; level: "warning" | "info" };
   ctx.ui.notify(notice.text, notice.level);

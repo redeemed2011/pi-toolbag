@@ -1,18 +1,9 @@
-import { spawnSync } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import type { AssistantMessage, AssistantMessageEvent, AssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
-
-const stallBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../stall-timeout/stall-timeout");
+import { runStall } from "./stallBin.js";
 
 function stallStep(op: "pump" | "finish", payload: Record<string, unknown>): string {
-  const child = spawnSync(stallBin, ["step"], {
-    input: JSON.stringify({ op, ...payload }),
-    encoding: "utf8",
-  });
-  if (child.status !== 0) throw new Error(child.stderr || "stall-timeout failed");
-  return child.stdout.trim();
+  return runStall(["step"], { op, ...payload });
 }
 
 export interface GuardModel {
@@ -56,37 +47,22 @@ const defaultSleep: Sleeper = (ms) => {
 }
 
 export function timeoutText(model: GuardModel, idleMs: number): string {
-  const child = spawnSync(stallBin, ["text"], {
-    input: JSON.stringify({ provider: model.provider, id: model.id, idleMs }),
-    encoding: "utf8",
-  });
-  if (child.status !== 0) throw new Error(child.stderr || "stall-timeout failed");
-  return child.stdout.trim();
+  return runStall(["text"], { provider: model.provider, id: model.id, idleMs });
 }
 
 export function timeoutMessage(model: GuardModel, partial: AssistantMessage | undefined, idleMs: number): AssistantMessage {
-  const child = spawnSync(stallBin, ["message"], {
-    input: JSON.stringify({
-      api: model.api,
-      provider: model.provider,
-      id: model.id,
-      idleMs,
-      partial: partial ?? null,
-      timestamp: Date.now(),
-    }),
-    encoding: "utf8",
-  });
-  if (child.status !== 0) throw new Error(child.stderr || "stall-timeout failed");
-  return JSON.parse(child.stdout) as AssistantMessage;
+  return JSON.parse(runStall(["message"], {
+    api: model.api,
+    provider: model.provider,
+    id: model.id,
+    idleMs,
+    partial: partial ?? null,
+    timestamp: Date.now(),
+  })) as AssistantMessage;
 }
 
 function partialFrom(event: AssistantMessageEvent): AssistantMessage | undefined {
-  const child = spawnSync(stallBin, ["partial"], {
-    input: JSON.stringify({ event }),
-    encoding: "utf8",
-  });
-  if (child.status !== 0) throw new Error(child.stderr || "stall-timeout failed");
-  const text = child.stdout.trim();
+  const text = runStall(["partial"], { event });
   return text === "null" ? undefined : JSON.parse(text) as AssistantMessage;
 }
 
@@ -112,12 +88,7 @@ async function raceIdle<T>(
     idle.promise.then(() => ({ kind: "timeout" as const })),
     settled,
   ]);
-  const aftermath = spawnSync(stallBin, ["race"], {
-    input: JSON.stringify({ kind: winner.kind }),
-    encoding: "utf8",
-  });
-  if (aftermath.status !== 0) throw new Error(aftermath.stderr || "stall-timeout failed");
-  if (aftermath.stdout.trim() === "abandon") {
+  if (runStall(["race"], { kind: winner.kind }) === "abandon") {
     abandon(settled);
     return winner;
   }
@@ -218,16 +189,11 @@ async function pump(
 
 function errorMessage(model: GuardModel, partial: AssistantMessage | undefined, error: unknown): AssistantMessage {
   const text = error instanceof Error ? error.message : String(error);
-  const child = spawnSync(stallBin, ["failure"], {
-    input: JSON.stringify({
-      message: partial ?? timeoutMessage(model, undefined, 0),
-      text,
-      timestamp: Date.now(),
-    }),
-    encoding: "utf8",
-  });
-  if (child.status !== 0) throw new Error(child.stderr || "stall-timeout failed");
-  return JSON.parse(child.stdout) as AssistantMessage;
+  return JSON.parse(runStall(["failure"], {
+    message: partial ?? timeoutMessage(model, undefined, 0),
+    text,
+    timestamp: Date.now(),
+  })) as AssistantMessage;
 }
 
 async function finishResult(

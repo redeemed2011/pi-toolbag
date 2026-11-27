@@ -1,9 +1,5 @@
-import { spawnSync } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { runKernel } from "./kernelBin.js";
 import type { FailoverError } from "./types.js";
-
-const kernelBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fallback-kernel/kernel");
 
 type BranchEntry = {
   type?: string;
@@ -21,8 +17,6 @@ type BranchEntry = {
 export function extractLastAssistantError(
   branch: ReadonlyArray<BranchEntry>,
 ): FailoverError | undefined {
-  const child = spawnSync(kernelBin, ["extract"], { input: JSON.stringify(branch), encoding: "utf8" });
-  if (child.status !== 0) throw new Error(child.stderr || "fallback-kernel failed");
-  const parsed = JSON.parse(child.stdout) as FailoverError | null;
+  const parsed = JSON.parse(runKernel("extract", branch)) as FailoverError | null;
   return parsed ?? undefined;
 }

@@ -1,14 +1,8 @@
-import { spawnSync } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { runKernel } from "./kernelBin.js";
 import type { ModelKey, UsageGate, UsageMetric } from "./types.js";
 
-const kernelBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fallback-kernel/kernel");
-
 function usage(payload: unknown): string {
-  const child = spawnSync(kernelBin, ["usage"], { input: JSON.stringify(payload), encoding: "utf8" });
-  if (child.status !== 0) throw new Error(child.stderr || "fallback-kernel failed");
-  return child.stdout.trim();
+  return runKernel("usage", payload);
 }
 
 function numberOrUndefined(payload: unknown): number | undefined {

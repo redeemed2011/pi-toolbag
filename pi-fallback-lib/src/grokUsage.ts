@@ -1,17 +1,12 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { runKernel } from "./kernelBin.js";
 import type { UsageGate } from "./types.js";
 import { httpsUrl, readJsonNumber, reportedUsage } from "./usage.js";
 
-const kernelBin = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fallback-kernel/kernel");
-
 function kernel(command: string, payload: unknown): string {
-  const child = spawnSync(kernelBin, [command], { input: JSON.stringify(payload), encoding: "utf8" });
-  if (child.status !== 0) throw new Error(child.stderr || "fallback-kernel failed");
-  return child.stdout.trim();
+  return runKernel(command, payload);
 }
 
 const LIVE_TTL_MS = 60_000;
