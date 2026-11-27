@@ -288,12 +288,15 @@ export function attachFallback(pi: FallbackHost, options: AttachOptions): Attach
 
   pi.on("before_agent_start", async (event, ctx) => {
     state.refusalCategory = undefined;
-    if ((event as BeforeAgentStartEventLike).messageType === "custom") return;
-    if (options.checkUsage === false) return;
-    if (!config?.enabled) return;
-    if (state.failoverInFlight) return;
     const current = currentKey(ctx);
-    if (!current) return;
+    const start = attachKernel({
+      messageType: (event as BeforeAgentStartEventLike).messageType ?? "",
+      checkUsage: options.checkUsage !== false,
+      enabled: Boolean(config?.enabled),
+      inFlight: state.failoverInFlight,
+      hasCurrent: Boolean(current),
+    }, "before");
+    if (start === "return") return;
     if (!state.preferred) state.preferred = current;
     if (current !== state.preferred && (await returnToPreferred(ctx, current))) return;
 

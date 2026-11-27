@@ -117,6 +117,18 @@ func main() {
 			return
 		}
 		fmt.Println(selectAccount(request.Accounts, request.Active, request.Session))
+	case "before":
+		var request struct {
+			MessageType string `json:"messageType"`
+			CheckUsage  bool   `json:"checkUsage"`
+			Enabled     bool   `json:"enabled"`
+			InFlight    bool   `json:"inFlight"`
+			HasCurrent  bool   `json:"hasCurrent"`
+		}
+		if decode(&request) {
+			return
+		}
+		fmt.Println(beforeAgent(request.MessageType, request.CheckUsage, request.Enabled, request.InFlight, request.HasCurrent))
 	case "select":
 		var picked struct {
 			Key          string `json:"key"`

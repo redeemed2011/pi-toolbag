@@ -91,6 +91,13 @@ func preferredKind(hasPreferred, hasGates, hasGate, readingOK, recovered bool) s
 	return "recovered"
 }
 
+func beforeAgent(messageType string, checkUsage, enabled, inFlight, hasCurrent bool) string {
+	if messageType == "custom" || !checkUsage || !enabled || inFlight || !hasCurrent {
+		return "return"
+	}
+	return "continue"
+}
+
 func modelSelect(key, source, ignore string, hasPreferred bool) map[string]any {
 	if ignore != "" && key == ignore && source == "set" {
 		return map[string]any{"action": "ignore"}
